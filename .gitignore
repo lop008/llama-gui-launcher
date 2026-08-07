@@ -1,0 +1,31 @@
+# 运行配置（含 API Key，切勿上传）
+config.json
+*.aic
+hf_model_cache.json
+
+# 日志
+logs/
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# 虚拟环境
+.venv/
+venv/
+
+# IDE
+.idea/
+.vscode/
+
+# 本地资源（可选占位/隐私图片）
+assets/icon.ico
+assets/donate_qr.png
+assets/donate_qr.jpg
+assets/ad.png
+
+# 打包产物
+dist/
+build/
+*.spec
