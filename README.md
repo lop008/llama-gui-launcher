@@ -1,110 +1,112 @@
-# LLama 启动器
+# LLama Launcher
 
-基于 llama.cpp 的本地大模型图形化启动器。让「选模型 → 配参数 → 后台启动 → 实时监控 → 连接 Agent 工具」整条链路一键搞定，不再需要手敲命令行。
+A GUI launcher for llama.cpp local large language models. It turns the whole workflow — **pick a model → configure parameters → start the server in the background → monitor resources in real time → connect to Agent tools** — into a one-click experience. No more memorizing long command lines.
 
-## 一、这个项目解决什么问题？
+**[中文文档 / Chinese](README.zh-CN.md)**
 
-在本地跑大模型（llama.cpp）时，你通常要面对：
+## What Problem Does It Solve?
 
-- **命令行繁琐**：`llama-server.exe -m 模型 -ngl all -c 32768 -n 8192 -fa on ...` 一长串参数靠记忆
-- **模型难管理**：模型文件散落在多个目录，还要区分视觉模型（mmproj）、跳过未下完的文件
-- **后台服务难控制**：黑窗口一闪而过、崩溃后显存不释放、模型跑飞/无限复读停不下来
-- **视觉模型容易配错**：主模型和 mmproj 维度不匹配时加载直接失败
-- **接 Agent 工具麻烦**：opencode、Claude Code 等要手动配 baseURL、API Key
+Running local LLMs with llama.cpp usually means dealing with:
 
-本启动器把以上全部图形化、自动化：**自动扫描模型、可视化调参、隐藏窗口后台运行、实时监控资源、一键停止、打开 Agent 自动连接服务**。
+- **Complex command lines**: `llama-server.exe -m model -ngl all -c 32768 -n 8192 -fa on ...` — a long list of flags you have to remember
+- **Messy model management**: model files scattered across folders, plus vision projectors (mmproj) and half-downloaded files to keep track of
+- **Hard-to-control background server**: a console window flashes by, VRAM is not released after a crash, and a runaway/looping model is hard to stop
+- **Vision model mismatches**: loading fails when the main model and its mmproj have different embedding dimensions
+- **Trouble connecting Agent tools**: opencode, Claude Code, etc. need manual baseURL / API Key setup
 
----
-
-## 二、主要功能
-
-### 模型管理
-- **自动扫描**：递归扫描 llama 目录下所有 `.gguf`，自动跳过未下载完成的文件（`.xltd` 等）
-- **视觉模型按目录配对**：只自动选中与主模型同目录的 `mmproj`；并做**嵌入维度一致性校验**——不匹配时红字警告 + 启动前拦截，避免"加载失败"报错
-- **模型信息**：离线解析 GGUF 头，显示架构/训练上下文/量化格式/参数量
-
-### 参数配置
-- **基本参数**：监听地址、端口、上下文预设（按显存一键推荐 16K~512K）、GPU 层数、上下文长度、预测 Token
-- **高级参数**：CPU 线程、批大小、并行 slots、闪存注意力、KV 缓存类型、连续批处理、温度/Top-P/Top-K/重复惩罚、采样预设（严谨/均衡/创意）、API Key、超时、mlock、mmap、自动开浏览器
-- **上下文预设 ↔ 上下文长度联动**：预设点选自动写上下文；手动改上下文自动回显对应档位（非预设值显示「自定义」）
-- **每个参数带悬停说明**，完整解释见 `参数说明.md`（菜单「关于 → 参数说明」）
-
-### 服务与监控
-- **隐藏窗口后台启动**：`/health` 就绪后自动打开浏览器 Web 界面
-- **一键停止**：`taskkill /T` 清理进程树（模型跑飞/无限复读时救命）
-- **崩溃防残留（显存自动释放）**：服务进程放入 Windows 作业对象（KILL_ON_JOB_CLOSE），本程序无论崩溃还是被强杀，系统都会自动清理 llama-server 进程树，立即释放显存
-- **实时状态监控**：状态栏显示 CPU、内存、显存（nvidia-smi）、运行模型、API 活动
-
-### Agent 工具
-- 内置 4 个：**opencode**（自动生成 opencode.json 连接服务）、**opencode 桌面版**（自动复制连接信息到剪贴板）、**Claude Code**（保留，不自动连接）、**llama-server**
-- 底部「打开 Agent 工具」打开列表当前高亮的工具；**记住上次选中的工具并高亮**，下次启动一眼看到
-- 服务运行时打开工具自动连接；服务未运行时正常打开并提示
-
-### 其他
-- **记住上次参数**：自动保存到 `config.json`
-- **导出/导入配置**：`.aic` 文件（内容即 JSON），完整备份/还原设置
-- **模型联网评估**：用模型名查 HuggingFace，显示简介/下载量/点赞（缓存 7 天，离线自动退回本地信息）
-- **托盘最小化**：关闭窗口缩到托盘，托盘菜单可显示/启动/停止/退出
-- **日志落盘**：`logs/运行日志-YYYYMMDD.log` 按天分文件
-- **深浅主题**：状态栏右下角灯泡一键切换
-- **可自定义图标 / 广告位**：放入 `assets/icon.ico` 换图标；`assets/ad.png` 显示在底部 430×40 广告位
+This launcher automates and visualizes all of the above: **auto model scanning, visual parameter tuning, hidden-window background startup, real-time resource monitoring, one-click stop, and auto-connection for Agent tools**.
 
 ---
 
-## 三、安装方法
+## Features
 
-### 方式 A：源码运行（开发/自用）
+### Model Management
+- **Auto scan**: recursively scans all `.gguf` files under the llama directory, skipping incomplete downloads (e.g. `.xltd`)
+- **Vision model pairing by directory**: auto-selects the `mmproj` in the same folder as the main model, with **embedding-dimension consistency checks** — red warning + pre-start interception on mismatch
+- **Model info**: reads the GGUF header offline (architecture / context length / quantization / parameter count)
 
-**环境要求**
+### Parameter Configuration
+- **Basic**: listen address, port, context presets (one-click VRAM-based recommendation from 16K to 512K), GPU layers, context length, max prediction tokens
+- **Advanced**: CPU threads, batch size, parallel slots, flash attention, KV cache type, continuous batching, temperature / top-p / top-k / repeat penalty, sampling presets (Precise / Balanced / Creative), API key, timeout, mlock, mmap, auto-open browser
+- **Context preset ↔ context length link**: picking a preset writes the context value; editing the context value auto-highlights the matching preset (or "Custom")
+- **Every parameter has a hover tooltip**; full explanations are in `参数说明.md` (menu: About → Parameter Guide)
+
+### Server & Monitoring
+- **Hidden-window background startup**: opens the browser Web UI automatically once `/health` is ready
+- **One-click stop**: `taskkill /T` kills the whole process tree (a lifesaver when the model runs away / loops)
+- **Crash-proof, VRAM auto-release**: the server process runs inside a Windows Job Object (`KILL_ON_JOB_CLOSE`) — if this app crashes or is force-killed, the system cleans up the llama-server process tree and frees VRAM immediately
+- **Real-time status bar**: CPU, memory, VRAM (nvidia-smi), running model, API activity
+
+### Agent Tools
+- 4 built-in tools: **opencode** (auto-generates `opencode.json` pointing at the service), **OpenCode desktop** (copies connection info to clipboard), **Claude Code** (launch only, not auto-connected), **llama-server**
+- "Open Agent Tool" opens the currently highlighted tool; **the last-selected tool is remembered and highlighted** on next launch
+- Opening a tool auto-connects it to the running service; if the service is not running it still opens with a hint
+
+### Other
+- **Remembers last-used parameters** in `config.json`
+- **Export / Import config**: `.aic` files (JSON content) for full backup/restore
+- **Online model lookup**: queries HuggingFace for the model's intro / downloads / likes (7-day cache, falls back to local info offline)
+- **Tray minimize**: closing the window minimizes to the system tray; tray menu shows / starts / stops / quits
+- **Log files**: `logs/运行日志-YYYYMMDD.log`, one file per day
+- **Dark/Light theme**: toggle with the light-bulb button at the bottom-right of the status bar
+- **Customizable icon / ad slot**: put `assets/icon.ico` to change the app icon; `assets/ad.png` fills the 430×40 ad slot at the bottom
+
+---
+
+## Installation
+
+### Option A: Run from source (development / personal use)
+
+**Requirements**
 - Windows
-- Python 3.9+（本机验证 3.13）
-- 目录内需有 llama.cpp 的 `llama-server.exe` 及配套 DLL（从 llama.cpp Releases 解压）
+- Python 3.9+ (verified on 3.13)
+- llama.cpp's `llama-server.exe` and its DLLs (extract from llama.cpp Releases) inside the directory
 
-**步骤**
+**Steps**
 ```bat
-cd /d 你的启动器目录
+cd /d your-launcher-directory
 pip install -r requirements.txt
 python main.py
 ```
 
-依赖（`requirements.txt`）：`PyQt6`、`requests`、`psutil`
+Dependencies (`requirements.txt`): `PyQt6`, `requests`, `psutil`
 
-### 方式 B：直接运行打包好的 exe
+### Option B: Run the packaged exe
 
-- 使用 `dist\LLama启动器.exe`（单文件，约 39 MB），**无需安装 Python**，双击即可运行
-- 首次启动较慢（需解压到临时目录，约几秒）；个别杀毒软件可能误报，加入白名单即可
-
----
-
-## 四、使用方法
-
-### 快速上手
-1. **设置 llama 目录**：选择 llama.cpp 所在文件夹（含 `llama-server.exe`），点「刷新模型」
-2. **选模型**：下拉选择主模型；视觉模型自动按目录配对（维度不匹配会有红色警告，可改选或选「不使用」）
-3. **调参数**：端口默认 8080、监听地址 `127.0.0.1`；可用「上下文预设」按显存一键推荐上下文；高级参数按需展开
-4. **启动**：点「启动服务」→ 隐藏窗口后台运行 → 就绪后自动打开浏览器 Web 界面（`http://127.0.0.1:8080/`）
-5. **监控**：状态栏实时显示 CPU/内存/显存/运行模型/API 活动
-6. **停止**：模型跑飞、幻觉复读时点「停止服务」一键终止
-7. **接 Agent**：切到「Agent 工具」页选中工具 → 点底部「打开 Agent 工具」（服务运行时自动连接）
-
-### 菜单说明
-| 菜单 | 项目 |
-|------|------|
-| 开始 | 启动服务 / 停止服务 / 退出 |
-| 工具 | 刷新模型 / 打开模型目录 ｜ 打开管理页面 / 查看 API 模型列表 ｜ 打开 Agent 工具 ｜ 导出配置(.aic) / 导入配置(.aic) ｜ 清空日志 / 打开日志目录 |
-| 关于 | 参数说明 / 开发者信息 |
+- Use `dist\LLama启动器.exe` (single file, ~39 MB) — **no Python required**, just double-click
+- First launch is slower (it unpacks to a temp directory, a few seconds); some antivirus may flag single-file executables — add an exception if needed
 
 ---
 
-## 五、输入输出示例
+## Usage
 
-### 1. 启动命令示例
+### Quick Start
+1. **Set the llama directory**: select the folder containing `llama-server.exe`, click "Refresh Models"
+2. **Pick a model**: select the main model; the vision model is auto-paired by directory (a red warning appears on dimension mismatch — switch it or choose "None" to run text-only)
+3. **Tune parameters**: default port 8080, listen address `127.0.0.1`; use "Context Preset" for a VRAM-based recommendation; expand "Advanced" as needed
+4. **Start**: click "Start Server" → runs in the background without a console window → the browser opens the Web UI at `http://127.0.0.1:8080/` when ready
+5. **Monitor**: the status bar shows CPU / memory / VRAM / running model / API activity in real time
+6. **Stop**: click "Stop Server" to terminate everything instantly when the model runs away or loops
+7. **Connect Agents**: go to the "Agent Tools" tab, select a tool, click "Open Agent Tool" (auto-connects when the service is running)
 
-界面点「启动服务」后，底部「命令预览」和日志会显示**实际执行的命令行**。例如：
+### Menu Reference
+| Menu | Items |
+|------|-------|
+| Start | Start Server / Stop Server / Exit |
+| Tools | Refresh Models / Open Model Directory ｜ Open Web UI / View API Model List ｜ Open Agent Tool ｜ Export Config (.aic) / Import Config (.aic) ｜ Clear Log / Open Log Directory |
+| About | Parameter Guide / Developer Info |
+
+---
+
+## Input / Output Examples
+
+### 1. Generated startup command
+
+After clicking "Start Server", the "Command Preview" and log show the **actual command executed**. For example:
 
 ```
-llama-server.exe -m <你的模型路径，如 D:\models\gemma-4-31B-it-Q6_K.gguf>
-  --mmproj <你的视觉模型路径，如 D:\models\mmproj-BF16.gguf>
+llama-server.exe -m <your-model-path>
+  --mmproj <your-mmproj-path>
   -ngl all -c 32768 -n 8192 -fa on --cont-batching
   --host 127.0.0.1 --port 8080
   -b 2048 -ctk f16 -ctv f16
@@ -112,42 +114,42 @@ llama-server.exe -m <你的模型路径，如 D:\models\gemma-4-31B-it-Q6_K.gguf
   --timeout 3600 -a gemma-4-31B-it-Q6_K
 ```
 
-### 2. 启动日志示例（「运行日志」页）
+### 2. Startup log (in the "Logs" tab)
 
 ```
-[防护] 已启用 Job Object：本程序退出/崩溃时，llama-server 将被系统自动清理，显存立即释放
+[防护] Job Object enabled: llama-server will be auto-cleaned if this app exits/crashes, VRAM released immediately
 common_params_print_info: verbosity = 3
-srv  load_model: loading model '<你的模型路径>'
-服务已就绪: http://127.0.0.1:8080
+srv  load_model: loading model '<your-model-path>'
+Server ready: http://127.0.0.1:8080
 ```
 
-### 3. 浏览器 / API 地址
+### 3. Browser / API endpoints
 
-- Web 聊天界面：`http://127.0.0.1:8080/`
-- OpenAI 兼容接口：`http://127.0.0.1:8080/v1`
+- Web chat UI: `http://127.0.0.1:8080/`
+- OpenAI-compatible API: `http://127.0.0.1:8080/v1`
 
-用 curl 测试接口（输入/输出）：
+Test with curl:
 
 ```
 curl http://127.0.0.1:8080/v1/chat/completions ^
   -H "Content-Type: application/json" ^
-  -d "{\"model\":\"gemma-4-31B-it-Q6_K\",\"messages\":[{\"role\":\"user\",\"content\":\"你好\"}],\"max_tokens\":64}"
+  -d "{\"model\":\"gemma-4-31B-it-Q6_K\",\"messages\":[{\"role\":\"user\",\"content\":\"Hello\"}],\"max_tokens\":64}"
 ```
 
-输出（节选）：
+Response (abridged):
 
 ```json
 {
   "id": "chatcmpl-...",
   "object": "chat.completion",
   "model": "gemma-4-31B-it-Q6_K",
-  "choices": [{ "message": { "role": "assistant", "content": "你好！很高兴见到你……" } }]
+  "choices": [{ "message": { "role": "assistant", "content": "Hello! Nice to meet you..." } }]
 }
 ```
 
-### 4. Agent 自动连接示例
+### 4. Agent auto-connection
 
-服务运行时打开 opencode，启动器自动在 llama 目录写入 `opencode.json`（备份并合并已有配置）：
+When the service is running, opening opencode automatically writes `opencode.json` into the llama directory (backing up and merging any existing config):
 
 ```json
 {
@@ -163,51 +165,51 @@ curl http://127.0.0.1:8080/v1/chat/completions ^
 }
 ```
 
-### 5. 配置导出示例
+### 5. Config export
 
-「工具 → 导出配置」生成 `xxx.aic`（内容即 JSON，与 `config.json` 结构一致），可在另一台机器「导入配置」还原全部设置。
+"Tools → Export Config" produces `xxx.aic` (JSON content, same structure as `config.json`) that can be restored on another machine with "Import Config".
 
 ---
 
-## 目录结构
+## Directory Structure
 
 ```
 LLama启动器/
-├── main.py                # 程序入口
-├── requirements.txt       # 依赖
-├── 参数说明.md             # 每个参数的完整解释
+├── main.py                # Entry point
+├── requirements.txt       # Dependencies
+├── 参数说明.md             # Full parameter documentation (in-app)
 ├── .gitignore
-├── config.json            # 运行配置（自动生成，含 API Key，请勿上传）
-├── hf_model_cache.json    # HF 查询缓存（自动生成）
-├── logs/                  # 运行日志（自动生成）
+├── config.json            # Runtime config (auto-generated, contains API key - DO NOT upload)
+├── hf_model_cache.json    # HF lookup cache (auto-generated)
+├── logs/                  # Runtime logs (auto-generated)
 ├── assets/
-│   ├── icon.ico           # 程序图标（可选，放入即生效）
-│   ├── ad.png             # 底部广告位 430×40（可选）
-│   └── donate_qr.jpg      # 开发者信息中的捐款二维码（可选）
-├── dist/LLama启动器.exe    # 打包好的可执行文件（pyinstaller 生成）
+│   ├── icon.ico           # App icon (optional, put here to apply)
+│   ├── ad.png             # Bottom ad slot 430×40 (optional)
+│   └── donate_qr.jpg      # Donation QR code in About dialog (optional)
+├── dist/LLama启动器.exe    # Packaged executable (built with pyinstaller)
 └── src/
-    ├── main_window.py       # 主窗口 + 菜单 + 托盘 + 状态栏
-    ├── config.py            # 配置读写
-    ├── model_scanner.py     # 模型扫描 / mmproj 配对
-    ├── gguf_reader.py       # GGUF 头解析
-    ├── cmd_builder.py       # 命令行生成
-    ├── server.py            # 子进程 / 健康检查 / 停止 / 作业对象
-    ├── jobobject.py         # Windows 作业对象（崩溃自动清理）
-    ├── system_monitor.py    # CPU/内存/显存/模型/API 监控
-    ├── hf_info.py           # HuggingFace 模型评估
-    ├── presets.py           # 上下文预设 / 采样预设
-    ├── tools.py             # Agent 工具注册与检测
-    ├── opencode_launcher.py # 生成 opencode.json
-    └── about_dialog.py      # 开发者信息
+    ├── main_window.py       # Main window + menu + tray + status bar
+    ├── config.py            # Config read/write
+    ├── model_scanner.py     # Model scanning / mmproj pairing
+    ├── gguf_reader.py       # GGUF header parsing
+    ├── cmd_builder.py       # Command-line generation
+    ├── server.py            # Subprocess / health check / stop / job object
+    ├── jobobject.py         # Windows Job Object (auto-cleanup on crash)
+    ├── system_monitor.py    # CPU/memory/VRAM/model/API monitoring
+    ├── hf_info.py           # HuggingFace model lookup
+    ├── presets.py           # Context presets / sampling presets
+    ├── tools.py             # Agent tool registry & detection
+    ├── opencode_launcher.py # Generates opencode.json
+    └── about_dialog.py      # Developer info
 ```
 
-## 开发者信息
+## Developer Info
 
-- 开发者：AI创客师
-- 哔哩哔哩入口见「关于 → 开发者信息」（链接可点击直达）
-- 如需更换：编辑 `src/about_dialog.py` 顶部常量
+- Developer: AI创客师
+- Bilibili link in "About → Developer Info" (clickable)
+- To change: edit the constants at the top of `src/about_dialog.py`
 
-## 二次开发规划
+## Roadmap
 
-- [ ] 模型下载通道（HuggingFace / ModelScope）
-- [ ] 模型评估接入 ModelScope 来源
+- [ ] Model download channel (HuggingFace / ModelScope)
+- [ ] Model lookup via ModelScope source
