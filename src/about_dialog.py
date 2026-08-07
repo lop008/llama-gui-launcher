@@ -41,12 +41,17 @@ class AboutDialog(QDialog):
         info.setToolTip("点击哔哩哔哩链接即可打开主页")
         lay.addWidget(info)
 
-        qr_path = os.path.join(base_dir, "assets", "donate_qr.jpg")
-        if os.path.isfile(qr_path):
+        qr_path = None
+        for name in ("donate_qr.png", "donate_qr.jpg"):
+            cand = os.path.join(base_dir, "assets", name)
+            if os.path.isfile(cand):
+                qr_path = cand
+                break
+        if qr_path:
             qr = QLabel()
             pm = QPixmap(qr_path)
             if not pm.isNull():
-                pm = pm.scaled(160, 160, Qt.AspectRatioMode.KeepAspectRatio,
+                pm = pm.scaled(280, 280, Qt.AspectRatioMode.KeepAspectRatio,
                                Qt.TransformationMode.SmoothTransformation)
                 qr.setPixmap(pm)
                 qr.setAlignment(Qt.AlignmentFlag.AlignCenter)
