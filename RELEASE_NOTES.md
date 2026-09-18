@@ -38,8 +38,8 @@
 
 | File | Description |
 |------|-------------|
-| `LLama启动器-v0.3.85-win-x64.exe` | Single-file build — no Python required |
-| `LLama启动器-v0.3.85-win-x64-portable.zip` | Portable build — extract and run |
+| `LLama-Launcher-v0.3.85-win-x64.exe` | Single-file build — no Python required |
+| `LLama-Launcher-v0.3.85-win-x64-portable.zip` | Portable build — extract and run |
 | Source code (zip / tar.gz) | Full source |
 
 ---

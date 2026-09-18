@@ -102,8 +102,8 @@ Download from the [Releases](https://github.com/lop008/llama-gui-launcher/releas
 
 | File | Description |
 |------|-------------|
-| `LLama启动器-v0.3.85-win-x64.exe` | **Single-file** build (~43 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
-| `LLama启动器-v0.3.85-win-x64-portable.zip` | **Portable** build — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
+| `LLama-Launcher-v0.3.85-win-x64.exe` | **Single-file** build (~43 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
+| `LLama-Launcher-v0.3.85-win-x64-portable.zip` | **Portable** build — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
 
 Put `llama-server.exe` and its DLLs in the same directory (or set the launcher path in the UI).
 

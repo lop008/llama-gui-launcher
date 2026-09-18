@@ -103,8 +103,8 @@ python main.py
 
 | 文件 | 说明 |
 |------|------|
-| `LLama启动器-v0.3.85-win-x64.exe` | **单文件版**（约 43 MB），双击即运行。首次启动较慢（需解压到临时目录，约几秒）；个别杀毒软件可能误报，加入白名单即可。 |
-| `LLama启动器-v0.3.85-win-x64-portable.zip` | **便携版**，解压后运行 `LLama启动器-win-x64-portable.exe`，启动更快、无需自解压。 |
+| `LLama-Launcher-v0.3.85-win-x64.exe` | **单文件版**（约 43 MB），双击即运行。首次启动较慢（需解压到临时目录，约几秒）；个别杀毒软件可能误报，加入白名单即可。 |
+| `LLama-Launcher-v0.3.85-win-x64-portable.zip` | **便携版**，解压后运行 `LLama启动器-win-x64-portable.exe`，启动更快、无需自解压。 |
 
 将 `llama-server.exe` 及配套 DLL 放到同一目录（或在界面中指定启动器路径）。
 
