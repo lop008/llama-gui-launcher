@@ -45,6 +45,7 @@ _probe.tar
 _probe_remote.tar.gz
 _push_probe.py
 _push_commit.py
+_publish_release.ps1
 
 # 本地模型（体积巨大，切勿上传）
 *.gguf
