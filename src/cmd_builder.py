@@ -2,7 +2,9 @@ import os
 import re
 
 
-def get_llama_server(llama_dir):
+def get_llama_server(llama_dir, launcher_exe=None):
+    if launcher_exe and os.path.isfile(launcher_exe):
+        return launcher_exe
     return os.path.join(llama_dir, "llama-server.exe")
 
 
@@ -14,8 +16,40 @@ def model_alias(path):
     return base
 
 
-def build_args(model_path, mmproj_path, s, llama_dir):
-    args = [get_llama_server(llama_dir)]
+# KV 缓存量化类型（llama.cpp -ctk/-ctv 允许值）
+KV_CACHE_TYPES = ["f16", "bf16", "f32", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0", "q5_1"]
+
+# GPU 拆分模式（llama.cpp -sm）
+SPLIT_MODES = ["layer", "row", "tensor", "none"]
+
+
+def _kv_types(s):
+    """返回 (K类型, V类型)。兼容旧配置的单键 kv_cache_type。"""
+    legacy = str(s.get("kv_cache_type") or "").strip()
+    k = str(s.get("kv_cache_k") or "").strip() or legacy or "f16"
+    v = str(s.get("kv_cache_v") or "").strip() or legacy or "f16"
+    if k not in KV_CACHE_TYPES:
+        k = "f16"
+    if v not in KV_CACHE_TYPES:
+        v = "f16"
+    return k, v
+
+
+def _selected_devices(s):
+    """返回选中的 GPU 设备列表（字符串）。"""
+    devs = s.get("devices") or []
+    out = [str(d).strip() for d in devs if str(d).strip()]
+    # 去重且保序
+    seen, res = set(), []
+    for d in out:
+        if d not in seen:
+            seen.add(d)
+            res.append(d)
+    return res
+
+
+def build_args(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
+    args = [get_llama_server(llama_dir, launcher_exe)]
     args += ["-m", model_path]
     if mmproj_path:
         args += ["--mmproj", mmproj_path]
@@ -39,6 +73,29 @@ def build_args(model_path, mmproj_path, s, llama_dir):
     if s.get("cont_batching"):
         args += ["--cont-batching"]
 
+    # ---- 多显卡（功能 3）：设备选择 / 拆分模式 / tensor-split / 主 GPU ----
+    devices = _selected_devices(s)
+    if devices:
+        # 勾选 1 张 = 指定只用该卡；勾选 ≥2 张 = 多卡拆分
+        args += ["-dev", ",".join(devices)]
+        if len(devices) > 1:
+            sm = str(s.get("split_mode") or "layer").strip()
+            if sm in SPLIT_MODES and sm != "none":
+                args += ["-sm", sm]
+            ts = str(s.get("tensor_split") or "").strip().replace("，", ",")
+            if ts:
+                args += ["-ts", ts]
+            try:
+                mg = int(s.get("main_gpu", 0) or 0)
+            except (TypeError, ValueError):
+                mg = 0
+            if mg > 0:
+                args += ["-mg", str(mg)]
+
+    # ---- MTP（功能 4）：多 token 预测，作为投机解码的 draft-mtp 类型启用 ----
+    if s.get("mtp"):
+        args += ["--spec-type", "draft-mtp"]
+
     args += ["--host", str(s.get("host", "127.0.0.1"))]
     args += ["--port", str(int(s.get("port", 8080)))]
 
@@ -54,8 +111,9 @@ def build_args(model_path, mmproj_path, s, llama_dir):
     if slots > 0:
         args += ["-np", str(slots)]
 
-    kvc = str(s.get("kv_cache_type", "f16"))
-    args += ["-ctk", kvc, "-ctv", kvc]
+    # ---- KV 缓存 K / V 独立类型（功能 2）----
+    k_type, v_type = _kv_types(s)
+    args += ["-ctk", k_type, "-ctv", v_type]
 
     temp = float(s.get("temp", 0.8) or 0.8)
     args += ["--temp", f"{temp:.2f}"]
@@ -96,3 +154,53 @@ def quote_arg(a):
 
 def build_command(args):
     return " ".join(quote_arg(a) for a in args)
+
+
+def quote_bat(a):
+    """为 cmd.exe 批处理安全引用一个参数（% 需加倍，其余含空格的用引号包裹）。"""
+    a = str(a).replace("%", "%%")
+    if not a:
+        return '""'
+    if all(c.isalnum() or c in "._-:/\\@" for c in a):
+        return a
+    return '"' + a + '"'
+
+
+def build_bat_content(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
+    """根据配置生成可直接双击启动 llama-server 的 .bat 内容（UTF-8）。"""
+    args = build_args(model_path, mmproj_path, s, llama_dir, launcher_exe=launcher_exe)
+    alias = model_alias(model_path)
+    host = str(s.get("host", "127.0.0.1"))
+    port = str(int(s.get("port", 8080) or 8080))
+
+    L = ["@echo off", "chcp 65001 >nul", f"title LLama Server - {alias}", "echo."]
+    L.append("echo ============================================================")
+    L.append("echo   LLama Server 一键启动")
+    L.append("echo   模型 : " + model_alias(model_path) + ".gguf")
+    if mmproj_path:
+        L.append("echo   视觉 : " + model_alias(mmproj_path))
+    L.append(f"echo   API  : http://{host}:{port}/v1")
+    L.append("echo   Ctrl+C 可停止服务")
+    L.append("echo ============================================================")
+    L.append("echo.")
+
+    if s.get("auto_open_browser", True):
+        L.append(f'start "" "http://{host}:{port}/"')
+
+    L.append(" ".join(quote_bat(a) for a in args))
+    L.append("echo.")
+    L.append("pause")
+    return "\r\n".join(L) + "\r\n"
+
+
+def build_preview_bat(preview_text, title="LLama Server"):
+    """把「命令预览」里的完整命令行原样导出为 .bat 内容（功能 6）。"""
+    cmd = (preview_text or "").strip()
+    L = ["@echo off", "chcp 65001 >nul", f"title {title}", "echo."]
+    if cmd:
+        L.append("echo 正在启动 llama-server …")
+        L.append(cmd)
+    else:
+        L.append("echo （预览为空，未生成命令）")
+    L += ["echo.", "pause"]
+    return "\r\n".join(L) + "\r\n"

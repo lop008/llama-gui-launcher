@@ -79,11 +79,14 @@ def find_executable(cmd, search_dirs=None):
     return None
 
 
-def find(tool, llama_dir=None):
-    if tool["id"] == "llama-server" and llama_dir:
-        cand = os.path.join(llama_dir, "llama-server.exe")
-        if os.path.isfile(cand):
-            return cand
+def find(tool, llama_dir=None, launcher_exe=None):
+    if tool["id"] == "llama-server":
+        if launcher_exe and os.path.isfile(launcher_exe):
+            return launcher_exe
+        if llama_dir:
+            cand = os.path.join(llama_dir, "llama-server.exe")
+            if os.path.isfile(cand):
+                return cand
     for c in tool["cmds"]:
         p = find_executable(c, tool.get("search_dirs"))
         if p:
@@ -91,14 +94,14 @@ def find(tool, llama_dir=None):
     return None
 
 
-def scan_all(overrides, llama_dir=None):
+def scan_all(overrides, llama_dir=None, launcher_exe=None):
     result = {}
     for t in ALL:
         override = (overrides or {}).get(t["id"])
         if override and override.get("path"):
             result[t["id"]] = override["path"]
         else:
-            result[t["id"]] = find(t, llama_dir)
+            result[t["id"]] = find(t, llama_dir, launcher_exe)
     return result
 
 

@@ -153,14 +153,32 @@ def port_in_use(host, port):
             return False
 
 
-def find_llama_server_processes():
-    """查找系统中残留的 llama-server.exe 进程（不含本启动器管理的）。"""
+def find_llama_server_processes(exclude_pids=None):
+    """查找系统中残留的 llama-server.exe 进程（不含本启动器管理的）。
+
+    exclude_pids：需要忽略的 PID 集合（本程序自己发起的 --version / --list-devices
+    探测进程等），避免启动时误报「残留进程」。
+    """
+    exclude = {int(p) for p in (exclude_pids or []) if str(p).strip().isdigit()}
     try:
         r = subprocess.run(
             ["tasklist", "/FI", "IMAGENAME eq llama-server.exe", "/FO", "CSV", "/NH"],
             capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW,
         )
-        return [line for line in r.stdout.strip().splitlines() if "llama-server.exe" in line.lower()]
+        out = []
+        for line in r.stdout.strip().splitlines():
+            low = line.lower()
+            if "llama-server.exe" not in low:
+                continue
+            # CSV: "llama-server.exe","1234","Console","1","12,345 K"
+            parts = [p.strip().strip('"') for p in line.split(",")]
+            pid = None
+            if len(parts) >= 2 and parts[1].isdigit():
+                pid = int(parts[1])
+            if pid is not None and pid in exclude:
+                continue
+            out.append(line)
+        return out
     except Exception:
         return []
 

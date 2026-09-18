@@ -24,8 +24,38 @@ assets/icon.ico
 assets/donate_qr.png
 assets/donate_qr.jpg
 assets/ad.png
+assets/原始图标.png
+assets/原始图片.png
+
+# 生成的 HTML 预览（暂不入库）
+docs/参数说明.html
 
 # 打包产物
 dist/
 build/
 *.spec
+
+# 本地统计（含使用记录）
+stats.json
+
+# 本地临时脚本与截图
+_test_*.py
+_layout_screenshot.png
+_probe.tar
+_probe_remote.tar.gz
+_push_probe.py
+_push_commit.py
+
+# 本地模型（体积巨大，切勿上传）
+*.gguf
+*.xltd
+Qwen3.8-27B-GGUF/
+
+# 发布产物（压缩包 / 单文件，勿入源码仓库）
+release/
+LLama*-win-x64.exe
+LLama*-win-x64-portable.zip
+
+# 本地笔记 / 开发计划（含敏感凭据，切勿上传）
+后续版本功能开发.txt
+新建 文本文档.txt
