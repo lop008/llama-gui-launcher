@@ -1,5 +1,11 @@
 # LLama Launcher
 
+[![Release](https://img.shields.io/github/v/release/lop008/llama-gui-launcher?color=e0a35c&label=release)](https://github.com/lop008/llama-gui-launcher/releases/latest)
+[![Stars](https://img.shields.io/github/stars/lop008/llama-gui-launcher?color=e0a35c)](https://github.com/lop008/llama-gui-launcher/stargazers)
+[![License](https://img.shields.io/github/license/lop008/llama-gui-launcher?color=blue)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078D6)](#)
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776AB)](#)
+
 A GUI launcher for llama.cpp local large language models. It turns the whole workflow — **pick a model → configure parameters → start the server in the background → monitor resources in real time → connect to Agent tools** — into a one-click experience. No more memorizing long command lines.
 
 **[中文文档 / Chinese](README.zh-CN.md)**

@@ -1,5 +1,11 @@
 # LLama 启动器
 
+[![Release](https://img.shields.io/github/v/release/lop008/llama-gui-launcher?color=e0a35c&label=release)](https://github.com/lop008/llama-gui-launcher/releases/latest)
+[![Stars](https://img.shields.io/github/stars/lop008/llama-gui-launcher?color=e0a35c)](https://github.com/lop008/llama-gui-launcher/stargazers)
+[![License](https://img.shields.io/github/license/lop008/llama-gui-launcher?color=blue)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20x64-0078D6)](#)
+[![Python](https://img.shields.io/badge/python-3.10%2B-3776AB)](#)
+
 **[English / English](README.md)**
 
 基于 llama.cpp 的本地大模型图形化启动器。让「选模型 → 配参数 → 后台启动 → 实时监控 → 连接 Agent 工具」整条链路一键搞定，不再需要手敲命令行。
