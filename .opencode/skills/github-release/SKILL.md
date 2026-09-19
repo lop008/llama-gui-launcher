@@ -228,8 +228,9 @@ gh release view "v0.4.25" --repo lop008/llama-gui-launcher
 **仓库设置**
 - **About**：英文 description（含 `llama.cpp` / `GGUF` / `local LLM` / `GUI launcher` 关键词）+ 官网/截图链接。
 - **Topics**（Settings → Topics）：`llama-cpp` `gguf` `local-llm` `llm` `gui` `launcher` `pyqt6` `qwen` `qwen3` `windows` `cuda` `text-generation` `ai` `machine-learning` `llama` `openai-api` `llm-server` `desktop-app`。
-  - 一键命令：`gh repo edit lop008/llama-gui-launcher --add-topic llama-cpp,gguf,...`
-  - ⚠️ 该 API 需要 token 具备 **Administration** 权限；若 fine-grained PAT 只给了 Contents/Releases，会返回 `403 Resource not accessible by personal access token`，此时改到网页 **Settings → Topics** 手动设置。
+  - 一键命令：`gh repo edit lop008/llama-gui-launcher --add-topic llama-cpp,gguf,...`（配合 `$env:GH_TOKEN` 使用）
+  - ⚠️ 权限：**fine-grained PAT 需要 Administration: Read and write**，否则返回 `403 Resource not accessible by personal access token`；**classic PAT 勾选 `public_repo` 即可**（推荐，最简单）。
+  - 也可完全不用 token，直接在网页 **Settings → Topics** 手动粘贴。
 - **Social preview**（Settings → Social preview）：上传 `docs/cover-vX.Y.Z.png`。**只能网页设置（无公开 API）**。
 - **README 徽章**：release / stars / license / platform / python（shields.io），已内置在 `README.md` 与 `README.zh-CN.md` 顶部。
 
