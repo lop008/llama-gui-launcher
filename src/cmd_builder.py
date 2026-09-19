@@ -1,3 +1,4 @@
+import json
 import os
 import re
 
@@ -141,6 +142,22 @@ def build_args(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
 
     args += ["--timeout", str(int(s.get("timeout", 3600) or 3600))]
     args += ["-a", model_alias(model_path)]
+
+    # ---- 对话模板（功能 8）：Jinja 模板 / 思考强度 / 推理预算 ----
+    if s.get("jinja"):
+        args += ["--jinja"]
+    effort = str(s.get("reasoning_effort") or "").strip()
+    # 思考强度是对话模板参数，必须配合 --jinja 才有效
+    if effort and s.get("jinja"):
+        kwargs = json.dumps({"reasoning_effort": effort}, ensure_ascii=False,
+                            separators=(",", ":"))
+        args += ["--chat-template-kwargs", kwargs]
+    try:
+        rbudget = int(s.get("reasoning_budget", -1) or -1)
+    except (TypeError, ValueError):
+        rbudget = -1
+    if rbudget >= 0:
+        args += ["--reasoning-budget", str(rbudget)]
     return args
 
 
@@ -157,13 +174,13 @@ def build_command(args):
 
 
 def quote_bat(a):
-    """为 cmd.exe 批处理安全引用一个参数（% 需加倍，其余含空格的用引号包裹）。"""
+    """为 cmd.exe 批处理安全引用一个参数（% 需加倍，含空格的用引号包裹，内部引号转义为 \\"）。"""
     a = str(a).replace("%", "%%")
     if not a:
         return '""'
     if all(c.isalnum() or c in "._-:/\\@" for c in a):
         return a
-    return '"' + a + '"'
+    return '"' + a.replace('"', '\\"') + '"'
 
 
 def build_bat_content(model_path, mmproj_path, s, llama_dir, launcher_exe=None):

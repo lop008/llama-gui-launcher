@@ -35,6 +35,10 @@ DEFAULTS = {
         "main_gpu": 0,
         # MTP（多 token 预测，--spec-type draft-mtp）
         "mtp": False,
+        # 对话模板：Jinja 模板开关 / 模板参数(reasoning_effort) / 推理预算
+        "jinja": False,
+        "reasoning_effort": "",
+        "reasoning_budget": -1,
         "slots": -1,
         "temp": 0.8,
         "top_p": 0.95,
@@ -49,6 +53,10 @@ DEFAULTS = {
     "tools": {},
     "last_agent_tool": "",
     "minimize_to_tray": True,
+    # 启动时检测残留 llama-server 进程并提示（可在「高级参数」中重新开启）
+    "check_residual": True,
+    # 端口被占用时建议更换端口（可在「高级参数」中关闭）
+    "port_hint": True,
     "theme": "dark",
     "window_geometry": None,
     # 以下为历史版本出现过、或供扩展使用的键，统一补齐避免 JSON 缺项

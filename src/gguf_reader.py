@@ -221,6 +221,54 @@ def detect_mtp(path):
     return len(hits) > 0, hits[:8]
 
 
+def read_chat_template(path):
+    """读取 GGUF 元数据中的对话模板字符串（tokenizer.chat_template）。
+
+    返回 (parsed_ok, template)：
+    - parsed_ok=False 表示文件无法解析（读不到头部）；
+    - parsed_ok=True 但 template 为空表示模型确实没有内置对话模板。
+    自动处理多文件分片模型。
+    """
+    files = _shard_group_files(path)
+    parsed = False
+    for fp in files:
+        try:
+            with open(fp, "rb") as f:
+                if f.read(4) != GGUF_MAGIC:
+                    continue
+                parsed = True
+                _u32(f)          # version
+                _u64(f)          # tensor_count
+                kv_count = _u64(f)
+                for _ in range(kv_count):
+                    key = _read_string(f)
+                    vtype = _u32(f)
+                    value = _read_value(f, vtype)
+                    if key == "tokenizer.chat_template" and isinstance(value, str):
+                        return True, value
+        except Exception:
+            continue
+    return parsed, ""
+
+
+def detect_chat_features(path):
+    """检测模型的对话模板能力。
+
+    返回 (has_template, has_reasoning)：
+    - has_template: True=含 chat_template（可启用 --jinja）；False=无；None=无法检测；
+    - has_reasoning: 模板是否支持思考强度/思考开关（reasoning_effort / enable_thinking / thinking）。
+    """
+    parsed, tpl = read_chat_template(path)
+    if not parsed:
+        return None, False
+    if not tpl:
+        return False, False
+    low = tpl.lower()
+    has_reasoning = ("reasoning_effort" in low or "enable_thinking" in low
+                     or "thinking" in low)
+    return True, has_reasoning
+
+
 def format_gguf_info(path):
     info = read_gguf_info(path)
     size = os.path.getsize(path) if os.path.exists(path) else 0

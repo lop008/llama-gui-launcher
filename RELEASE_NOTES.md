@@ -1,6 +1,64 @@
+# LLama 启动器 发布说明 / Release Notes
+
+> 最新版本 / Latest release: **v0.4.25** · 发布日期 / Released: 2026-09-20
+
+---
+
+# LLama 启动器 v0.4.25 发布说明 / Release Notes
+
+## English
+
+### New Features
+
+- **Chat-template support** — a new Advanced row for `--jinja`, thinking effort (`--chat-template-kwargs {"reasoning_effort":"low|medium|high"}`) and `--reasoning-budget`. The model's `tokenizer.chat_template` is auto-detected from the GGUF: a model without a template disables the Jinja checkbox, and a model without `reasoning_effort`/`enable_thinking` disables the effort/reasoning-budget controls. Thinking effort is hard-bound to Jinja and is never sent without `--jinja`.
+- **Import launch file** — new button at position 7 plus `Tools → Import launch file (.bat)…`: parse an existing `.bat/.cmd/.ps1/.sh/text` file and apply its `llama-server` parameters (model, mmproj, context, sampling, KV cache, chat template, …) back into the UI. UTF-8/GBK aware; the API key is intentionally not imported.
+- **Friendlier residual-process prompt** — the dialog now offers a "don't ask again" checkbox persisted to `config.json`, and Advanced parameters has a new "check residual processes on startup" toggle to re-enable it.
+- **Port-in-use suggestion** — when the configured port is occupied, a free port is suggested and, on confirmation, the main-window port is updated automatically (new Advanced toggle).
+- **Aspect-ratio ad image** — the right-side image now stretches horizontally only and keeps its original proportions.
+- **Launch-file validator** recognizes `--jinja`, `--chat-template-kwargs` and `--reasoning-budget`.
+
+### Improvements
+
+- Advanced parameters gained two rows: chat template (Jinja / thinking effort / reasoning budget) and startup behavior (residual check / port suggestion).
+
+### Downloads
+
+| File | Description |
+|------|-------------|
+| `LLama-Launcher-v0.4.25-win-x64.exe` | Single-file build — no Python required |
+| `LLama-Launcher-v0.4.25-win-x64-portable.zip` | Portable build — extract and run |
+| Source code (zip / tar.gz) | Full source |
+
+---
+
+## 中文
+
+### 🆕 新增功能
+
+- **对话模板支持**：高级参数新增一行，支持 `--jinja`、思考强度（`--chat-template-kwargs {"reasoning_effort":"low|medium|high"}`）与推理预算（`--reasoning-budget`）。选择模型后自动检测 GGUF 的 `tokenizer.chat_template`：无模板则禁用 Jinja 勾选；无 `reasoning_effort`/`enable_thinking` 则禁用思考强度与推理预算。思考强度与 Jinja 强绑定，未开 Jinja 不会发送该参数。
+- **导入启动文件**：底部 7 号位 + 菜单「工具 → 导入启动文件 (.bat)…」，解析已有 `.bat/.cmd/.ps1/.sh/文本` 文件并把 `llama-server` 参数（模型、视觉模型、上下文、采样、KV 缓存、对话模板等）回填到界面；自动兼容 UTF-8/GBK，API Key 出于安全不导入。
+- **残留进程提示优化**：弹窗新增「不再提示」（写入 `config.json`）；高级参数新增「启动时检测残留进程」开关，可随时重新开启。
+- **端口占用建议**：端口被占用时建议一个可用端口，确认后自动更新主界面端口号（高级参数新增开关）。
+- **广告位图片按比例缩放**：右侧图片仅横向铺满、保持原始比例，不再纵向拉伸。
+- **启动文件校验器** 识别 `--jinja`、`--chat-template-kwargs`、`--reasoning-budget`。
+
+### 🔧 改进
+
+- 高级参数区新增两行：对话模板（Jinja / 思考强度 / 推理预算）与启动时行为（残留检测 / 端口建议）。
+
+### 下载
+
+| 文件 | 说明 |
+|------|------|
+| `LLama-Launcher-v0.4.25-win-x64.exe` | 单文件版，无需安装 Python，双击即用 |
+| `LLama-Launcher-v0.4.25-win-x64-portable.zip` | 便携版，解压即用 |
+| Source code (zip / tar.gz) | 源码 |
+
+---
+
 # LLama 启动器 v0.3.85 发布说明 / Release Notes
 
-> 最新版本 / Latest release: **v0.3.85** · 发布日期 / Released: 2026-09-19
+> 版本 / Version: v0.3.85 · 发布日期 / Released: 2026-09-19
 
 ---
 

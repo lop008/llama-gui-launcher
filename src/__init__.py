@@ -1,2 +1,2 @@
-__version__ = "0.3.85"
+__version__ = "0.4.25"
 APP_NAME = "LLama 万能启动器"

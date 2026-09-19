@@ -33,7 +33,7 @@ docs/参数说明.html
 # 打包产物
 dist/
 build/
-*.spec
+# 注意：*.spec 是可复用的最小化打包定义，需要入库（勿忽略）
 
 # 本地统计（含使用记录）
 stats.json

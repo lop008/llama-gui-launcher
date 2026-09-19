@@ -2,6 +2,21 @@
 
 All notable changes to LLama 启动器 / LLama Launcher.
 
+## [0.4.25] - 2026-09-20
+
+### New Features
+
+- **Chat-template support** — new advanced row for `--jinja`, thinking effort (`--chat-template-kwargs {"reasoning_effort":"low|medium|high"}`) and `--reasoning-budget`. The model's `tokenizer.chat_template` is auto-detected from the GGUF: models without a template disable the Jinja checkbox, and models without `reasoning_effort`/`enable_thinking` disable the effort/reasoning-budget controls. Thinking effort is hard-bound to Jinja (not sent without `--jinja`).
+- **Import launch file** — new button at position 7 (and menu `Tools → Import launch file (.bat)…`): parse an existing `.bat/.cmd/.ps1/.sh/text` file and apply its `llama-server` parameters (model, mmproj, context, sampling, KV cache, chat template, …) back into the UI. Handles UTF-8/GBK.
+- **Residual-process prompt improved** — the dialog now has a "don't ask again" checkbox persisted to `config.json`, with a new "check residual processes on startup" toggle in Advanced parameters to re-enable it.
+- **Port-in-use suggestion** — when the configured port is occupied, suggest a free port and update the main-window port automatically after confirmation (new Advanced toggle).
+- **Ad image scales by width** — the right-side image now keeps its aspect ratio (no more vertical stretching).
+- **Launch-file validator** recognizes `--jinja`, `--chat-template-kwargs` and `--reasoning-budget`.
+
+### Improvements
+
+- Advanced parameters gained two rows: chat template (Jinja / thinking effort / reasoning budget) and startup behavior (residual check / port suggestion).
+
 ## [0.3.85] - 2026-09-19
 
 ### New Features

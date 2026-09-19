@@ -50,6 +50,8 @@ _PARAM_FLAGS = {
     "-sm": "split_mode", "--split-mode": "split_mode",
     "-mg": "main_gpu", "--main-gpu": "main_gpu",
     "-rea": "reasoning_format", "--reasoning-format": "reasoning_format",
+    "--chat-template-kwargs": "chat_template_kwargs",
+    "--reasoning-budget": "reasoning_budget",
 }
 
 # 布尔开关（不带值）：识别后不吞掉下一个 token。
@@ -59,6 +61,7 @@ _FLAG_FLAGS = {
     "--context-shift": "context_shift",
     "--mlock": "mlock",
     "--no-mmap": "no_mmap",
+    "--jinja": "jinja",
 }
 
 _PARAM_LABELS = {
@@ -71,9 +74,12 @@ _PARAM_LABELS = {
     "repeat_penalty": "重复惩罚", "timeout": "超时(秒)", "alias": "模型别名(-a)",
     "slots": "并行slots(-np)", "split_mode": "拆分模式(-sm)", "main_gpu": "主GPU(-mg)",
     "reasoning_format": "推理格式",
+    "chat_template_kwargs": "模板参数(--chat-template-kwargs)",
+    "reasoning_budget": "推理预算(--reasoning-budget)",
     "cont_batching": "连续批处理", "cmoe": "MoE加速(-cmoe)",
     "context_shift": "上下文移位", "mlock": "锁定内存(--mlock)",
     "no_mmap": "禁用mmap(--no-mmap)",
+    "jinja": "Jinja模板(--jinja)",
 }
 
 _EXE_RE = re.compile(r"llama-(server|cli)\.exe$", re.IGNORECASE)

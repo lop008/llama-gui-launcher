@@ -4,18 +4,16 @@ A GUI launcher for llama.cpp local large language models. It turns the whole wor
 
 **[中文文档 / Chinese](README.zh-CN.md)**
 
-> **Latest release: v0.3.85** — six color themes, a fully redesigned model-download tab, per-row resumable downloads, and a large round of UI polish. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
+> **Latest release: v0.4.25** — chat-template support (Jinja / thinking effort / reasoning budget), import launch files, a friendlier residual-process prompt with port-in-use suggestions, and an aspect-ratio-preserving ad image. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
 
-## What's New in v0.3.85
+## What's New in v0.4.25
 
-- **Six built-in themes** — Dark / Light / Orange / Green / Gray / Brown, defined in `src/themes.py`. All palettes share identical metrics, so switching never changes the layout size.
-- **Redesigned Model Download tab** — two-column layout (repositories on the left, files inside the selected repo on the right), three-field search (A organization/author · B model name/version · C auxiliary keyword) with AND/OR matching, per-page count selector, "Load more", and "Open download directory".
-- **Per-row file actions** — file name / size / installed / download / progress columns with header-click sorting and **resumable per-file downloads**. Clicking an already-downloaded file sets it as the main model and runs the full follow-up logic.
-- **Repository info + operation log** below the two columns, with a draggable splitter.
-- **Custom download directory** — defaults to the main page's model directory with a per-repository subfolder.
-- **Broader MTP detection** — recognizes `mtp` / `nextn` / `next_n` / `eh_proj` / `shared_head` tensors and `nextn_predict_layers` metadata.
-- **UI polish** — default window 1280 × 1280, compact advanced-parameter area, always-visible spin-box arrows, model path in the status bar, enlarged tab labels and group titles, and a horizontally-filled ad slot.
-- **Fixes** — no more false "residual process" dialog on startup; exporting a launch file no longer leaves a stray `.ico`; config now persists `custom_tools` / `opencode_workdir` / `last_download_dir`.
+- **Chat-template support** — a new advanced row for `--jinja`, thinking effort (`--chat-template-kwargs {"reasoning_effort":"low|medium|high"}`) and `--reasoning-budget`. The model's `tokenizer.chat_template` is auto-detected from the GGUF: no template → the Jinja checkbox is disabled; no `reasoning_effort`/`enable_thinking` → the effort and budget controls are disabled. Thinking effort is hard-bound to Jinja.
+- **Import launch file** — button at position 7 (and `Tools → Import launch file (.bat)…`): parse an existing `.bat/.cmd/.ps1/.sh/text` file and apply its parameters (model, mmproj, context, sampling, KV cache, chat template, …) back into the UI. UTF-8/GBK aware.
+- **Friendlier residual-process prompt** — the dialog now offers "don't ask again" (persisted to `config.json`), and Advanced parameters has a toggle to re-enable the check.
+- **Port-in-use suggestion** — when the port is occupied, suggest a free port and update the main-window port after confirmation.
+- **Aspect-ratio ad image** — the right-side image now stretches horizontally only and keeps its proportions.
+- **Launch-file validator** recognizes `--jinja`, `--chat-template-kwargs` and `--reasoning-budget`.
 
 ## What Problem Does It Solve?
 
