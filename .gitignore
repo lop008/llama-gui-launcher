@@ -19,6 +19,9 @@ venv/
 .idea/
 .vscode/
 
+# opencode 本地配置 / 技能（仅本地使用，不上传）
+.opencode/
+
 # 本地资源（可选占位/隐私图片）
 assets/icon.ico
 assets/donate_qr.png
