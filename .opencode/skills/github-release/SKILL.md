@@ -1,6 +1,6 @@
 ---
 name: github-release
-description: Use when releasing or publishing a new version of the LLama 万能启动器 / llama-gui-launcher to GitHub — bumping the version, updating the bilingual README/CHANGELOG/RELEASE_NOTES, building minimized PyInstaller packages, creating the versioned cover image and release body, committing/tagging/pushing, creating the GitHub Release with assets, and the GitHub promotion checklist. Triggers include 发版, 上传 GitHub, 打包发布, release, version bump, gh release, GitHub 推广.
+description: Use ONLY when the user explicitly asks to release/publish a new version to GitHub, or explicitly asks for the release/publish workflow (version bump, packaging, GitHub Release, upload) of the LLama 万能启动器 / llama-gui-launcher. Do not trigger for unrelated edits. Triggers include 发版, 发布新版本, 上传 GitHub, 打包发布, release, version bump, gh release.
 ---
 
 # GitHub 发版与推广 Skill（LLama 万能启动器）
