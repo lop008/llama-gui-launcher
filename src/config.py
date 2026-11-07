@@ -1,9 +1,12 @@
 import json
 import os
+from .i18n import t
 
 CONFIG_FILE = "config.json"
 
 DEFAULTS = {
+    # 界面语言：auto=跟随系统；或 zh-CN / zh-TW / en / ja / ko / ru / es / fr
+    "language": "auto",
     "llama_dir": "",
     "launcher_exe": "",
     "data_dir": "",
@@ -130,7 +133,7 @@ class Config:
         if isinstance(loaded, dict):
             self.data = _migrate(_merge(DEFAULTS, loaded))
         else:
-            raise ValueError("文件内容不是有效的配置")
+            raise ValueError(t('文件内容不是有效的配置'))
 
     def load(self):
         # 先读程序目录的引导配置

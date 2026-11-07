@@ -15,6 +15,7 @@ from PyQt6.QtWidgets import (
 )
 
 from .themes import THEMES
+from .i18n import t
 
 _IDLE_TEXT = "—"
 _COLLAPSE_MS = 5000   # 未点击（未钉住）时，鼠标离开后 5 秒收起
@@ -85,7 +86,7 @@ class HoverPill(QWidget):
         self._api_lbl = QLabel()
         self._api_lbl.setObjectName("ppApi")
         self._api_lbl.setVisible(False)
-        self._model_lbl = QLabel("未运行")
+        self._model_lbl = QLabel(t('未运行'))
         self._model_lbl.setObjectName("ppModel")
         self._model_lbl.setVisible(False)
         self._chev = QLabel("▴")
@@ -94,7 +95,7 @@ class HoverPill(QWidget):
         self._btn_close.setObjectName("ppClose")
         self._btn_close.setFixedSize(18, 18)
         self._btn_close.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._btn_close.setToolTip("隐藏悬浮窗（可在「高级参数 → 缩到托盘时显示悬浮小窗」重新开启）")
+        self._btn_close.setToolTip(t('隐藏悬浮窗（可在「高级参数 → 缩到托盘时显示悬浮小窗」重新开启）'))
         self._btn_close.setVisible(False)
         self._btn_close.clicked.connect(self._on_close_clicked)
 
@@ -122,12 +123,12 @@ class HoverPill(QWidget):
         self._card.setContentsMargins(10, 8, 10, 8)
         self._card.setHorizontalSpacing(12)
         self._card.setVerticalSpacing(6)
-        self._v_speed, self._row_speed = self._mk_tile("速度 tok/s", "生成输出速度（/slots n_decoded 差分，或 /metrics / 日志推算）")
-        self._v_cpu, self._row_cpu = self._mk_tile("CPU 负载%", "系统整体 CPU 负载：所有核心平均占用率（不是单核，也不会超过 100%）")
-        self._v_mem, self._row_mem = self._mk_tile("内存 GB", "系统内存 已用/总量")
-        self._v_gpu, self._row_gpu = self._mk_tile("GPU 负载 %", "GPU 计算核心利用率（nvidia-smi utilization.gpu，多卡取最大，约每 2 秒刷新；与显存占用是两个不同指标）")
-        self._v_vram, self._row_vram = self._mk_tile("显存 GB", "显存 已用/总量（nvidia-smi）")
-        self._v_api, self._row_api = self._mk_tile("API 接入", "正在请求模型的客户端数量")
+        self._v_speed, self._row_speed = self._mk_tile(t('速度 tok/s'), t('生成输出速度（/slots n_decoded 差分，或 /metrics / 日志推算）'))
+        self._v_cpu, self._row_cpu = self._mk_tile(t('CPU 负载%'), t('系统整体 CPU 负载：所有核心平均占用率（不是单核，也不会超过 100%）'))
+        self._v_mem, self._row_mem = self._mk_tile(t('内存 GB'), t('系统内存 已用/总量'))
+        self._v_gpu, self._row_gpu = self._mk_tile(t('GPU 负载 %'), t('GPU 计算核心利用率（nvidia-smi utilization.gpu，多卡取最大，约每 2 秒刷新；与显存占用是两个不同指标）'))
+        self._v_vram, self._row_vram = self._mk_tile(t('显存 GB'), t('显存 已用/总量（nvidia-smi）'))
+        self._v_api, self._row_api = self._mk_tile(t('API 接入'), t('正在请求模型的客户端数量'))
         self._model_full = QLabel(_IDLE_TEXT)
         self._model_full.setObjectName("ppModelFull")
         self._model_full.setWordWrap(False)
@@ -205,11 +206,11 @@ class HoverPill(QWidget):
 
     def set_model(self, name):
         name = (name or "").strip()
-        self._model = "" if name in ("未运行", "加载中…") else name
+        self._model = "" if name in (t('未运行'), t('加载中…')) else name
         self._model_lbl.setText(self._elide(self._model or _IDLE_TEXT, self._model_lbl, 170))
         full = self._model or _IDLE_TEXT
-        self._model_full.setText(f"模型：{full}")
-        tip = ("当前运行的模型：" + full) if self._model else "当前没有模型在运行"
+        self._model_full.setText(t('模型：{0}').format(full))
+        tip = (t('当前运行的模型：') + full) if self._model else t('当前没有模型在运行')
         self._model_lbl.setToolTip(tip)
         self._model_full.setToolTip(tip)
 
@@ -252,14 +253,14 @@ class HoverPill(QWidget):
             self._api_lbl.setVisible(False)
         self._set_value(self._v_speed, f"{self._speed:.1f}")
         self._set_value(self._v_api,
-                        f"{self._api_busy} 个接入" if self._api_busy else "空闲")
+                        t('{0} 个接入').format(self._api_busy) if self._api_busy else t('空闲'))
         self._repaint_dot()
 
     def _repaint_dot(self):
         color = "#3fd07f" if self._running else "#5c7080"
         self._dot.setStyleSheet(
             f"background:{color}; border-radius:5px; min-width:10px; min-height:10px;")
-        self._dot.setToolTip("模型服务运行中" if self._running else "模型服务未运行")
+        self._dot.setToolTip(t('模型服务运行中') if self._running else t('模型服务未运行'))
 
     def _set_value(self, lbl, text):
         lbl.setText(str(text))
@@ -464,19 +465,19 @@ class HoverPill(QWidget):
     def _build_menu(self):
         """右键菜单：打开主界面 / 启动模型 / 停止模型 / 隐藏图标 / 退出。"""
         menu = QMenu(self)
-        act_show = menu.addAction("打开主界面")
+        act_show = menu.addAction(t('打开主界面'))
         act_show.triggered.connect(self.open_main.emit)
-        act_start = menu.addAction("启动模型")
+        act_start = menu.addAction(t('启动模型'))
         act_start.setEnabled(not self._running)
         act_start.triggered.connect(self.start_requested.emit)
-        act_stop = menu.addAction("停止模型")
+        act_stop = menu.addAction(t('停止模型'))
         act_stop.setEnabled(self._running)
         act_stop.triggered.connect(self.stop_requested.emit)
         menu.addSeparator()
-        act_hide = menu.addAction("隐藏图标")
-        act_hide.setToolTip("本次最小化期间不再显示悬浮窗；下次点 X 收起时会自动恢复显示")
+        act_hide = menu.addAction(t('隐藏图标'))
+        act_hide.setToolTip(t('本次最小化期间不再显示悬浮窗；下次点 X 收起时会自动恢复显示'))
         act_hide.triggered.connect(self._on_hide_requested)
-        act_quit = menu.addAction("退出")
+        act_quit = menu.addAction(t('退出'))
         act_quit.triggered.connect(self.quit_requested.emit)
         return menu
 

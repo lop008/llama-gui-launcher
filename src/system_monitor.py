@@ -19,6 +19,7 @@ import time
 from ctypes import wintypes
 
 from PyQt6.QtCore import QObject, QTimer, pyqtSignal
+from .i18n import t
 
 CREATE_NO_WINDOW = 0x08000000
 
@@ -272,10 +273,10 @@ class SystemMonitor(QObject):
                     self._pproc.cpu_percent(None)  # 基准采样
                 except Exception:
                     self._pproc = None
-            self.model_changed.emit(model_hint or "加载中…")
+            self.model_changed.emit(model_hint or t('加载中…'))
         else:
-            self.api_changed.emit("API 未运行")
-            self.model_changed.emit("未运行")
+            self.api_changed.emit(t('API 未运行'))
+            self.model_changed.emit(t('未运行'))
 
     def fetch_model_now(self):
         """服务就绪时主动拉取一次运行模型名（加载完成后立即显示）。"""
@@ -307,7 +308,7 @@ class SystemMonitor(QObject):
             if not self._model_fetched:
                 self._query_model()
         else:
-            self.api_changed.emit("API 未运行")
+            self.api_changed.emit(t('API 未运行'))
 
     def _system_cpu(self):
         if HAS_PSUTIL:
@@ -353,7 +354,7 @@ class SystemMonitor(QObject):
             try:
                 vm = psutil.virtual_memory()
                 self.mem_raw_changed.emit(vm.used / 2**30, vm.total / 2**30)
-                tip = f"系统内存: {vm.used / 2**30:.1f} / {vm.total / 2**30:.1f} GB"
+                tip = t('系统内存: {0:.1f} / {1:.1f} GB').format(vm.used / 2 ** 30, vm.total / 2 ** 30)
                 if self._pid:
                     try:
                         rss = psutil.Process(self._pid).memory_info().rss / 2**30
@@ -365,7 +366,7 @@ class SystemMonitor(QObject):
                 pass
         load, total, used = _mem_status()
         self.mem_raw_changed.emit(used / 2**30, total / 2**30)
-        tip = f"系统内存: {used / 2**30:.1f} / {total / 2**30:.1f} GB"
+        tip = t('系统内存: {0:.1f} / {1:.1f} GB').format(used / 2 ** 30, total / 2 ** 30)
         if self._pid:
             ws = _proc_working_set(self._pid)
             if ws:
@@ -489,7 +490,7 @@ class SystemMonitor(QObject):
         try:
             if not self.log_dir:
                 return None
-            path = os.path.join(self.log_dir, f"运行日志-{time.strftime('%Y%m%d')}.log")
+            path = os.path.join(self.log_dir, t('运行日志-{0}.log').format(time.strftime('%Y%m%d')))
             if not os.path.isfile(path):
                 return None
             size = os.path.getsize(path)
@@ -546,7 +547,7 @@ class SystemMonitor(QObject):
         self._api_probe_busy = True
 
         def work():
-            text = "API 空闲"
+            text = t('API 空闲')
             busy = 0
             slots = None
             try:
@@ -555,10 +556,10 @@ class SystemMonitor(QObject):
                 if r.ok:
                     slots = r.json()
                     busy = sum(1 for s in slots if s.get("is_processing"))
-                    text = f"API 使用中({busy})" if busy else "API 空闲"
+                    text = t('API 使用中({0})').format(busy) if busy else t('API 空闲')
             except Exception:
                 slots = None
-                text = "API 空闲"
+                text = t('API 空闲')
 
             # 实时输出速度：/slots 的 n_decoded 计数器增量（详见 _slots_speed_update）
             if isinstance(slots, list):
@@ -589,7 +590,7 @@ class SystemMonitor(QObject):
             if name:
                 self._model_fetched = True
             try:
-                self.model_changed.emit(name or "加载中…")
+                self.model_changed.emit(name or t('加载中…'))
             except RuntimeError:
                 pass
 

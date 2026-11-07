@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
     QAbstractItemView, QDialog, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
     QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
+from .i18n import t
 
 # ---------------------------------------------------------------- 参数识别表
 # flag（小写）→ 参数名。覆盖 bat/cmd/ps1/sh 常见写法与 llama.cpp 长短选项。
@@ -68,24 +69,24 @@ _FLAG_FLAGS = {
 }
 
 _PARAM_LABELS = {
-    "model": "模型", "ctx": "上下文长度", "port": "端口", "host": "监听地址",
-    "ngl": "GPU层数", "batch": "批大小", "ubatch": "微批(-ub)", "threads": "线程",
-    "predict": "预测Token", "api_key": "API Key", "spec_type": "MTP(--spec-type)",
-    "tensor_split": "tensor-split", "mmproj": "视觉模型", "flash_attn": "闪存注意力",
-    "device": "设备(-dev)", "kv_k": "KV缓存K(-ctk)", "kv_v": "KV缓存V(-ctv)",
-    "temp": "温度", "top_k": "Top-K", "top_p": "Top-P",
-    "repeat_penalty": "重复惩罚", "timeout": "超时(秒)", "alias": "模型别名(-a)",
-    "slots": "并行slots(-np)", "split_mode": "拆分模式(-sm)", "main_gpu": "主GPU(-mg)",
-    "reasoning_format": "推理格式",
-    "chat_template_kwargs": "模板参数(--chat-template-kwargs)",
-    "reasoning_budget": "推理预算(--reasoning-budget)",
-    "ssl_key_file": "SSL私钥(--ssl-key-file)",
-    "ssl_cert_file": "SSL证书(--ssl-cert-file)",
-    "cont_batching": "连续批处理", "cmoe": "MoE加速(-cmoe)",
-    "context_shift": "上下文移位", "mlock": "锁定内存(--mlock)",
-    "no_mmap": "禁用mmap(--no-mmap)",
-    "jinja": "Jinja模板(--jinja)",
-    "metrics": "指标统计(--metrics)",
+    "model": t('模型'), "ctx": t('上下文长度'), "port": t('端口'), "host": t('监听地址'),
+    "ngl": t('GPU层数'), "batch": t('批大小'), "ubatch": t('微批(-ub)'), "threads": t('线程'),
+    "predict": t('预测Token'), "api_key": "API Key", "spec_type": "MTP(--spec-type)",
+    "tensor_split": "tensor-split", "mmproj": t('视觉模型'), "flash_attn": t('闪存注意力'),
+    "device": t('设备(-dev)'), "kv_k": t('KV缓存K(-ctk)'), "kv_v": t('KV缓存V(-ctv)'),
+    "temp": t('温度'), "top_k": "Top-K", "top_p": "Top-P",
+    "repeat_penalty": t('重复惩罚'), "timeout": t('超时(秒)'), "alias": t('模型别名(-a)'),
+    "slots": t('并行slots(-np)'), "split_mode": t('拆分模式(-sm)'), "main_gpu": t('主GPU(-mg)'),
+    "reasoning_format": t('推理格式'),
+    "chat_template_kwargs": t('模板参数(--chat-template-kwargs)'),
+    "reasoning_budget": t('推理预算(--reasoning-budget)'),
+    "ssl_key_file": t('SSL私钥(--ssl-key-file)'),
+    "ssl_cert_file": t('SSL证书(--ssl-cert-file)'),
+    "cont_batching": t('连续批处理'), "cmoe": t('MoE加速(-cmoe)'),
+    "context_shift": t('上下文移位'), "mlock": t('锁定内存(--mlock)'),
+    "no_mmap": t('禁用mmap(--no-mmap)'),
+    "jinja": t('Jinja模板(--jinja)'),
+    "metrics": t('指标统计(--metrics)'),
 }
 
 _EXE_RE = re.compile(r"llama-(server|cli)\.exe$", re.IGNORECASE)
@@ -368,23 +369,23 @@ def validate_script(text, path=""):
     # a. 文件存在且可读
     if path:
         if os.path.isfile(path) and os.access(path, os.R_OK):
-            items.append(("文件存在且可读", "ok", f"文件存在且可读：{path}"))
+            items.append((t('文件存在且可读'), "ok", t('文件存在且可读：{0}').format(path)))
         else:
-            items.append(("文件存在且可读", "fail", f"文件不存在或不可读：{path}"))
+            items.append((t('文件存在且可读'), "fail", t('文件不存在或不可读：{0}').format(path)))
     else:
-        items.append(("文件存在且可读", "warn", "未提供文件路径，跳过存在性检查"))
+        items.append((t('文件存在且可读'), "warn", t('未提供文件路径，跳过存在性检查')))
 
     # b. 文本可解码（bytes 输入时执行；二进制则终止后续解析）
     if isinstance(text, (bytes, bytearray)):
         data = bytes(text)
         decoded, enc = _decode_bytes(data)
         if decoded is None:
-            items.append(("文本可解码", "fail", "二进制文件，仅校验存在性与大小"))
+            items.append((t('文本可解码'), "fail", t('二进制文件，仅校验存在性与大小')))
             return items
         text = decoded
     else:
         enc = "str"
-    items.append(("文本可解码", "ok", f"文本可解码（{enc}）"))
+    items.append((t('文本可解码'), "ok", t('文本可解码（{0}）').format(enc)))
 
     # 规范化：变量替换 + 续行合并 + 注释跳过
     _vars, phys_info = normalize_script(text, path)
@@ -393,7 +394,7 @@ def validate_script(text, path=""):
     # c. 脚本引用的可执行文件是否存在
     exe, exe_line = _find_exe(eff_lines)
     if not exe:
-        items.append(("可执行文件", "warn", "未找到 llama-server/llama-cli 可执行命令行"))
+        items.append((t('可执行文件'), "warn", t('未找到 llama-server/llama-cli 可执行命令行')))
     else:
         if os.path.isabs(exe):
             exists = os.path.isfile(exe)
@@ -401,10 +402,10 @@ def validate_script(text, path=""):
             cand = _resolve(path, exe)
             exists = os.path.isfile(cand) or shutil.which(exe) is not None
         if exists:
-            items.append(("可执行文件", "ok", f"可执行文件存在：{exe}"))
+            items.append((t('可执行文件'), "ok", t('可执行文件存在：{0}').format(exe)))
         else:
-            items.append(("可执行文件", "fail",
-                           f"可执行文件不存在：{exe}（请检查路径或先安装 llama.cpp）"))
+            items.append((t('可执行文件'), "fail",
+                           t('可执行文件不存在：{0}（请检查路径或先安装 llama.cpp）').format(exe)))
 
     # 参数提取（c/d/e 共用）
     params = {}
@@ -415,28 +416,28 @@ def validate_script(text, path=""):
     # d. -m 模型文件是否存在
     model = params.get("model", "")
     if not model:
-        items.append(("数据模型", "warn", "脚本未指定 -m/--model 模型参数"))
+        items.append((t('数据模型'), "warn", t('脚本未指定 -m/--model 模型参数')))
     else:
         mp = _resolve(path, model)
         exists = os.path.isfile(mp)
-        yes_no = "是" if exists else "否"
-        items.append(("数据模型", "ok" if exists else "fail",
-                      f"数据模型是否已就位（能否加载）：{yes_no}（{mp}）"))
+        yes_no = t('是') if exists else t('否')
+        items.append((t('数据模型'), "ok" if exists else "fail",
+                      t('数据模型是否已就位（能否加载）：{0}（{1}）').format(yes_no, mp)))
 
     # d2. --mmproj 视觉模型文件是否存在
     mm = params.get("mmproj", "")
     if mm:
         mp = _resolve(path, mm)
         exists = os.path.isfile(mp)
-        items.append(("视觉模型", "ok" if exists else "fail",
-                      f"视觉模型是否已就位：{'是' if exists else '否'}（{mp}）"))
+        items.append((t('视觉模型'), "ok" if exists else "fail",
+                      t('视觉模型是否已就位：{0}（{1}）').format(t('是') if exists else t('否'), mp)))
 
     # e. --port 合法性 + socket 绑定测试当前是否空闲
     port = params.get("port", "")
     if not port:
-        items.append(("端口", "ok", "脚本未指定 --port（llama-server 默认使用 8080）"))
+        items.append((t('端口'), "ok", t('脚本未指定 --port（llama-server 默认使用 8080）')))
     elif not str(port).isdigit():
-        items.append(("端口", "fail", f"--port 值不是合法数字：{port}"))
+        items.append((t('端口'), "fail", t('--port 值不是合法数字：{0}').format(port)))
     else:
         p = int(port)
         free = True
@@ -448,17 +449,17 @@ def validate_script(text, path=""):
         finally:
             s.close()
         if free:
-            items.append(("端口", "ok", f"端口 {p}（当前空闲）"))
+            items.append((t('端口'), "ok", t('端口 {0}（当前空闲）').format(p)))
         else:
-            items.append(("端口", "warn",
-                          f"端口 {p} 当前被占用，启动时会失败（可先释放该端口或改用其他端口）"))
+            items.append((t('端口'), "warn",
+                          t('端口 {0} 当前被占用，启动时会失败（可先释放该端口或改用其他端口）').format(p)))
 
     # f. bat 基本语法检查（存在主命令行即可，不做强校验）
     if exe_line:
         head = exe_line if len(exe_line) <= 60 else exe_line[:57] + "..."
-        items.append(("脚本语法", "ok", f"存在主命令行：{head}"))
+        items.append((t('脚本语法'), "ok", t('存在主命令行：{0}').format(head)))
     else:
-        items.append(("脚本语法", "fail", "未找到可执行的主命令行"))
+        items.append((t('脚本语法'), "fail", t('未找到可执行的主命令行')))
 
     return items
 
@@ -467,10 +468,10 @@ def overall_conclusion(items):
     """整体结论：全部 ok → ✔；有 warn → ⚠ 可运行但有问题；有 fail → ✘。"""
     st = [s for _n, s, _d in items]
     if "fail" in st:
-        return "✘ 无法正常运行"
+        return t('✘ 无法正常运行')
     if "warn" in st:
-        return "⚠ 可运行但有问题"
-    return "✔ 可以正常运行"
+        return t('⚠ 可运行但有问题')
+    return t('✔ 可以正常运行')
 
 
 # ---------------------------------------------------------------- 报告对话框
@@ -482,7 +483,7 @@ class ValidateBatDialog(QDialog):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("启动文件校验报告")
+        self.setWindowTitle(t('启动文件校验报告'))
         self.setMinimumWidth(720)
         self.resize(860, 560)
         self._path = ""
@@ -496,7 +497,7 @@ class ValidateBatDialog(QDialog):
         lay.addWidget(self.label_summary)
 
         self.table = QTableWidget(0, 2)
-        self.table.setHorizontalHeaderLabels(["源文件", "说明"])
+        self.table.setHorizontalHeaderLabels([t('源文件'), t('说明')])
         hh = self.table.horizontalHeader()
         hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -504,13 +505,12 @@ class ValidateBatDialog(QDialog):
         lay.addWidget(self.table, 1)
 
         row = QHBoxLayout()
-        self.btn_revalidate = QPushButton("重新校验")
+        self.btn_revalidate = QPushButton(t('重新校验'))
         self.btn_revalidate.setToolTip(
-            "读取左列当前编辑后的文本，重新解析并刷新右列说明与整体结论。\n"
-            "支持 bat 变量（set VAR=… / %VAR%）、^ 续行合并、REM/:: 注释跳过。")
+            t('读取左列当前编辑后的文本，重新解析并刷新右列说明与整体结论。\n支持 bat 变量（set VAR=… / %VAR%）、^ 续行合并、REM/:: 注释跳过。'))
         self.btn_revalidate.clicked.connect(self._revalidate)
-        self.btn_save_cfg = QPushButton("保存配置")
-        self.btn_save_cfg.setToolTip("把左列各行按原顺序写回源文件（bat 在中文 Windows 下建议 GBK 编码写出）")
+        self.btn_save_cfg = QPushButton(t('保存配置'))
+        self.btn_save_cfg.setToolTip(t('把左列各行按原顺序写回源文件（bat 在中文 Windows 下建议 GBK 编码写出）'))
         self.btn_save_cfg.clicked.connect(self._save_back)
         row.addWidget(self.btn_revalidate)
         row.addWidget(self.btn_save_cfg)
@@ -526,8 +526,8 @@ class ValidateBatDialog(QDialog):
     def _pick_file(self):
         start = os.path.expanduser("~")
         path, _ = QFileDialog.getOpenFileName(
-            self, "选择启动文件", start,
-            "文本脚本 (*.bat *.cmd *.ps1 *.sh *.txt);;所有文件 (*.*)")
+            self, t('选择启动文件'), start,
+            t('文本脚本 (*.bat *.cmd *.ps1 *.sh *.txt);;所有文件 (*.*)'))
         if not path:
             self.close()
             return
@@ -535,7 +535,7 @@ class ValidateBatDialog(QDialog):
             with open(path, "rb") as f:
                 data = f.read()
         except OSError as e:
-            QMessageBox.critical(self, "错误", f"读取文件失败：{e}")
+            QMessageBox.critical(self, t('错误'), t('读取文件失败：{0}').format(e))
             self.close()
             return
         self._path = path
@@ -557,8 +557,8 @@ class ValidateBatDialog(QDialog):
         if text is None:
             # 二进制文件：仅展示存在性与大小，禁用保存
             self.table.setRowCount(1)
-            it_l = QTableWidgetItem("<二进制文件>")
-            it_r = QTableWidgetItem("二进制文件，仅校验存在性与大小")
+            it_l = QTableWidgetItem(t('<二进制文件>'))
+            it_r = QTableWidgetItem(t('二进制文件，仅校验存在性与大小'))
             it_r.setFlags(it_r.flags() & ~Qt.ItemFlag.ItemIsEditable)
             self.table.setItem(0, 0, it_l)
             self.table.setItem(0, 1, it_r)
@@ -575,13 +575,13 @@ class ValidateBatDialog(QDialog):
             kind, eff = (phys_info[idx] if idx < len(phys_info) else ("head", None))
             left = raw.rstrip("\r")
             if kind == "comment":
-                right = "注释行（REM/::，校验时忽略）"
+                right = t('注释行（REM/::，校验时忽略）')
             elif kind == "cont":
-                right = "续行（^ 与上一行合并为一条命令解析）"
+                right = t('续行（^ 与上一行合并为一条命令解析）')
             else:
                 found = _parse_line(eff or "")
                 descs = [self._describe_param(name, value, checks) for _f, name, value in found]
-                right = "；".join(descs) if descs else ("未识别/普通语句" if left.strip() else "")
+                right = "；".join(descs) if descs else (t('未识别/普通语句') if left.strip() else "")
             rows.append((left, right))
 
         self.table.setRowCount(len(rows))
@@ -594,21 +594,22 @@ class ValidateBatDialog(QDialog):
 
     def _describe_param(self, name, value, checks):
         """单个参数在右列的说明文本（模型/视觉模型/端口附带校验状态）。"""
-        label = _PARAM_LABELS.get(name, name or "未识别")
+        label = _PARAM_LABELS.get(name, name or t('未识别'))
         if name == "model":
-            st = (checks.get("数据模型") or ("", ""))[0]
+            st = (checks.get(t('数据模型')) or ("", ""))[0]
             base = os.path.basename(value) or value
-            return f"{label}: {base} —— 文件存在 {'✔' if st == 'ok' else '✘'}"
+            return t('{0}: {1} —— 文件存在 {2}').format(label, base, '✔' if st == 'ok' else '✘')
         if name == "mmproj":
-            st = (checks.get("视觉模型") or ("", ""))[0]
+            st = (checks.get(t('视觉模型')) or ("", ""))[0]
             base = os.path.basename(value) or value
-            return f"{label}: {base} —— 文件存在 {'✔' if st == 'ok' else '✘'}"
+            return t('{0}: {1} —— 文件存在 {2}').format(label, base, '✔' if st == 'ok' else '✘')
         if name == "port":
-            desc = (checks.get("端口") or ("", ""))[1]
-            free = "空闲" in desc and "被占用" not in desc
-            return f"{label}: {value}（{'当前空闲' if free else '被占用/未检查'}）"
+            desc = (checks.get(t('端口')) or ("", ""))[1]
+            free = t('空闲') in desc and t('被占用') not in desc
+            return t('{0}: {1}（{2}）').format(
+                label, value, t('当前空闲') if free else t('被占用/未检查'))
         if value == "":
-            return f"{label}: 已开启"
+            return t('{0}: 已开启').format(label)
         return f"{label}: {value}"
 
     # ---------------------------------------------------------- 重新校验 / 保存
@@ -625,16 +626,15 @@ class ValidateBatDialog(QDialog):
             data = new_text.encode("utf-8-sig")   # 含 BOM，保证可解码检查通过
         self._raw_bytes = data
         self._refresh(data)
-        self.label_status.setText("已重新校验")
+        self.label_status.setText(t('已重新校验'))
 
     def _save_back(self):
         """把左列各行按原顺序写回源文件（先确认；优先沿用原编码，bat 建议 GBK）。"""
         if not self._path:
             return
         ret = QMessageBox.question(
-            self, "确认写回源文件",
-            f"将左列当前内容按原顺序写回：\n{self._path}\n\n"
-            "（bat 在中文 Windows 下建议 GBK 编码写出，避免乱码）\n确定继续？",
+            self, t('确认写回源文件'),
+            t('将左列当前内容按原顺序写回：\n{0}\n\n（bat 在中文 Windows 下建议 GBK 编码写出，避免乱码）\n确定继续？').format(self._path),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if ret != QMessageBox.StandardButton.Yes:
             return
@@ -653,6 +653,6 @@ class ValidateBatDialog(QDialog):
             with open(self._path, "wb") as f:
                 f.write(data)
         except OSError as e:
-            QMessageBox.critical(self, "错误", f"写回失败：{e}")
+            QMessageBox.critical(self, t('错误'), t('写回失败：{0}').format(e))
             return
-        self.label_status.setText(f"已保存（{enc}）：{self._path}")
+        self.label_status.setText(t('已保存（{0}）：{1}').format(enc, self._path))

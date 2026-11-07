@@ -11,6 +11,7 @@ import os
 import re
 import threading
 import time
+from .i18n import t
 
 STATS_FILE = "stats.json"
 
@@ -202,10 +203,10 @@ def human_duration(seconds):
     h, rem = divmod(s, 3600)
     m, sec = divmod(rem, 60)
     if h:
-        return f"{h} 小时 {m} 分"
+        return t('{0} 小时 {1} 分').format(h, m)
     if m:
-        return f"{m} 分 {sec} 秒"
-    return f"{sec} 秒"
+        return t('{0} 分 {1} 秒').format(m, sec)
+    return t('{0} 秒').format(sec)
 
 
 def human_tokens(n):

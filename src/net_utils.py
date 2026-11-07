@@ -12,6 +12,7 @@ import ipaddress
 import os
 import socket
 import tempfile
+from .i18n import t
 
 
 def _is_ascii(text):
@@ -99,8 +100,7 @@ def ensure_self_signed_cert(key_path, cert_path, common_name="llama-server"):
         from cryptography.x509.oid import NameOID
     except ImportError as e:  # pragma: no cover - 依赖缺失时的友好提示
         raise RuntimeError(
-            "生成 HTTPS 证书需要 cryptography 库，请先安装：\n"
-            "    pip install cryptography") from e
+            t('生成 HTTPS 证书需要 cryptography 库，请先安装：\n    pip install cryptography')) from e
 
     try:
         os.makedirs(os.path.dirname(key_path) or ".", exist_ok=True)

@@ -22,6 +22,7 @@ from .llama_updater import (MODE_ALL, MODE_SERVER, UpdaterError, backup_launcher
                             schedule_self_update, win_assets)
 from .model_downloader import ModelDownloader
 from .model_scanner import human_size
+from .i18n import t
 
 PER_PAGE = 30
 
@@ -58,16 +59,16 @@ class _InstallWorker(QThread):
     def run(self):
         try:
             cur_ver = get_local_version(
-                os.path.join(self._dir, "llama-server.exe")) or "未知版本"
-            self.log.emit(f"备份 {self._dir} 顶层文件（当前版本 {cur_ver}）→ bak\\{cur_ver}.zip")
+                os.path.join(self._dir, "llama-server.exe")) or t('未知版本')
+            self.log.emit(t('备份 {0} 顶层文件（当前版本 {1}）→ bak\\{2}.zip').format(self._dir, cur_ver, cur_ver))
             backup_cb = lambda d, t: self.backup_progress.emit(int(d * 100 // max(1, t)))
             backup_path = backup_launcher_dir(self._dir, cur_ver, progress_cb=backup_cb)
             if backup_path:
-                self.log.emit("备份完成: " + os.path.basename(backup_path))
+                self.log.emit(t('备份完成: ') + os.path.basename(backup_path))
             else:
-                self.log.emit("跳过备份（无可备份文件）")
+                self.log.emit(t('跳过备份（无可备份文件）'))
 
-            self.log.emit("开始安装…")
+            self.log.emit(t('开始安装…'))
             install_cb = lambda d, t: self.install_progress.emit(int(d * 100 // max(1, t)))
             actions, skipped, pending = install_from_zip(
                 self._zip, self._dir, mode=self._mode, progress_cb=install_cb)
@@ -83,32 +84,32 @@ def _show_result(parent, res, target_dir, exe_path=""):
     for _n, s in res["actions"]:
         counts[s] = counts.get(s, 0) + 1
 
-    lines = [f"已安装到：{target_dir}"]
+    lines = [t('已安装到：{0}').format(target_dir)]
     if exe_path and os.path.isfile(exe_path):
         try:
-            ver = get_local_version(exe_path) or "未知"
+            ver = get_local_version(exe_path) or t('未知')
         except Exception:
-            ver = "未知"
-        lines.append(f"当前 llama 版本：{ver}")
+            ver = t('未知')
+        lines.append(t('当前 llama 版本：{0}').format(ver))
 
     parts = []
     if counts.get("installed"):
-        parts.append(f"新装 {counts['installed']}")
+        parts.append(t('新装 {0}').format(counts['installed']))
     if counts.get("replaced"):
-        parts.append(f"替换 {counts['replaced']}")
+        parts.append(t('替换 {0}').format(counts['replaced']))
     if counts.get("removed"):
-        parts.append(f"删除旧文件 {counts['removed']}")
+        parts.append(t('删除旧文件 {0}').format(counts['removed']))
     if res.get("skipped"):
-        parts.append(f"未选中 {res['skipped']}")
-    lines.append("，".join(parts) + "。" if parts else "无文件变更。")
+        parts.append(t('未选中 {0}').format(res['skipped']))
+    lines.append("，".join(parts) + "。" if parts else t('无文件变更。'))
     if res.get("backup_path"):
-        lines.append(f"备份：{os.path.basename(res['backup_path'])}")
+        lines.append(t('备份：{0}').format(os.path.basename(res['backup_path'])))
 
     pending = res.get("pending", [])
     if pending:
         lines.append("")
-        lines.append(f"⚠ {len(pending)} 个文件正被占用，已写成 .new，关闭本程序后自动替换。")
-    QMessageBox.information(parent, "更新完成", "\n".join(lines))
+        lines.append(t('⚠ {0} 个文件正被占用，已写成 .new，关闭本程序后自动替换。').format(len(pending)))
+    QMessageBox.information(parent, t('更新完成'), "\n".join(lines))
 
 
 class UpdaterTab(QWidget):
@@ -128,37 +129,37 @@ class UpdaterTab(QWidget):
         root.setSpacing(6)
 
         bar = QHBoxLayout()
-        self.btn_refresh = QPushButton("刷新")
+        self.btn_refresh = QPushButton(t('刷新'))
         self.btn_refresh.clicked.connect(self.refresh)
         bar.addWidget(self.btn_refresh)
         bar.addSpacing(12)
 
-        bar.addWidget(QLabel("分支:"))
-        self.radio_all = QRadioButton("全部")
-        self.radio_stable = QRadioButton("仅稳定")
-        self.radio_pre = QRadioButton("仅预发布")
+        bar.addWidget(QLabel(t('分支:')))
+        self.radio_all = QRadioButton(t('全部'))
+        self.radio_stable = QRadioButton(t('仅稳定'))
+        self.radio_pre = QRadioButton(t('仅预发布'))
         self.radio_all.setChecked(True)
         for r in (self.radio_all, self.radio_stable, self.radio_pre):
             r.toggled.connect(self._apply_filter)
             bar.addWidget(r)
 
         bar.addStretch(1)
-        self.btn_more = QPushButton("↓ 加载更多")
+        self.btn_more = QPushButton(t('↓ 加载更多'))
         self.btn_more.clicked.connect(self.load_more)
         bar.addWidget(self.btn_more)
-        self.btn_open_dl = QPushButton("打开下载目录")
-        self.btn_open_dl.setToolTip("打开更新包下载目录")
+        self.btn_open_dl = QPushButton(t('打开下载目录'))
+        self.btn_open_dl.setToolTip(t('打开更新包下载目录'))
         self.btn_open_dl.clicked.connect(self._open_dl_dir)
         bar.addWidget(self.btn_open_dl)
         self.label_status = QLabel("")
         bar.addWidget(self.label_status)
         root.addLayout(bar)
 
-        self.chk_all_files = QCheckBox("安装 zip 内全部文件（含工具/示例，默认仅 server+DLL）")
+        self.chk_all_files = QCheckBox(t('安装 zip 内全部文件（含工具/示例，默认仅 server+DLL）'))
         root.addWidget(self.chk_all_files)
 
         self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["文件名", "版本", "日期", "分支", "操作"])
+        self.table.setHorizontalHeaderLabels([t('文件名'), t('版本'), t('日期'), t('分支'), t('操作')])
         self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setColumnWidth(0, 340)
@@ -175,13 +176,13 @@ class UpdaterTab(QWidget):
         self.detail_view = QTextEdit()
         self.detail_view.setReadOnly(True)
         self.detail_view.setMaximumHeight(96)
-        self.detail_view.setPlaceholderText("点击某一行查看该版本信息")
+        self.detail_view.setPlaceholderText(t('点击某一行查看该版本信息'))
         root.addWidget(self.detail_view)
 
         self.log_view = QTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setMaximumHeight(120)
-        self.log_view.setPlaceholderText("操作日志…")
+        self.log_view.setPlaceholderText(t('操作日志…'))
         root.addWidget(self.log_view, 0)
 
         self._downloader.task_started.connect(self._on_task_started)
@@ -202,7 +203,7 @@ class UpdaterTab(QWidget):
         self._row_meta.clear()
         self._state.clear()
         self._page = 1
-        self._set_loading(True, "正在加载版本列表…")
+        self._set_loading(True, t('正在加载版本列表…'))
         self._list_worker = _ListWorker(self._page)
         self._list_worker.ok.connect(self._on_list_ok)
         self._list_worker.err.connect(self._on_list_err)
@@ -215,7 +216,7 @@ class UpdaterTab(QWidget):
             self.refresh()
             return
         self._page += 1
-        self._set_loading(True, f"正在加载第 {self._page} 页…")
+        self._set_loading(True, t('正在加载第 {0} 页…').format(self._page))
         self._list_worker = _ListWorker(self._page)
         self._list_worker.ok.connect(self._on_list_ok)
         self._list_worker.err.connect(self._on_list_err)
@@ -237,17 +238,17 @@ class UpdaterTab(QWidget):
         self._apply_filter()
         n = sum(len(x["assets"]) for x in self._releases)
         dl = sum(1 for s in self._state.values() if s.get("downloaded"))
-        text = f"共 {len(self._releases)} 个版本 / {n} 个 Windows 包"
+        text = t('共 {0} 个版本 / {1} 个 Windows 包').format(len(self._releases), n)
         if dl:
-            text += f"（{dl} 已下载）"
+            text += t('（{0} 已下载）').format(dl)
         self.label_status.setText(text)
         self._set_loading(False)
 
     def _on_list_err(self, msg):
         self._set_loading(False)
         if self._page == 1:
-            self.label_status.setText("加载失败")
-        QMessageBox.critical(self, "加载失败", f"获取版本列表失败：\n{msg}")
+            self.label_status.setText(t('加载失败'))
+        QMessageBox.critical(self, t('加载失败'), t('获取版本列表失败：\n{0}').format(msg))
 
     def _append_release_rows(self, rel, assets):
         base = self.table.rowCount()
@@ -259,11 +260,11 @@ class UpdaterTab(QWidget):
             key = f"{rel['tag']}::{name}"
 
             it_name = QTableWidgetItem(name)
-            it_name.setToolTip(f"大小: {human_size(a['size'])}\n{a['url']}")
+            it_name.setToolTip(t('大小: {0}\n{1}').format(human_size(a['size']), a['url']))
             self.table.setItem(r, 0, it_name)
             self.table.setItem(r, 1, QTableWidgetItem(rel["tag"]))
             self.table.setItem(r, 2, QTableWidgetItem(rel["published_at"]))
-            branch = "预发布" if rel["prerelease"] else "主分支(稳定)"
+            branch = t('预发布') if rel["prerelease"] else t('主分支(稳定)')
             self.table.setItem(r, 3, QTableWidgetItem(branch))
 
             op = self._make_op_widget(key, name, a)
@@ -276,12 +277,12 @@ class UpdaterTab(QWidget):
         lay = QHBoxLayout(w)
         lay.setContentsMargins(2, 2, 2, 2)
         lay.setSpacing(4)
-        dl = QPushButton("下载")
+        dl = QPushButton(t('下载'))
         pb = QProgressBar()
         pb.setRange(0, 100)
         pb.setValue(0)
         pb.setMinimumWidth(96)
-        inst = QPushButton("安装")
+        inst = QPushButton(t('安装'))
         inst.setEnabled(False)
         lay.addWidget(dl)
         lay.addWidget(pb, 1)
@@ -300,7 +301,7 @@ class UpdaterTab(QWidget):
             st["downloaded"] = True
             st["dest"] = dest
             pb.setValue(100)
-            pb.setFormat("已下载")
+            pb.setFormat(t('已下载'))
             inst.setEnabled(True)
 
         dl.clicked.connect(lambda *_: self._on_download(key))
@@ -324,10 +325,8 @@ class UpdaterTab(QWidget):
             return
         rel = meta["release"]
         a = meta["asset"]
-        branch = "预发布" if rel["prerelease"] else "主分支(稳定)"
-        text = (f"<b>{rel['tag']}</b>　{rel.get('name','')}<br>"
-                f"发布日期: {rel['published_at']}　|　分支: {branch}<br>"
-                f"文件: {a['name']}（{human_size(a.get('size',0))}）")
+        branch = t('预发布') if rel["prerelease"] else t('主分支(稳定)')
+        text = (t('<b>{0}</b>\u3000{1}<br>发布日期: {2}\u3000|\u3000分支: {3}<br>文件: {4}（{5}）').format(rel['tag'], rel.get('name', ''), rel['published_at'], branch, a['name'], human_size(a.get('size', 0))))
         self.detail_view.setHtml(text)
 
     # ------------------------------------------------------------- 下载
@@ -349,7 +348,7 @@ class UpdaterTab(QWidget):
                 os.makedirs(d, exist_ok=True)
             os.startfile(d)  # type: ignore[attr-defined]
         except OSError as e:
-            QMessageBox.critical(self, "错误", str(e))
+            QMessageBox.critical(self, t('错误'), str(e))
 
     def _on_download(self, key):
         st = self._state[key]
@@ -357,13 +356,13 @@ class UpdaterTab(QWidget):
         try:
             os.makedirs(os.path.dirname(dest), exist_ok=True)
         except OSError as e:
-            QMessageBox.critical(self, "错误", f"无法创建临时目录：\n{e}")
+            QMessageBox.critical(self, t('错误'), t('无法创建临时目录：\n{0}').format(e))
             return
         st["dest"] = dest
         st["dl_btn"].setEnabled(False)
         st["progress"].setValue(0)
-        st["progress"].setFormat("排队中…")
-        self.log(f"开始下载 {st['name']}（{human_size(st['size'])}）→ {dest}")
+        st["progress"].setFormat(t('排队中…'))
+        self.log(t('开始下载 {0}（{1}）→ {2}').format(st['name'], human_size(st['size']), dest))
         self._downloader.enqueue(st["url"], dest, label=key)
 
     def _on_task_started(self, key):
@@ -390,19 +389,19 @@ class UpdaterTab(QWidget):
         st["downloaded"] = True
         st["dest"] = final
         st["progress"].setValue(100)
-        st["progress"].setFormat("已下载")
+        st["progress"].setFormat(t('已下载'))
         st["install_btn"].setEnabled(True)
         st["dl_btn"].setEnabled(True)
-        self.log(f"下载完成 {st['name']}")
+        self.log(t('下载完成 {0}').format(st['name']))
 
     def _on_task_failed(self, key, err):
         st = self._state.get(key)
         if not st:
             return
-        st["progress"].setFormat("失败")
+        st["progress"].setFormat(t('失败'))
         st["dl_btn"].setEnabled(True)
-        self.log(f"下载失败 {st['name']}: {err}")
-        QMessageBox.critical(self, "下载失败", f"{st['name']}：\n{err}\n\n可点击「下载」重试（支持断点续传）。")
+        self.log(t('下载失败 {0}: {1}').format(st['name'], err))
+        QMessageBox.critical(self, t('下载失败'), t('{0}：\n{1}\n\n可点击「下载」重试（支持断点续传）。').format(st['name'], err))
 
     # ------------------------------------------------------------- 安装
     def _target_dir(self):
@@ -419,34 +418,32 @@ class UpdaterTab(QWidget):
     def _on_install(self, key):
         st = self._state[key]
         if not st["downloaded"] or not os.path.isfile(st["dest"]):
-            QMessageBox.information(self, "提示", "请先下载该文件再安装。")
+            QMessageBox.information(self, t('提示'), t('请先下载该文件再安装。'))
             return
         if self._install_worker and self._install_worker.isRunning():
-            QMessageBox.information(self, "提示", "已有安装任务进行中，请稍候。")
+            QMessageBox.information(self, t('提示'), t('已有安装任务进行中，请稍候。'))
             return
         target_dir = self._target_dir()
         if not target_dir or not os.path.isdir(target_dir):
-            QMessageBox.critical(self, "错误", f"目标目录无效：\n{target_dir}")
+            QMessageBox.critical(self, t('错误'), t('目标目录无效：\n{0}').format(target_dir))
             return
         mode = MODE_ALL if self.chk_all_files.isChecked() else MODE_SERVER
 
         ret = QMessageBox.question(
-            self, "确认安装",
-            f"将把 {st['name']} 安装到：\n{target_dir}\n\n"
-            "会先备份该目录顶层文件，删除旧版本二进制/DLL，再解压安装所有选中文件。\n"
-            "模型与配置不受影响。继续？")
+            self, t('确认安装'),
+            t('将把 {0} 安装到：\n{1}\n\n会先备份该目录顶层文件，删除旧版本二进制/DLL，再解压安装所有选中文件。\n模型与配置不受影响。继续？').format(st['name'], target_dir))
         if ret != QMessageBox.StandardButton.Yes:
             return
 
         st["dl_btn"].setEnabled(False)
         st["install_btn"].setEnabled(False)
-        self.log(f"开始安装 {st['name']} → {target_dir}")
+        self.log(t('开始安装 {0} → {1}').format(st['name'], target_dir))
         self._install_worker = _InstallWorker(st["dest"], target_dir, mode)
         self._install_worker.log.connect(self.log)
         self._install_worker.backup_progress.connect(
-            lambda p: (self.log(f"备份进度 {p}%"), st["progress"].setValue(p)))
+            lambda p: (self.log(t('备份进度 {0}%').format(p)), st["progress"].setValue(p)))
         self._install_worker.install_progress.connect(
-            lambda p: (self.log(f"安装进度 {p}%"), st["progress"].setFormat(f"安装 {p}%")))
+            lambda p: (self.log(t('安装进度 {0}%').format(p)), st["progress"].setFormat(t('安装 {0}%').format(p))))
         self._install_worker.done.connect(lambda res, k=key: self._on_install_done(k, res))
         self._install_worker.error.connect(self._on_install_err)
         self._install_worker.start()
@@ -460,28 +457,28 @@ class UpdaterTab(QWidget):
         if pending:
             schedule_self_update(pending, target_dir, pid=os.getpid())
 
-        lines = ["安装完成："]
+        lines = [t('安装完成：')]
         counts = {}
         for _name, status in actions:
             counts[status] = counts.get(status, 0) + 1
         if counts.get("installed"):
-            lines.append(f"  新装 {counts['installed']} 个")
+            lines.append(t('  新装 {0} 个').format(counts['installed']))
         if counts.get("replaced"):
-            lines.append(f"  替换 {counts['replaced']} 个")
+            lines.append(t('  替换 {0} 个').format(counts['replaced']))
         if counts.get("removed"):
-            lines.append(f"  删除旧文件 {counts['removed']} 个")
+            lines.append(t('  删除旧文件 {0} 个').format(counts['removed']))
         if res["skipped"]:
-            lines.append(f"  未选中 {res['skipped']} 个")
+            lines.append(t('  未选中 {0} 个').format(res['skipped']))
         if pending:
             lines.append("")
-            lines.append(f"⚠ {len(pending)} 个文件正被占用，已写成 .new：")
+            lines.append(t('⚠ {0} 个文件正被占用，已写成 .new：').format(len(pending)))
             lines.extend("    " + p for p in pending)
-            lines.append("已安排延迟替换——请关闭本程序后自动完成。")
+            lines.append(t('已安排延迟替换——请关闭本程序后自动完成。'))
 
         self.log("\n".join(lines))
         if st:
             st["progress"].setValue(100)
-            st["progress"].setFormat("已安装")
+            st["progress"].setFormat(t('已安装'))
             st["dl_btn"].setEnabled(True)
             st["install_btn"].setEnabled(True)
 
@@ -491,8 +488,8 @@ class UpdaterTab(QWidget):
             self.mw.recheck_llama_version()
 
     def _on_install_err(self, msg):
-        self.log(f"安装失败：{msg}")
-        QMessageBox.critical(self, "安装失败", f"{msg}")
+        self.log(t('安装失败：{0}').format(msg))
+        QMessageBox.critical(self, t('安装失败'), f"{msg}")
 
     # ------------------------------------------------------------- 日志
     def log(self, text):

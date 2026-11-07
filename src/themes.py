@@ -8,6 +8,7 @@
     app.setStyleSheet(build_qss("dark"))
 """
 from string import Template
+from .i18n import t
 
 # 深色（默认）
 _DARK = {
@@ -185,12 +186,12 @@ _BROWN = {
 
 # 顺序即菜单顺序；键名用于 config.json 的 "theme" 字段
 THEMES = {
-    "dark": {"name": "深色", "icon": "🌙", "colors": _DARK},
-    "light": {"name": "浅色", "icon": "☀️", "colors": _LIGHT},
-    "orange": {"name": "橙色", "icon": "🟠", "colors": _ORANGE},
-    "green": {"name": "绿色", "icon": "🟢", "colors": _GREEN},
-    "gray": {"name": "灰色", "icon": "⚪", "colors": _GRAY},
-    "brown": {"name": "棕色", "icon": "🟤", "colors": _BROWN},
+    "dark": {"name": t('深色'), "icon": "🌙", "colors": _DARK},
+    "light": {"name": t('浅色'), "icon": "☀️", "colors": _LIGHT},
+    "orange": {"name": t('橙色'), "icon": "🟠", "colors": _ORANGE},
+    "green": {"name": t('绿色'), "icon": "🟢", "colors": _GREEN},
+    "gray": {"name": t('灰色'), "icon": "⚪", "colors": _GRAY},
+    "brown": {"name": t('棕色'), "icon": "🟤", "colors": _BROWN},
 }
 
 # 所有主题共用同一模板：仅 $颜色 变化，尺寸/字号完全一致 → 切换不改布局

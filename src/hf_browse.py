@@ -6,6 +6,7 @@
 from urllib.parse import quote
 
 import requests
+from .i18n import t
 
 HF_API = "https://huggingface.co/api/models"
 HEADERS = {"User-Agent": "LLamaLauncher/0.2"}
@@ -19,13 +20,13 @@ def _get(url, params=None, timeout=25):
     try:
         r = requests.get(url, params=params, headers=HEADERS, timeout=timeout)
     except requests.exceptions.RequestException as e:
-        raise HFError(f"网络请求失败: {e}") from e
+        raise HFError(t('网络请求失败: {0}').format(e)) from e
     if not (200 <= r.status_code < 300):
-        raise HFError(f"HF 接口返回 HTTP {r.status_code}")
+        raise HFError(t('HF 接口返回 HTTP {0}').format(r.status_code))
     try:
         return r.json()
     except ValueError as e:
-        raise HFError("HF 接口返回了非 JSON 内容") from e
+        raise HFError(t('HF 接口返回了非 JSON 内容')) from e
 
 
 def _get_raw(url, params=None, timeout=25):
@@ -33,13 +34,13 @@ def _get_raw(url, params=None, timeout=25):
     try:
         r = requests.get(url, params=params, headers=HEADERS, timeout=timeout)
     except requests.exceptions.RequestException as e:
-        raise HFError(f"网络请求失败: {e}") from e
+        raise HFError(t('网络请求失败: {0}').format(e)) from e
     if not (200 <= r.status_code < 300):
-        raise HFError(f"HF 接口返回 HTTP {r.status_code}")
+        raise HFError(t('HF 接口返回 HTTP {0}').format(r.status_code))
     try:
         return r.json(), r.headers
     except ValueError as e:
-        raise HFError("HF 接口返回了非 JSON 内容") from e
+        raise HFError(t('HF 接口返回了非 JSON 内容')) from e
 
 
 def list_repos(author="unsloth", search=None, limit=100, cursor=None):

@@ -7,7 +7,7 @@ import webbrowser
 from collections import Counter
 
 from PyQt6.QtCore import QEvent, QPoint, QThread, Qt, QTimer, pyqtSignal
-from PyQt6.QtGui import QAction, QCloseEvent, QColor, QFont, QIcon, QPainter, QPixmap
+from PyQt6.QtGui import QAction, QActionGroup, QCloseEvent, QColor, QFont, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog,
     QGroupBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
@@ -40,6 +40,8 @@ from .system_monitor import SystemMonitor
 from .themes import THEMES, build_qss
 from .updater_tab import UpdaterTab
 from .usage_stats import StatsStore, parse_log_line
+from .i18n import LANGUAGES, t
+from . import i18n
 
 try:
     from . import tools as tools_mod
@@ -234,8 +236,8 @@ class MainWindow(QMainWindow):
         self.refresh_models(keep_selection=True)
         self._set_running_state(False)
         self.scan_tools()
-        self._log_file("程序启动")
-        self.statusBar().showMessage("就绪")
+        self._log_file(t('程序启动'))
+        self.statusBar().showMessage(t('就绪'))
         if not os.environ.get("LLAMA_LAUNCHER_NO_GPU_DETECT"):
             QTimer.singleShot(2000, self.detect_gpus)   # 启动时自动检测多显卡（功能 3）
 
@@ -297,42 +299,39 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ UI
     def _build_menu(self):
         m = self.menuBar()
-        menu_start = m.addMenu("开始(&S)")
-        self.act_start = QAction("启动服务(&R)", self)
+        menu_start = m.addMenu(t('开始(&S)'))
+        self.act_start = QAction(t('启动服务(&R)'), self)
         self.act_start.setShortcut("Ctrl+R")
-        self.act_stop = QAction("停止服务(&T)", self)
-        self.act_quit = QAction("退出(&X)", self)
+        self.act_stop = QAction(t('停止服务(&T)'), self)
+        self.act_quit = QAction(t('退出(&X)'), self)
         self.act_quit.setShortcut("Ctrl+Q")
         menu_start.addAction(self.act_start)
         menu_start.addAction(self.act_stop)
         menu_start.addSeparator()
         menu_start.addAction(self.act_quit)
 
-        menu_tools = m.addMenu("工具(&T)")
-        self.act_refresh = QAction("刷新模型", self)
-        self.act_open_dir = QAction("打开模型目录", self)
-        self.act_web = QAction("打开管理页面", self)
-        self.act_api = QAction("查看 API 模型列表", self)
-        self.act_open_agent = QAction("打开 Agent 工具", self)
-        self.act_clear_log = QAction("清空日志", self)
-        self.act_open_log = QAction("打开日志目录", self)
-        self.act_export = QAction("导出配置 (.aic)", self)
-        self.act_import = QAction("导入配置 (.aic)", self)
-        self.act_export_bat = QAction("导出一键启动 (.bat)", self)
+        menu_tools = m.addMenu(t('工具(&T)'))
+        self.act_refresh = QAction(t('刷新模型'), self)
+        self.act_open_dir = QAction(t('打开模型目录'), self)
+        self.act_web = QAction(t('打开管理页面'), self)
+        self.act_api = QAction(t('查看 API 模型列表'), self)
+        self.act_open_agent = QAction(t('打开 Agent 工具'), self)
+        self.act_clear_log = QAction(t('清空日志'), self)
+        self.act_open_log = QAction(t('打开日志目录'), self)
+        self.act_export = QAction(t('导出配置 (.aic)'), self)
+        self.act_import = QAction(t('导入配置 (.aic)'), self)
+        self.act_export_bat = QAction(t('导出一键启动 (.bat)'), self)
         self.act_export_bat.setToolTip(
-            "将当前模型与参数生成可双击直接启动 llama-server 的批处理，"
-            "并在桌面创建带软件图标的快捷方式")
-        self.act_import_bat = QAction("导入启动文件 (.bat)…", self)
+            t('将当前模型与参数生成可双击直接启动 llama-server 的批处理，并在桌面创建带软件图标的快捷方式'))
+        self.act_import_bat = QAction(t('导入启动文件 (.bat)…'), self)
         self.act_import_bat.setToolTip(
-            "选择一个已有的 .bat/.cmd/.ps1/.sh/文本启动文件，解析其中的 llama-server 参数"
-            "并应用到当前界面（模型、上下文、采样、对话模板等）")
-        self.act_export_preview_bat = QAction("导出命令预览 (.bat)…", self)
+            t('选择一个已有的 .bat/.cmd/.ps1/.sh/文本启动文件，解析其中的 llama-server 参数并应用到当前界面（模型、上下文、采样、对话模板等）'))
+        self.act_export_preview_bat = QAction(t('导出命令预览 (.bat)…'), self)
         self.act_export_preview_bat.setToolTip(
-            "把「命令预览」页里的完整命令行原样保存为 .bat 文件，可自选存储路径（功能 6）")
-        self.act_stats = QAction("数据统计…", self)
+            t('把「命令预览」页里的完整命令行原样保存为 .bat 文件，可自选存储路径（功能 6）'))
+        self.act_stats = QAction(t('数据统计…'), self)
         self.act_stats.setToolTip(
-            "打开独立的数据统计界面：打开次数、使用时长、输入/输出 token，"
-            "支持按小时 / 日 / 月查看（功能 9）")
+            t('打开独立的数据统计界面：打开次数、使用时长、输入/输出 token，支持按小时 / 日 / 月查看（功能 9）'))
         menu_tools.addAction(self.act_refresh)
         menu_tools.addAction(self.act_open_dir)
         menu_tools.addSeparator()
@@ -351,12 +350,30 @@ class MainWindow(QMainWindow):
         menu_tools.addAction(self.act_clear_log)
         menu_tools.addAction(self.act_open_log)
 
-        menu_help = m.addMenu("关于(&H)")
-        self.act_about = QAction("开发者信息", self)
-        self.act_docs = QAction("参数说明", self)
+        menu_lang = m.addMenu(t('语言(&L)'))
+        _lang_group = QActionGroup(self)
+        _lang_group.setExclusive(True)
+        for _code, _native in LANGUAGES:
+            _act = QAction(_native, self)
+            _act.setCheckable(True)
+            _act.setChecked(i18n.lang() == _code)
+            _act.triggered.connect(lambda _chk=False, c=_code: self._switch_language(c))
+            _lang_group.addAction(_act)
+            menu_lang.addAction(_act)
+        menu_lang.addSeparator()
+        _act_auto = QAction(t('跟随系统语言'), self)
+        _act_auto.setCheckable(True)
+        _act_auto.setChecked((self.cfg.data.get("language") or "auto") == "auto")
+        _act_auto.triggered.connect(lambda _chk=False: self._switch_language("auto"))
+        _lang_group.addAction(_act_auto)
+        menu_lang.addAction(_act_auto)
+
+        menu_help = m.addMenu(t('关于(&H)'))
+        self.act_about = QAction(t('开发者信息'), self)
+        self.act_docs = QAction(t('参数说明'), self)
         menu_help.addAction(self.act_docs)
         menu_help.addAction(self.act_about)
-        self.act_update_now = QAction("立即更新", self)
+        self.act_update_now = QAction(t('立即更新'), self)
         menu_help.addAction(self.act_update_now)
 
     def _build_ui(self):
@@ -375,12 +392,12 @@ class MainWindow(QMainWindow):
         pw = QVBoxLayout(self.params_panel)
         pw.setContentsMargins(0, 0, 0, 0)
 
-        self.box_basic = CollapsibleBox("基本参数")
+        self.box_basic = CollapsibleBox(t('基本参数'))
         self._build_basic(self.box_basic.layout())
-        self.box_advanced = CollapsibleBox("高级参数")
+        self.box_advanced = CollapsibleBox(t('高级参数'))
         self.box_advanced.set_collapsed(True)
         self._build_advanced(self.box_advanced.layout())
-        self.box_gpu = CollapsibleBox("多显卡 (Multi-GPU)")
+        self.box_gpu = CollapsibleBox(t('多显卡 (Multi-GPU)'))
         self.box_gpu.set_collapsed(True)
         self._build_gpu(self.box_gpu.layout())
         pw.addWidget(self.box_basic)
@@ -409,13 +426,13 @@ class MainWindow(QMainWindow):
         tt = QVBoxLayout(tool_tab)
         tt.setContentsMargins(0, 0, 0, 0)
         tool_bar = QHBoxLayout()
-        tip = QLabel("双击行 = 打开；选中行后点底部「打开 Agent 工具」；未找到的工具双击可手动指定路径")
+        tip = QLabel(t('双击行 = 打开；选中行后点底部「打开 Agent 工具」；未找到的工具双击可手动指定路径'))
         tip.setStyleSheet("color: #888;")
         tool_bar.addWidget(tip)
         tool_bar.addStretch(1)
         tt.addLayout(tool_bar)
         self.tool_table = QTableWidget(0, 5)
-        self.tool_table.setHorizontalHeaderLabels(["工具", "类型", "描述", "状态", "打开"])
+        self.tool_table.setHorizontalHeaderLabels([t('工具'), t('类型'), t('描述'), t('状态'), t('打开')])
         self.tool_table.horizontalHeader().setStretchLastSection(True)
         self.tool_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.tool_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -428,14 +445,12 @@ class MainWindow(QMainWindow):
         it = QVBoxLayout(info_tab)
         it.setContentsMargins(0, 0, 0, 0)
         info_bar = QHBoxLayout()
-        self.check_hf_query = QCheckBox("联网查询")
+        self.check_hf_query = QCheckBox(t('联网查询'))
         self.check_hf_query.setToolTip(
-            "勾选后，每次选择模型都会自动联网查询 HuggingFace 补充信息"
-            "（简介 / 下载量 / 点赞 / 标签等，结果本地缓存 7 天）。\n"
-            "不勾选则只显示从本地 GGUF 头部解析的信息。")
+            t('勾选后，每次选择模型都会自动联网查询 HuggingFace 补充信息（简介 / 下载量 / 点赞 / 标签等，结果本地缓存 7 天）。\n不勾选则只显示从本地 GGUF 头部解析的信息。'))
         info_bar.addWidget(self.check_hf_query)
-        self.btn_hf = QPushButton("联网查询该模型")
-        self.btn_hf.setToolTip("用模型名联网搜索 HuggingFace，拉取简介/下载量/点赞等公开信息（本地缓存 7 天）")
+        self.btn_hf = QPushButton(t('联网查询该模型'))
+        self.btn_hf.setToolTip(t('用模型名联网搜索 HuggingFace，拉取简介/下载量/点赞等公开信息（本地缓存 7 天）'))
         info_bar.addWidget(self.btn_hf)
         info_bar.addStretch(1)
         it.addLayout(info_bar)
@@ -453,12 +468,12 @@ class MainWindow(QMainWindow):
             tabs.addTab(widget, title)
             self._tab_widgets[key] = widget
 
-        _add_tab(self.log_view, "运行日志", "log")
-        _add_tab(self.preview_view, "命令预览", "preview")
-        _add_tab(tool_tab, "Agent 工具", "tools")
-        _add_tab(info_tab, "模型信息", "info")
-        _add_tab(self.download_tab, "模型下载", "download")
-        _add_tab(self.updater_tab, "更新 llama.cpp", "updater")
+        _add_tab(self.log_view, t('运行日志'), "log")
+        _add_tab(self.preview_view, t('命令预览'), "preview")
+        _add_tab(tool_tab, t('Agent 工具'), "tools")
+        _add_tab(info_tab, t('模型信息'), "info")
+        _add_tab(self.download_tab, t('模型下载'), "download")
+        _add_tab(self.updater_tab, t('更新 llama.cpp'), "updater")
         self.tabs = tabs
         self.tabs.setMinimumHeight(280)
         # 恢复上次的标签顺序，并在拖动后持久化
@@ -468,37 +483,33 @@ class MainWindow(QMainWindow):
         root.addWidget(splitter_widget)
 
         # ---- 主按钮区（C1: 双排 × 5 列共 10 个；广告位在网格右侧）----
-        self.btn_start = QPushButton("启动服务")
-        self.btn_start.setToolTip("启动 llama-server（隐藏窗口后台运行），就绪后自动打开浏览器")
-        self.btn_stop = QPushButton("停止服务")
-        self.btn_stop.setToolTip("停止服务并清理进程树（模型跑飞/幻觉时一键终止）")
-        self.btn_web = QPushButton("打开网页")
-        self.btn_web.setToolTip("在浏览器中打开 llama.cpp Web 聊天界面")
-        self.btn_agent = QPushButton("打开 Agent 工具")
-        self.btn_agent.setToolTip("打开「Agent 工具」列表中当前选中（高亮）的工具")
-        self.btn_save = QPushButton("保存配置")
-        self.btn_save.setToolTip("将当前所有设置保存到 config.json（服务器参数、所选模型、视觉模型、工具路径、主题等），下次启动自动恢复")
+        self.btn_start = QPushButton(t('启动服务'))
+        self.btn_start.setToolTip(t('启动 llama-server（隐藏窗口后台运行），就绪后自动打开浏览器'))
+        self.btn_stop = QPushButton(t('停止服务'))
+        self.btn_stop.setToolTip(t('停止服务并清理进程树（模型跑飞/幻觉时一键终止）'))
+        self.btn_web = QPushButton(t('打开网页'))
+        self.btn_web.setToolTip(t('在浏览器中打开 llama.cpp Web 聊天界面'))
+        self.btn_agent = QPushButton(t('打开 Agent 工具'))
+        self.btn_agent.setToolTip(t('打开「Agent 工具」列表中当前选中（高亮）的工具'))
+        self.btn_save = QPushButton(t('保存配置'))
+        self.btn_save.setToolTip(t('将当前所有设置保存到 config.json（服务器参数、所选模型、视觉模型、工具路径、主题等），下次启动自动恢复'))
         # C1: 第 2 排 —— 校验启动文件 + 导入启动文件（7 号位）+ 导出启动文件 + 2 个占位按钮
-        self.btn_validate_bat = QPushButton("校验启动文件")
+        self.btn_validate_bat = QPushButton(t('校验启动文件'))
         self.btn_validate_bat.setToolTip(
-            "选择 .bat/.cmd/.ps1/.sh/文本脚本，静态校验启动项能否正常运行并生成参数报告。\n"
-            "支持 bat 变量（set VAR=… / %VAR%）、^ 续行合并、REM/:: 注释跳过。")
-        self.btn_import_file = QPushButton("导入启动文件")
+            t('选择 .bat/.cmd/.ps1/.sh/文本脚本，静态校验启动项能否正常运行并生成参数报告。\n支持 bat 变量（set VAR=… / %VAR%）、^ 续行合并、REM/:: 注释跳过。'))
+        self.btn_import_file = QPushButton(t('导入启动文件'))
         self.btn_import_file.setToolTip(
-            "选择一个已有的 .bat/.cmd/.ps1/.sh/文本启动文件，解析其中的 llama-server 参数并应用到当前界面\n"
-            "（模型、视觉模型、上下文、采样参数、对话模板等），等同「工具 → 导入启动文件 (.bat)…」。")
-        self.btn_export_file = QPushButton("导出启动文件")
+            t('选择一个已有的 .bat/.cmd/.ps1/.sh/文本启动文件，解析其中的 llama-server 参数并应用到当前界面\n（模型、视觉模型、上下文、采样参数、对话模板等），等同「工具 → 导入启动文件 (.bat)…」。'))
+        self.btn_export_file = QPushButton(t('导出启动文件'))
         self.btn_export_file.setToolTip(
-            "把当前模型与全部参数导出为可双击直接启动 llama-server 的 .bat 一键启动脚本，"
-            "并在桌面创建带软件图标的快捷方式（等同「工具 → 导出一键启动 (.bat)」）")
+            t('把当前模型与全部参数导出为可双击直接启动 llama-server 的 .bat 一键启动脚本，并在桌面创建带软件图标的快捷方式（等同「工具 → 导出一键启动 (.bat)」）'))
         # C1: 第 2 排 —— 校验启动文件 + 导入启动文件 + 导出启动文件 + 数据统计 + 1 个预留
-        self.btn_stats = QPushButton("数据统计")
+        self.btn_stats = QPushButton(t('数据统计'))
         self.btn_stats.setToolTip(
-            "打开数据统计窗口：打开次数、使用时长、输入/输出 token，"
-            "支持按小时 / 日 / 月查看（等同「工具 → 数据统计…」）")
-        _b = QPushButton("预留功能")
+            t('打开数据统计窗口：打开次数、使用时长、输入/输出 token，支持按小时 / 日 / 月查看（等同「工具 → 数据统计…」）'))
+        _b = QPushButton(t('预留功能'))
         _b.setEnabled(False)
-        _b.setToolTip("预留功能（暂未开放）")
+        _b.setToolTip(t('预留功能（暂未开放）'))
         self.btn_ph_3 = _b
 
         btn_grid = QGridLayout()
@@ -509,7 +520,8 @@ class MainWindow(QMainWindow):
                  self.btn_stats, self.btn_ph_3]
         for _r, _row in enumerate((_row0, _row1)):
             for _c, _b in enumerate(_row):
-                _b.setFixedWidth(120)   # 压缩按钮宽度（原 150）
+                # 中文 120px 够用；其他语言按内容自动加宽，避免裁字
+                _b.setMinimumWidth(120)
                 _b.setFixedHeight(36)
                 btn_grid.addWidget(_b, _r, _c)
 
@@ -517,13 +529,13 @@ class MainWindow(QMainWindow):
         self.label_ad = _AspectImageLabel()
         self.label_ad.setMinimumWidth(160)
         self.label_ad.setMinimumHeight(40)
-        self.label_ad.setToolTip("广告位。放入 assets/ad.png 即可替换为你的图片（按宽度等比缩放，不会纵向拉伸）。")
+        self.label_ad.setToolTip(t('广告位。放入 assets/ad.png 即可替换为你的图片（按宽度等比缩放，不会纵向拉伸）。'))
         ad_path = os.path.join(self.resource_dir, "assets", "ad.png")
         pm = QPixmap(ad_path) if os.path.isfile(ad_path) else QPixmap()
         if not pm.isNull():
             self.label_ad.set_source_pixmap(pm)
         else:
-            self.label_ad.setText("广告位")
+            self.label_ad.setText(t('广告位'))
             self.label_ad.setStyleSheet(
                 "background:#0a1322; color:#2f5a75; border:1px dashed #1d4f7a; font-size:12px;")
         # C1: 广告位放在按钮网格右侧，横向填充剩余空间（不参与双排网格）
@@ -537,9 +549,9 @@ class MainWindow(QMainWindow):
         sb = self.statusBar()
 
         # ---- 功能 1：当前选中模型的完整绝对路径 → 状态栏左侧（_on_model_changed 中更新）----
-        self.label_model_path = QLabel("未选择模型")
+        self.label_model_path = QLabel(t('未选择模型'))
         self.label_model_path.setMaximumWidth(460)
-        self.label_model_path.setToolTip("当前选中主模型的完整路径")
+        self.label_model_path.setToolTip(t('当前选中主模型的完整路径'))
         sb.addWidget(self.label_model_path)
 
         def _mk_label():
@@ -547,9 +559,9 @@ class MainWindow(QMainWindow):
             lab.setStyleSheet("color: #777; padding: 0 6px;")
             return lab
 
-        self.btn_theme = QPushButton("🎨 主题")
-        self.btn_theme.setFixedWidth(96)
-        self.btn_theme.setToolTip("选择配色方案：深色 / 浅色 / 橙色 / 绿色 / 灰色 / 棕色")
+        self.btn_theme = QPushButton(t('🎨 主题'))
+        self.btn_theme.setMinimumWidth(96)
+        self.btn_theme.setToolTip(t('选择配色方案：深色 / 浅色 / 橙色 / 绿色 / 灰色 / 棕色'))
         theme_menu = QMenu(self)
         for _key, _th in THEMES.items():
             _act = theme_menu.addAction(f"{_th['icon']} {_th['name']}")
@@ -558,34 +570,34 @@ class MainWindow(QMainWindow):
         sb.addPermanentWidget(self.btn_theme)          # 最右
 
         self.label_api = _mk_label()
-        self.label_api.setText("API 未运行")
-        self.label_api.setToolTip("外部工具（opencode 等）是否正在通过 API 请求模型")
+        self.label_api.setText(t('API 未运行'))
+        self.label_api.setToolTip(t('外部工具（opencode 等）是否正在通过 API 请求模型'))
         sb.addPermanentWidget(self.label_api)
 
         self.label_model = _mk_label()
-        self.label_model.setText("模型 未运行")
-        self.label_model.setToolTip("当前加载运行的模型")
+        self.label_model.setText(t('模型 未运行'))
+        self.label_model.setToolTip(t('当前加载运行的模型'))
         sb.addPermanentWidget(self.label_model)
 
         self.label_vram = _mk_label()
-        self.label_vram.setToolTip("显卡显存占用（已用/总，nvidia-smi）")
+        self.label_vram.setToolTip(t('显卡显存占用（已用/总，nvidia-smi）'))
         sb.addPermanentWidget(self.label_vram)
 
         self.label_mem = _mk_label()
-        self.label_mem.setToolTip("系统内存占用")
+        self.label_mem.setToolTip(t('系统内存占用'))
         sb.addPermanentWidget(self.label_mem)
 
         self.label_cpu = _mk_label()
-        self.label_cpu.setToolTip("服务运行时显示 llama-server 进程 CPU 占用；未运行时显示系统 CPU")
+        self.label_cpu.setToolTip(t('服务运行时显示 llama-server 进程 CPU 占用；未运行时显示系统 CPU'))
         sb.addPermanentWidget(self.label_cpu)          # 最左（靠近普通消息）
 
-        self.setWindowTitle(f"LLama 启动器 v{__version__}")
+        self.setWindowTitle(t('LLama 启动器 v{0}').format(__version__))
         # 双排按钮网格 + 广告位需要较宽窗口，直接以目标尺寸初始化
         self.resize(1280, 1280)
 
     def _build_basic(self, lay):
         # ---- A4: 「生成参数」分组（先创建；控件由 basic/advanced 两处添加进来）----
-        self.group_gen = QGroupBox("生成参数")
+        self.group_gen = QGroupBox(t('生成参数'))
         self._gen_grid = QGridLayout(self.group_gen)
         self._gen_grid.setContentsMargins(8, 2, 8, 6)
         self._gen_grid.setHorizontalSpacing(10)
@@ -611,42 +623,37 @@ class MainWindow(QMainWindow):
 
         # ---- 目录类设置（模型 / 启动器 / 数据）并排一行，充分利用横向宽度 ----
         self.edit_dir = QLineEdit()
-        self.edit_dir.setPlaceholderText("扫描模型的根目录")
-        self.edit_dir.setToolTip("模型扫描根目录。程序会在此目录的 2~3 级子目录内扫描 .gguf 模型（自动跳过 .venv/.git 等无关目录）。")
-        btn_dir = QPushButton("浏览…")
+        self.edit_dir.setPlaceholderText(t('扫描模型的根目录'))
+        self.edit_dir.setToolTip(t('模型扫描根目录。程序会在此目录的 2~3 级子目录内扫描 .gguf 模型（自动跳过 .venv/.git 等无关目录）。'))
+        btn_dir = QPushButton(t('浏览…'))
         btn_dir.clicked.connect(self._browse_dir)
-        btn_dir.setToolTip("选择模型扫描目录")
-        self.btn_refresh = QPushButton("刷新模型")
+        btn_dir.setToolTip(t('选择模型扫描目录'))
+        self.btn_refresh = QPushButton(t('刷新模型'))
         self.btn_refresh.clicked.connect(lambda: self.refresh_models())
-        self.btn_refresh.setToolTip("重新扫描模型目录下的所有 GGUF 模型文件")
+        self.btn_refresh.setToolTip(t('重新扫描模型目录下的所有 GGUF 模型文件'))
 
         self.edit_launcher = QLineEdit()
-        self.edit_launcher.setPlaceholderText("留空 = 模型目录\\llama-server.exe")
+        self.edit_launcher.setPlaceholderText(t('留空 = 模型目录\\llama-server.exe'))
         self.edit_launcher.setToolTip(
-            "启动服务时使用的可执行文件（默认 llama-server.exe）。\n"
-            "若将来 llama 改名字或路径不同，可在此直接用文件选择器指定新文件。\n"
-            "留空 = 自动回退到 模型目录\\llama-server.exe")
-        btn_launcher = QPushButton("浏览…")
+            t('启动服务时使用的可执行文件（默认 llama-server.exe）。\n若将来 llama 改名字或路径不同，可在此直接用文件选择器指定新文件。\n留空 = 自动回退到 模型目录\\llama-server.exe'))
+        btn_launcher = QPushButton(t('浏览…'))
         btn_launcher.clicked.connect(self._browse_launcher)
-        btn_launcher.setToolTip("选择启动器可执行文件（*.exe）")
-        btn_launcher_clear = QPushButton("清除")
+        btn_launcher.setToolTip(t('选择启动器可执行文件（*.exe）'))
+        btn_launcher_clear = QPushButton(t('清除'))
         btn_launcher_clear.clicked.connect(self._clear_launcher)
-        btn_launcher_clear.setToolTip("清除自定义启动器文件，恢复为自动查找")
+        btn_launcher_clear.setToolTip(t('清除自定义启动器文件，恢复为自动查找'))
 
         self.edit_data_dir = QLineEdit()
-        self.edit_data_dir.setPlaceholderText("留空 = 程序所在目录")
+        self.edit_data_dir.setPlaceholderText(t('留空 = 程序所在目录'))
         # A3: tooltip 按实际行为撰写（redirect_data_dir 只迁移 config.json，不复制旧统计/日志）
         self.edit_data_dir.setToolTip(
-            "存放本地数据：config.json 权威副本、使用统计 stats.json、"
-            "运行日志 logs/、联网查询缓存 hf_model_cache.json。\n"
-            "留空 = 程序所在目录。切换后新产生的数据写入新目录，"
-            "并在程序目录留下指向文件（已有的统计/日志文件不会自动迁移）。")
-        btn_data_dir = QPushButton("浏览…")
+            t('存放本地数据：config.json 权威副本、使用统计 stats.json、运行日志 logs/、联网查询缓存 hf_model_cache.json。\n留空 = 程序所在目录。切换后新产生的数据写入新目录，并在程序目录留下指向文件（已有的统计/日志文件不会自动迁移）。'))
+        btn_data_dir = QPushButton(t('浏览…'))
         btn_data_dir.clicked.connect(self._browse_data_dir)
-        btn_data_dir.setToolTip("选择数据存储目录")
-        btn_data_reset = QPushButton("恢复默认")
+        btn_data_dir.setToolTip(t('选择数据存储目录'))
+        btn_data_reset = QPushButton(t('恢复默认'))
         btn_data_reset.clicked.connect(self._reset_data_dir)
-        btn_data_reset.setToolTip("恢复为程序所在目录")
+        btn_data_reset.setToolTip(t('恢复为程序所在目录'))
 
         def _path_group(label_text, edit, *buttons):
             box = QWidget()
@@ -663,28 +670,25 @@ class MainWindow(QMainWindow):
         dir_lay = QHBoxLayout(dir_row)
         dir_lay.setContentsMargins(0, 0, 0, 0)
         dir_lay.setSpacing(10)
-        dir_lay.addWidget(_path_group("模型目录:", self.edit_dir, btn_dir, self.btn_refresh), 1)
-        dir_lay.addWidget(_path_group("启动器文件:", self.edit_launcher, btn_launcher, btn_launcher_clear), 1)
-        dir_lay.addWidget(_path_group("数据目录:", self.edit_data_dir, btn_data_dir, btn_data_reset), 1)
+        dir_lay.addWidget(_path_group(t('模型目录:'), self.edit_dir, btn_dir, self.btn_refresh), 1)
+        dir_lay.addWidget(_path_group(t('启动器文件:'), self.edit_launcher, btn_launcher, btn_launcher_clear), 1)
+        dir_lay.addWidget(_path_group(t('数据目录:'), self.edit_data_dir, btn_data_dir, btn_data_reset), 1)
         grid.addWidget(dir_row, 0, 0, 1, 9)
 
         # ---- A2: 排序方式移到「主模型」行末尾（功能 1）----
         self.combo_sort = QComboBox()
-        for name in ("目录+文件名", "大小降序", "名称"):
+        for name in (t('目录+文件名'), t('大小降序'), t('名称')):
             self.combo_sort.addItem(name)
         self.combo_sort.setToolTip(
-            "模型列表排序方式：\n"
-            "· 目录+文件名 = 先按所在目录、再按文件名从小到大（自然排序，默认）；\n"
-            "· 大小降序 = 大文件在前；\n"
-            "· 名称 = 仅按文件名从小到大。")
+            t('模型列表排序方式：\n· 目录+文件名 = 先按所在目录、再按文件名从小到大（自然排序，默认）；\n· 大小降序 = 大文件在前；\n· 名称 = 仅按文件名从小到大。'))
         self.combo_sort.setMinimumWidth(118)
 
         # ---- 功能 5：主模型 / 视觉模型 / 排序 并排一行（功能不变）----
         self.combo_model = QComboBox()
-        self.combo_model.setToolTip("选择要加载的 GGUF 主模型（自动扫描目录得到）")
+        self.combo_model.setToolTip(t('选择要加载的 GGUF 主模型（自动扫描目录得到）'))
         self.combo_mmproj = QComboBox()
-        self.combo_mmproj.setToolTip("视觉模型（mmproj）文件，负责把图像编码成模型能理解的向量。\n只列出与主模型同一目录下的 mmproj（保证配套一致），或选择「（不使用）」以纯文本模式运行。\n鼠标悬停可查看完整路径。")
-        self.combo_mmproj.addItem("（不使用）", None)
+        self.combo_mmproj.setToolTip(t('视觉模型（mmproj）文件，负责把图像编码成模型能理解的向量。\n只列出与主模型同一目录下的 mmproj（保证配套一致），或选择「（不使用）」以纯文本模式运行。\n鼠标悬停可查看完整路径。'))
+        self.combo_mmproj.addItem(t('（不使用）'), None)
         self.label_mmproj_warn = QLabel("")
         self.label_mmproj_warn.setStyleSheet("color: #ff6a6a;")
         self.label_mmproj_warn.setWordWrap(True)
@@ -693,51 +697,48 @@ class MainWindow(QMainWindow):
         mrow = QHBoxLayout(model_row)
         mrow.setContentsMargins(0, 0, 0, 0)
         mrow.setSpacing(6)
-        mrow.addWidget(QLabel("主模型:"))
+        mrow.addWidget(QLabel(t('主模型:')))
         mrow.addWidget(self.combo_model, 4)
-        mrow.addWidget(QLabel("视觉模型:"))
+        mrow.addWidget(QLabel(t('视觉模型:')))
         mrow.addWidget(self.combo_mmproj, 4)
-        mrow.addWidget(QLabel("排序:"))
+        mrow.addWidget(QLabel(t('排序:')))
         mrow.addWidget(self.combo_sort, 1)
         mrow.addWidget(self.label_mmproj_warn, 2)
         grid.addWidget(model_row, 1, 0, 1, 9)
 
-        grid.addWidget(QLabel("监听地址:"), 2, 0)
+        grid.addWidget(QLabel(t('监听地址:')), 2, 0)
         self.edit_host = QLineEdit()
-        self.edit_host.setToolTip("服务监听的地址（Host）。\n127.0.0.1 = 仅本机访问；0.0.0.0 = 局域网内其他设备也能访问。")
+        self.edit_host.setToolTip(t('服务监听的地址（Host）。\n127.0.0.1 = 仅本机访问；0.0.0.0 = 局域网内其他设备也能访问。'))
         grid.addWidget(self.edit_host, 2, 1)
 
-        grid.addWidget(QLabel("端口:"), 2, 2)
+        grid.addWidget(QLabel(t('端口:')), 2, 2)
         self.spin_port = QSpinBox()
         self.spin_port.setRange(1, 65535)
         self.spin_port.setValue(8080)
-        self.spin_port.setToolTip("服务监听的端口（默认 8080）。\nOpenAI 兼容接口地址为 http(s)://监听地址:端口/v1")
+        self.spin_port.setToolTip(t('服务监听的端口（默认 8080）。\nOpenAI 兼容接口地址为 http(s)://监听地址:端口/v1'))
         grid.addWidget(self.spin_port, 2, 3)
 
         # ---- API Key：从高级参数移到此处（端口之后、局域网共享之前）----
         grid.addWidget(QLabel("API Key:"), 2, 4)
         self.edit_apikey = QLineEdit()
         self.edit_apikey.setEchoMode(QLineEdit.EchoMode.Password)
-        self.edit_apikey.setToolTip("API 密钥（--api-key）。\n设置后客户端调用接口必须携带此 Key，否则会被拒绝。\n留空 = 不设密钥，任何人都能访问。")
+        self.edit_apikey.setToolTip(t('API 密钥（--api-key）。\n设置后客户端调用接口必须携带此 Key，否则会被拒绝。\n留空 = 不设密钥，任何人都能访问。'))
         grid.addWidget(self.edit_apikey, 2, 5)
 
         # ---- 局域网共享 / HTTPS / 本机 IP：与监听地址同一行，紧凑排布 ----
-        self.check_lan = QCheckBox("局域网共享")
+        self.check_lan = QCheckBox(t('局域网共享'))
         self.check_lan.setToolTip(
-            "勾选后监听地址自动设为 0.0.0.0，局域网内其他电脑可通过「本机IP:端口」访问本服务。\n"
-            "取消勾选恢复为 127.0.0.1（仅本机可访问）。")
+            t('勾选后监听地址自动设为 0.0.0.0，局域网内其他电脑可通过「本机IP:端口」访问本服务。\n取消勾选恢复为 127.0.0.1（仅本机可访问）。'))
         grid.addWidget(self.check_lan, 2, 6)
 
-        self.check_ssl = QCheckBox("启用 HTTPS")
+        self.check_ssl = QCheckBox(t('启用 HTTPS'))
         self.check_ssl.setToolTip(
-            "勾选后以 HTTPS 协议提供服务，并自动生成自签名证书。\n"
-            "若数据目录含中文等非 ASCII 字符，证书会改放到英文目录（避免 llama-server 无法读取）。\n"
-            "浏览器首次访问会提示「不安全」，手动信任即可；对外正式使用建议换成受信任证书。")
+            t('勾选后以 HTTPS 协议提供服务，并自动生成自签名证书。\n若数据目录含中文等非 ASCII 字符，证书会改放到英文目录（避免 llama-server 无法读取）。\n浏览器首次访问会提示「不安全」，手动信任即可；对外正式使用建议换成受信任证书。'))
         grid.addWidget(self.check_ssl, 2, 7)
 
         self.label_local_ip = QLabel("")
         self.label_local_ip.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        self.label_local_ip.setToolTip("本机在局域网中的访问地址，可直接复制给其他设备使用。")
+        self.label_local_ip.setToolTip(t('本机在局域网中的访问地址，可直接复制给其他设备使用。'))
         grid.addWidget(self.label_local_ip, 2, 8)
 
         # GPU层数(-ngl) 已移入「生成参数」分组（见 _build_advanced）
@@ -745,27 +746,27 @@ class MainWindow(QMainWindow):
         lay.addLayout(grid)
 
         # ---- A4: 上下文预设 / 上下文长度 / 预测Token → 「生成参数」分组 ----
-        self._gen_grid.addWidget(QLabel("上下文预设:"), 0, 0)
+        self._gen_grid.addWidget(QLabel(t('上下文预设:')), 0, 0)
         self.combo_preset = QComboBox()
         for name, _ctx in PRESETS:
             self.combo_preset.addItem(name)
-        self.combo_preset.setToolTip("根据显卡显存大小，一键应用推荐的「上下文长度」（只修改「上下文长度」参数）。\n点选后「上下文长度」会同步更新为该档位；手动修改「上下文长度」后此下拉会自动回显对应档位或「自定义」。\n例：24GB 显存推荐 512K 上下文。")
+        self.combo_preset.setToolTip(t('根据显卡显存大小，一键应用推荐的「上下文长度」（只修改「上下文长度」参数）。\n点选后「上下文长度」会同步更新为该档位；手动修改「上下文长度」后此下拉会自动回显对应档位或「自定义」。\n例：24GB 显存推荐 512K 上下文。'))
         self._gen_grid.addWidget(self.combo_preset, 0, 1)
 
-        self._gen_grid.addWidget(QLabel("上下文长度:"), 0, 2)
+        self._gen_grid.addWidget(QLabel(t('上下文长度:')), 0, 2)
         self.spin_ctx = QSpinBox()
         self.spin_ctx.setRange(256, 1048576)
         self.spin_ctx.setSingleStep(1024)
         self.spin_ctx.setValue(32768)
-        self.spin_ctx.setToolTip("上下文长度（token），即模型一次会话最多能「记住」的对话量。\n这是真正传给 llama-server 的参数（-c），可自由设为任意值。\n越大越占显存/内存，也越慢。建议 ≤ 模型的训练上下文。\n可参考「模型信息」页显示的模型训练上下文。")
+        self.spin_ctx.setToolTip(t('上下文长度（token），即模型一次会话最多能「记住」的对话量。\n这是真正传给 llama-server 的参数（-c），可自由设为任意值。\n越大越占显存/内存，也越慢。建议 ≤ 模型的训练上下文。\n可参考「模型信息」页显示的模型训练上下文。'))
         self._gen_grid.addWidget(self.spin_ctx, 0, 3)
 
-        self._gen_grid.addWidget(QLabel("预测Token:"), 0, 4)
+        self._gen_grid.addWidget(QLabel(t('预测Token:')), 0, 4)
         self.spin_np = QSpinBox()
         self.spin_np.setRange(-1, 1000000)
         self.spin_np.setValue(8192)
-        self.spin_np.setSpecialValueText("-1 = 无限")
-        self.spin_np.setToolTip("每次回答最多生成的 token 数（-n）。\n-1 = 不限制，直到模型输出结束符为止；\n若模型「停不下来/无限复读」，可调小此值限制回答长度。")
+        self.spin_np.setSpecialValueText(t('-1 = 无限'))
+        self.spin_np.setToolTip(t('每次回答最多生成的 token 数（-n）。\n-1 = 不限制，直到模型输出结束符为止；\n若模型「停不下来/无限复读」，可调小此值限制回答长度。'))
         self._gen_grid.addWidget(self.spin_np, 0, 5)
 
         lay.addWidget(self.group_gen)
@@ -783,53 +784,47 @@ class MainWindow(QMainWindow):
             grid.setColumnStretch(_c, 1)
 
         # ---- 第 0 行：计算 / 服务（CPU线程 / 闪存注意力 / 超时 / 自动打开浏览器）----
-        grid.addWidget(QLabel("CPU线程:"), 0, 0)
+        grid.addWidget(QLabel(t('CPU线程:')), 0, 0)
         self.spin_threads = QSpinBox()
         self.spin_threads.setRange(-1, 256)
         self.spin_threads.setValue(-1)
-        self.spin_threads.setSpecialValueText("-1 = 自动")
-        self.spin_threads.setToolTip("用于计算的 CPU 线程数（-t）。\n-1 = 自动（使用全部逻辑核心）。")
+        self.spin_threads.setSpecialValueText(t('-1 = 自动'))
+        self.spin_threads.setToolTip(t('用于计算的 CPU 线程数（-t）。\n-1 = 自动（使用全部逻辑核心）。'))
         grid.addWidget(self.spin_threads, 0, 1)
 
-        grid.addWidget(QLabel("闪存注意力:"), 0, 2)
+        grid.addWidget(QLabel(t('闪存注意力:')), 0, 2)
         self.combo_fa = QComboBox()
         self.combo_fa.addItems(["on", "off", "auto"])
-        self.combo_fa.setToolTip("Flash Attention 闪存注意力（-fa）。\non = 开启，省显存且更快（N 卡 / 新架构推荐）；\noff = 关闭，兼容性更好。")
+        self.combo_fa.setToolTip(t('Flash Attention 闪存注意力（-fa）。\non = 开启，省显存且更快（N 卡 / 新架构推荐）；\noff = 关闭，兼容性更好。'))
         grid.addWidget(self.combo_fa, 0, 3)
 
-        grid.addWidget(QLabel("超时(秒):"), 0, 4)
+        grid.addWidget(QLabel(t('超时(秒):')), 0, 4)
         self.spin_timeout = QSpinBox()
         self.spin_timeout.setRange(30, 86400)
         self.spin_timeout.setValue(3600)
-        self.spin_timeout.setToolTip("服务读写超时（--timeout）。\n单个请求超过该秒数会被强制断开，默认 3600。")
+        self.spin_timeout.setToolTip(t('服务读写超时（--timeout）。\n单个请求超过该秒数会被强制断开，默认 3600。'))
         grid.addWidget(self.spin_timeout, 0, 5)
 
-        self.check_browser = QCheckBox("启动成功后自动打开浏览器")
+        self.check_browser = QCheckBox(t('启动成功后自动打开浏览器'))
         self.check_browser.setChecked(True)
-        self.check_browser.setToolTip("服务就绪后自动用默认浏览器打开 Web 界面。")
+        self.check_browser.setToolTip(t('服务就绪后自动用默认浏览器打开 Web 界面。'))
         grid.addWidget(self.check_browser, 0, 6, 1, 2)
 
         # ---- 功能 6/7：连续批处理 / mlock / mmap / MTP + MTP 说明压缩到同一行 ----
-        self.check_cont = QCheckBox("连续批处理")
+        self.check_cont = QCheckBox(t('连续批处理'))
         self.check_cont.setChecked(True)
         self.check_cont.setToolTip(
-            "连续批处理（--cont-batching）：\n"
-            "多个客户端并发请求时，新请求可以在解码过程中随时插入当前批次，"
-            "不必等整批全部生成完才处理下一个，显著提升总吞吐量、降低等待。\n"
-            "多客户端场景推荐开启；单客户端使用时无影响。")
-        self.check_mlock = QCheckBox("mlock 锁定内存")
-        self.check_mlock.setToolTip("--mlock：把模型锁定在内存中，防止被系统换出到磁盘。\n占内存更多，但推理更稳定。")
-        self.check_mmap = QCheckBox("禁用 mmap")
-        self.check_mmap.setToolTip("--no-mmap：关闭内存映射加载。\n加载更慢但内存占用更可控，个别磁盘/内存环境可改善稳定性。")
-        self.check_mtp = QCheckBox("启用 MTP")
+            t('连续批处理（--cont-batching）：\n多个客户端并发请求时，新请求可以在解码过程中随时插入当前批次，不必等整批全部生成完才处理下一个，显著提升总吞吐量、降低等待。\n多客户端场景推荐开启；单客户端使用时无影响。'))
+        self.check_mlock = QCheckBox(t('mlock 锁定内存'))
+        self.check_mlock.setToolTip(t('--mlock：把模型锁定在内存中，防止被系统换出到磁盘。\n占内存更多，但推理更稳定。'))
+        self.check_mmap = QCheckBox(t('禁用 mmap'))
+        self.check_mmap.setToolTip(t('--no-mmap：关闭内存映射加载。\n加载更慢但内存占用更可控，个别磁盘/内存环境可改善稳定性。'))
+        self.check_mtp = QCheckBox(t('启用 MTP'))
         self.check_mtp.setToolTip(
-            "MTP（Multi-Token Prediction）：让模型自带的 MTP 头参与投机解码，"
-            "可显著提升生成速度（对应 --spec-type draft-mtp）。\n"
-            "仅当所选模型的 GGUF 内含 MTP 张量时可用；选择模型后会自动检测，\n"
-            "不支持的模型该选项会被自动禁用。")
+            t('MTP（Multi-Token Prediction）：让模型自带的 MTP 头参与投机解码，可显著提升生成速度（对应 --spec-type draft-mtp）。\n仅当所选模型的 GGUF 内含 MTP 张量时可用；选择模型后会自动检测，\n不支持的模型该选项会被自动禁用。'))
         self.label_mtp_status = QLabel("")
         self.label_mtp_status.setStyleSheet("color: #8fd0ff;")
-        self.label_mtp_status.setToolTip("MTP 检测结果（扫描模型 GGUF 张量名）：绿色=可启用，橙色=不支持/无法检测")
+        self.label_mtp_status.setToolTip(t('MTP 检测结果（扫描模型 GGUF 张量名）：绿色=可启用，橙色=不支持/无法检测'))
         grid.addWidget(self.check_cont, 1, 0, 1, 2)
         grid.addWidget(self.check_mlock, 1, 2)
         grid.addWidget(self.check_mmap, 1, 3)
@@ -837,96 +832,81 @@ class MainWindow(QMainWindow):
         grid.addWidget(self.label_mtp_status, 1, 5, 1, 3)
 
         # ---- 第 2 行：对话模板（Jinja 模板 / 思考强度 / 推理预算）----
-        self.check_jinja = QCheckBox("启用 Jinja 模板")
+        self.check_jinja = QCheckBox(t('启用 Jinja 模板'))
         self.check_jinja.setToolTip(
-            "启用模型自带的 Jinja 对话模板（--jinja）。\n"
-            "llama-server 默认用内置的硬编码模板；开启后改用模型 GGUF 元数据里的\n"
-            "tokenizer.chat_template，能正确套用新版模型（Qwen3.x 等）自己的对话格式，\n"
-            "并且是「思考强度」(--chat-template-kwargs) 生效的前提。")
+            t('启用模型自带的 Jinja 对话模板（--jinja）。\nllama-server 默认用内置的硬编码模板；开启后改用模型 GGUF 元数据里的\ntokenizer.chat_template，能正确套用新版模型（Qwen3.x 等）自己的对话格式，\n并且是「思考强度」(--chat-template-kwargs) 生效的前提。'))
         grid.addWidget(self.check_jinja, 2, 0, 1, 2)
 
-        grid.addWidget(QLabel("思考强度:"), 2, 2)
+        grid.addWidget(QLabel(t('思考强度:')), 2, 2)
         self.combo_reasoning = QComboBox()
-        for _name, _val in (("不设置", ""), ("低 (low)", "low"),
-                            ("中 (medium)", "medium"), ("高 (high)", "high")):
+        for _name, _val in ((t('不设置'), ""), (t('低 (low)'), "low"),
+                            (t('中 (medium)'), "medium"), (t('高 (high)'), "high")):
             self.combo_reasoning.addItem(_name, _val)
         self.combo_reasoning.setToolTip(
-            "传给对话模板的 reasoning_effort 变量（--chat-template-kwargs）。\n"
-            "Qwen3 等支持思考的模型用它控制「思考深度」：low/medium/high。\n"
-            "「不设置」= 不传该参数（使用模板默认）。\n"
-            "需同时勾选「启用 Jinja 模板」才会生效。")
+            t('传给对话模板的 reasoning_effort 变量（--chat-template-kwargs）。\nQwen3 等支持思考的模型用它控制「思考深度」：low/medium/high。\n「不设置」= 不传该参数（使用模板默认）。\n需同时勾选「启用 Jinja 模板」才会生效。'))
         grid.addWidget(self.combo_reasoning, 2, 3)
 
-        grid.addWidget(QLabel("推理预算:"), 2, 4)
+        grid.addWidget(QLabel(t('推理预算:')), 2, 4)
         self.spin_reasoning_budget = QSpinBox()
         self.spin_reasoning_budget.setRange(-1, 1000000)
         self.spin_reasoning_budget.setValue(-1)
-        self.spin_reasoning_budget.setSpecialValueText("-1 = 不限制")
+        self.spin_reasoning_budget.setSpecialValueText(t('-1 = 不限制'))
         self.spin_reasoning_budget.setToolTip(
-            "思考段最多能消耗的 token 数（--reasoning-budget）。\n"
-            "模型在 reasoning/thinking 里用完这么多 token 后会被强制收尾、输出正式答案。\n"
-            "-1 = 不限制（默认）。与「思考强度」是两套机制：一个是软引导，一个是硬上限。")
+            t('思考段最多能消耗的 token 数（--reasoning-budget）。\n模型在 reasoning/thinking 里用完这么多 token 后会被强制收尾、输出正式答案。\n-1 = 不限制（默认）。与「思考强度」是两套机制：一个是软引导，一个是硬上限。'))
         grid.addWidget(self.spin_reasoning_budget, 2, 5)
         self.label_chat_status = QLabel("")
         self.label_chat_status.setStyleSheet("color: #8fd0ff;")
-        self.label_chat_status.setToolTip("对话模板检测结果（读取模型 GGUF 的 tokenizer.chat_template）：绿色=支持，橙色=不支持/无法检测")
+        self.label_chat_status.setToolTip(t('对话模板检测结果（读取模型 GGUF 的 tokenizer.chat_template）：绿色=支持，橙色=不支持/无法检测'))
         grid.addWidget(self.label_chat_status, 2, 6, 1, 2)
 
         # ---- 第 3 行：启动时行为（残留进程检测 / 端口占用建议）----
-        self.check_residual = QCheckBox("启动时检测残留进程")
+        self.check_residual = QCheckBox(t('启动时检测残留进程'))
         self.check_residual.setToolTip(
-            "启动时扫描系统中残留的 llama-server 进程并询问是否清理。\n"
-            "若在弹窗中勾选了「不再提示」，可在此重新开启。")
+            t('启动时扫描系统中残留的 llama-server 进程并询问是否清理。\n若在弹窗中勾选了「不再提示」，可在此重新开启。'))
         grid.addWidget(self.check_residual, 3, 0, 1, 4)
 
-        self.check_port_hint = QCheckBox("端口被占用时建议更换端口")
+        self.check_port_hint = QCheckBox(t('端口被占用时建议更换端口'))
         self.check_port_hint.setToolTip(
-            "启动时若发现配置的端口已被占用，则建议一个可用端口，\n"
-            "确认后自动更新主界面的端口号。")
+            t('启动时若发现配置的端口已被占用，则建议一个可用端口，\n确认后自动更新主界面的端口号。'))
         grid.addWidget(self.check_port_hint, 3, 4, 1, 2)
 
-        self.check_hover_pill = QCheckBox("缩到托盘时显示悬浮小窗")
+        self.check_hover_pill = QCheckBox(t('缩到托盘时显示悬浮小窗'))
         self.check_hover_pill.setToolTip(
-            "点 X 收起主窗口后，屏幕右下角显示一个小胶囊：状态圆点 + 实时输出速度(tok/s)。\n"
-            "鼠标停留展开数据卡片：速度 / CPU / 内存 / GPU 负载 / 显存 / API 接入数 / 模型名；\n"
-            "单击=展开或收起，拖动=移动位置，双击=返回主界面，右键=菜单（打开主界面/启动模型/停止模型/隐藏图标/退出），"
-            "✕=停用（可再勾选恢复）。")
+            t('点 X 收起主窗口后，屏幕右下角显示一个小胶囊：状态圆点 + 实时输出速度(tok/s)。\n鼠标停留展开数据卡片：速度 / CPU / 内存 / GPU 负载 / 显存 / API 接入数 / 模型名；\n单击=展开或收起，拖动=移动位置，双击=返回主界面，右键=菜单（打开主界面/启动模型/停止模型/隐藏图标/退出），✕=停用（可再勾选恢复）。'))
         grid.addWidget(self.check_hover_pill, 3, 6, 1, 2)
 
         # ---- 「生成参数」分组：每行 4 组 ----
         # 第 0 行末尾：批大小（前三组 上下文预设/上下文长度/预测Token 在 _build_basic）
-        self._gen_grid.addWidget(QLabel("批大小:"), 0, 6)
+        self._gen_grid.addWidget(QLabel(t('批大小:')), 0, 6)
         self.spin_batch = QSpinBox()
         self.spin_batch.setRange(1, 16384)
         self.spin_batch.setValue(2048)
-        self.spin_batch.setToolTip("逻辑批大小（-b），影响 prompt 处理速度。默认 2048 即可。")
+        self.spin_batch.setToolTip(t('逻辑批大小（-b），影响 prompt 处理速度。默认 2048 即可。'))
         self._gen_grid.addWidget(self.spin_batch, 0, 7)
 
         # 第 1 行：并行slots / 采样预设 / 温度 / Top-P
-        self._gen_grid.addWidget(QLabel("并行slots:"), 1, 0)
+        self._gen_grid.addWidget(QLabel(t('并行slots:')), 1, 0)
         self.spin_slots = QSpinBox()
         self.spin_slots.setRange(-1, 64)
         self.spin_slots.setValue(-1)
-        self.spin_slots.setSpecialValueText("-1 = 自动")
-        self.spin_slots.setToolTip("同时处理的并发请求数（-np）。\n多个客户端同时使用时建议 ≥2；每个 slot 会额外占用上下文内存。\n-1 = 自动。")
+        self.spin_slots.setSpecialValueText(t('-1 = 自动'))
+        self.spin_slots.setToolTip(t('同时处理的并发请求数（-np）。\n多个客户端同时使用时建议 ≥2；每个 slot 会额外占用上下文内存。\n-1 = 自动。'))
         self._gen_grid.addWidget(self.spin_slots, 1, 1)
 
-        self._gen_grid.addWidget(QLabel("采样预设:"), 1, 2)
+        self._gen_grid.addWidget(QLabel(t('采样预设:')), 1, 2)
         self.combo_sampling = QComboBox()
         for name, _v in SAMPLING_PRESETS:
             self.combo_sampling.addItem(name)
         self.combo_sampling.setToolTip(
-            "一键应用一组采样参数（温度/Top-P/Top-K/重复惩罚）。\n"
-            "严谨=低温度适合写代码/翻译；均衡=日常对话；创意=高温度适合写作/脑洞。\n"
-            "手动修改任一采样参数后会自动回到「自定义」。")
+            t('一键应用一组采样参数（温度/Top-P/Top-K/重复惩罚）。\n严谨=低温度适合写代码/翻译；均衡=日常对话；创意=高温度适合写作/脑洞。\n手动修改任一采样参数后会自动回到「自定义」。'))
         self._gen_grid.addWidget(self.combo_sampling, 1, 3)
 
-        self._gen_grid.addWidget(QLabel("温度:"), 1, 4)
+        self._gen_grid.addWidget(QLabel(t('温度:')), 1, 4)
         self.spin_temp = QDoubleSpinBox()
         self.spin_temp.setRange(0.0, 2.0)
         self.spin_temp.setSingleStep(0.05)
         self.spin_temp.setValue(0.8)
-        self.spin_temp.setToolTip("温度（--temp）：控制随机性/创造力。\n越低越保守严谨（0 = 每次都选最可能的词，趋于复读）；\n越高越发散创意（可能胡言乱语）。\n建议 0.3~1.2。")
+        self.spin_temp.setToolTip(t('温度（--temp）：控制随机性/创造力。\n越低越保守严谨（0 = 每次都选最可能的词，趋于复读）；\n越高越发散创意（可能胡言乱语）。\n建议 0.3~1.2。'))
         self._gen_grid.addWidget(self.spin_temp, 1, 5)
 
         self._gen_grid.addWidget(QLabel("Top-P:"), 1, 6)
@@ -934,7 +914,7 @@ class MainWindow(QMainWindow):
         self.spin_topp.setRange(0.0, 1.0)
         self.spin_topp.setSingleStep(0.05)
         self.spin_topp.setValue(0.95)
-        self.spin_topp.setToolTip("核采样（--top-p）：只从累计概率达到该值的候选词中选。\n0.95 = 默认；1.0 = 关闭；越小越保守。")
+        self.spin_topp.setToolTip(t('核采样（--top-p）：只从累计概率达到该值的候选词中选。\n0.95 = 默认；1.0 = 关闭；越小越保守。'))
         self._gen_grid.addWidget(self.spin_topp, 1, 7)
 
         # 第 2 行：Top-K / 重复惩罚 / GPU层数 / KV缓存(K/V)
@@ -942,28 +922,25 @@ class MainWindow(QMainWindow):
         self.spin_topk = QSpinBox()
         self.spin_topk.setRange(0, 200)
         self.spin_topk.setValue(40)
-        self.spin_topk.setSpecialValueText("0 = 默认")
-        self.spin_topk.setToolTip("（--top-k）：只从概率最高的前 K 个候选词中选。\n40 = 默认；0 = 关闭；越小越保守。")
+        self.spin_topk.setSpecialValueText(t('0 = 默认'))
+        self.spin_topk.setToolTip(t('（--top-k）：只从概率最高的前 K 个候选词中选。\n40 = 默认；0 = 关闭；越小越保守。'))
         self._gen_grid.addWidget(self.spin_topk, 2, 1)
 
-        self._gen_grid.addWidget(QLabel("重复惩罚:"), 2, 2)
+        self._gen_grid.addWidget(QLabel(t('重复惩罚:')), 2, 2)
         self.spin_rp = QDoubleSpinBox()
         self.spin_rp.setRange(0.0, 2.0)
         self.spin_rp.setSingleStep(0.1)
         self.spin_rp.setValue(1.0)
-        self.spin_rp.setSpecialValueText("0 = 默认")
-        self.spin_rp.setToolTip("重复惩罚（--repeat-penalty）。\n>1 抑制重复输出，有助于缓解「无限复读/幻觉循环」；\n1.0 = 关闭；建议 1.0~1.3。")
+        self.spin_rp.setSpecialValueText(t('0 = 默认'))
+        self.spin_rp.setToolTip(t('重复惩罚（--repeat-penalty）。\n>1 抑制重复输出，有助于缓解「无限复读/幻觉循环」；\n1.0 = 关闭；建议 1.0~1.3。'))
         self._gen_grid.addWidget(self.spin_rp, 2, 3)
 
-        self._gen_grid.addWidget(QLabel("GPU层数:"), 2, 4)
+        self._gen_grid.addWidget(QLabel(t('GPU层数:')), 2, 4)
         self.combo_ngl = QComboBox()
         self.combo_ngl.setEditable(True)
         self.combo_ngl.addItems(["all", "auto", "0", "1", "10", "20", "32", "40", "64"])
         self.combo_ngl.setToolTip(
-            "卸载到 GPU 显存中的层数（-ngl）。\n"
-            "all = 尽可能全部放入显存；auto = 自动判断；0 = 纯 CPU 运行；也可填具体层数。\n"
-            "与多显卡部署不冲突：ngl 决定总共卸载多少层，\n"
-            "-ts/-sm（多显卡区）再决定这些层如何在多张卡之间分配。")
+            t('卸载到 GPU 显存中的层数（-ngl）。\nall = 尽可能全部放入显存；auto = 自动判断；0 = 纯 CPU 运行；也可填具体层数。\n与多显卡部署不冲突：ngl 决定总共卸载多少层，\n-ts/-sm（多显卡区）再决定这些层如何在多张卡之间分配。'))
         self._gen_grid.addWidget(self.combo_ngl, 2, 5)
 
         # ---- KV 缓存 K/V：从「高级参数」移入「生成参数」----
@@ -971,22 +948,20 @@ class MainWindow(QMainWindow):
         self.combo_kvc_k.addItems(KV_CACHE_TYPES)
         self.combo_kvc_k.setCurrentText("f16")
         self.combo_kvc_k.setToolTip(
-            "KV 缓存 K（Key）部分的量化类型，对应参数 -ctk，可与 V 独立设置。\n"
-            "f16 = 默认质量好；q8_0/q4_0 = 更省显存但精度略降；f32 = 最占显存。")
+            t('KV 缓存 K（Key）部分的量化类型，对应参数 -ctk，可与 V 独立设置。\nf16 = 默认质量好；q8_0/q4_0 = 更省显存但精度略降；f32 = 最占显存。'))
         self.combo_kvc_v = QComboBox()
         self.combo_kvc_v.addItems(KV_CACHE_TYPES)
         self.combo_kvc_v.setCurrentText("f16")
         self.combo_kvc_v.setToolTip(
-            "KV 缓存 V（Value）部分的量化类型，对应参数 -ctv，可与 K 独立设置。\n"
-            "K/V 可分别选不同精度；常见做法：K 用 q8_0、V 用 f16，兼顾精度与显存。")
+            t('KV 缓存 V（Value）部分的量化类型，对应参数 -ctv，可与 K 独立设置。\nK/V 可分别选不同精度；常见做法：K 用 q8_0、V 用 f16，兼顾精度与显存。'))
         kv_box = QWidget()
         kv_lay = QHBoxLayout(kv_box)
         kv_lay.setContentsMargins(0, 0, 0, 0)
         kv_lay.setSpacing(4)
         kv_lay.addWidget(self.combo_kvc_k, 1)
         kv_lay.addWidget(self.combo_kvc_v, 1)
-        kv_label = QLabel("KV缓存K/V:")
-        kv_label.setToolTip("KV 缓存量化类型（K=-ctk / V=-ctv），可分别设置；\n常见做法：K 用 q8_0、V 用 f16，兼顾精度与显存。")
+        kv_label = QLabel(t('KV缓存K/V:'))
+        kv_label.setToolTip(t('KV 缓存量化类型（K=-ctk / V=-ctv），可分别设置；\n常见做法：K 用 q8_0、V 用 f16，兼顾精度与显存。'))
         self._gen_grid.addWidget(kv_label, 2, 6)
         self._gen_grid.addWidget(kv_box, 2, 7)
 
@@ -995,12 +970,11 @@ class MainWindow(QMainWindow):
     def _build_gpu(self, lay):
         """多显卡设置面板（功能 3）。"""
         row0 = QHBoxLayout()
-        self.btn_detect_gpus = QPushButton("检测 GPU")
+        self.btn_detect_gpus = QPushButton(t('检测 GPU'))
         self.btn_detect_gpus.setToolTip(
-            "运行 llama-server --list-devices 列出本机可用设备（CUDA0/CUDA1…），\n"
-            "勾选要参与计算的显卡；只勾一张 = 指定只用该卡，多张 = 拆分到多卡。")
+            t('运行 llama-server --list-devices 列出本机可用设备（CUDA0/CUDA1…），\n勾选要参与计算的显卡；只勾一张 = 指定只用该卡，多张 = 拆分到多卡。'))
         row0.addWidget(self.btn_detect_gpus)
-        self.label_gpus = QLabel("尚未检测")
+        self.label_gpus = QLabel(t('尚未检测'))
         self.label_gpus.setStyleSheet("color: #8fd0ff;")
         row0.addWidget(self.label_gpus, 1)
         lay.addLayout(row0)
@@ -1019,11 +993,10 @@ class MainWindow(QMainWindow):
         self.gpu_ratio_layout.setVerticalSpacing(6)
         self.gpu_ratio_spins = []     # [QDoubleSpinBox]，每张检测到的卡一个
         self._gpu_ratio_labels = []   # 对应的 QLabel（重建时清理用）
-        self.btn_auto_split = QPushButton("按显存自动分配")
+        self.btn_auto_split = QPushButton(t('按显存自动分配'))
         self.btn_auto_split.setEnabled(False)
         self.btn_auto_split.setToolTip(
-            "检测 GPU（≥2 张且可用 nvidia-smi）后可用：\n"
-            "查询每张卡总显存，按比例换算成整数权重填入 tensor-split。")
+            t('检测 GPU（≥2 张且可用 nvidia-smi）后可用：\n查询每张卡总显存，按比例换算成整数权重填入 tensor-split。'))
         self.btn_auto_split.clicked.connect(self._auto_split_by_vram)
         self.gpu_ratio_layout.addWidget(self.btn_auto_split, 0, 0)
         self.gpu_ratio_panel.setVisible(False)
@@ -1032,39 +1005,32 @@ class MainWindow(QMainWindow):
         grid = QGridLayout()
         grid.setHorizontalSpacing(8)
         grid.setVerticalSpacing(6)
-        grid.addWidget(QLabel("拆分模式:"), 0, 0)
+        grid.addWidget(QLabel(t('拆分模式:')), 0, 0)
         self.combo_split_mode = QComboBox()
         for m in SPLIT_MODES:
             self.combo_split_mode.addItem(m)
         self.combo_split_mode.setCurrentText("layer")
         self.combo_split_mode.setToolTip(
-            "多卡拆分方式（-sm）：\n"
-            "· layer = 按层切分（默认，KV 也跨卡）；\n"
-            "· row = 按行并行切分权重；\n"
-            "· tensor = 张量级切分（实验性）；\n"
-            "· none = 只用单卡。")
+            t('多卡拆分方式（-sm）：\n· layer = 按层切分（默认，KV 也跨卡）；\n· row = 按行并行切分权重；\n· tensor = 张量级切分（实验性）；\n· none = 只用单卡。'))
         grid.addWidget(self.combo_split_mode, 0, 1)
 
         grid.addWidget(QLabel("tensor-split:"), 0, 2)
         self.edit_tensor_split = QLineEdit()
-        self.edit_tensor_split.setPlaceholderText("如 3,1（留空=均分）")
+        self.edit_tensor_split.setPlaceholderText(t('如 3,1（留空=均分）'))
         self.edit_tensor_split.setToolTip(
-            "各 GPU 的算力权重比例（-ts），逗号分隔，例如两张卡写 3,1。\n"
-            "显存差异大时建议按显存比例填写；留空 = llama.cpp 自动均分。")
+            t('各 GPU 的算力权重比例（-ts），逗号分隔，例如两张卡写 3,1。\n显存差异大时建议按显存比例填写；留空 = llama.cpp 自动均分。'))
         grid.addWidget(self.edit_tensor_split, 0, 3)
 
-        grid.addWidget(QLabel("主GPU:"), 0, 4)
+        grid.addWidget(QLabel(t('主GPU:')), 0, 4)
         self.spin_main_gpu = QSpinBox()
         self.spin_main_gpu.setRange(0, 63)
         self.spin_main_gpu.setValue(0)
         self.spin_main_gpu.setToolTip(
-            "主 GPU 索引（-mg）：中间结果/KV 的归属卡，一般保持 0。")
+            t('主 GPU 索引（-mg）：中间结果/KV 的归属卡，一般保持 0。'))
         grid.addWidget(self.spin_main_gpu, 0, 5)
 
         tip = QLabel(
-            "提示：勾选 ≥2 张显卡后才会添加 -dev/-sm/-ts 参数；单卡/不勾选 = 行为与原来一致（自动选卡）。\n"
-            "GPU层数(-ngl)与多显卡部署不冲突：-ngl 决定总共卸载多少层到显存，\n"
-            "-ts(tensor-split)/-sm(拆分模式) 再决定这些层如何在多张卡之间分配；-ngl all = 全部放卡上。")
+            t('提示：勾选 ≥2 张显卡后才会添加 -dev/-sm/-ts 参数；单卡/不勾选 = 行为与原来一致（自动选卡）。\nGPU层数(-ngl)与多显卡部署不冲突：-ngl 决定总共卸载多少层到显存，\n-ts(tensor-split)/-sm(拆分模式) 再决定这些层如何在多张卡之间分配；-ngl all = 全部放卡上。'))
         tip.setStyleSheet("color: #888;")
         tip.setWordWrap(True)
         lay.addWidget(tip)
@@ -1110,7 +1076,7 @@ class MainWindow(QMainWindow):
                 sp.setRange(0.0, 16.0)
                 sp.setSingleStep(1.0)
                 sp.setValue(1.0)
-                sp.setToolTip(f"{name}（{short}）在 tensor-split 中的权重；\n修改后自动同步到「tensor-split」输入框。")
+                sp.setToolTip(t('{0}（{1}）在 tensor-split 中的权重；\n修改后自动同步到「tensor-split」输入框。').format(name, short))
                 self.gpu_ratio_layout.addWidget(sp, row, 1)
                 self._gpu_ratio_labels.append(lab)
                 self.gpu_ratio_spins.append(sp)
@@ -1140,16 +1106,15 @@ class MainWindow(QMainWindow):
         if len(devices) >= 2 and has_smi:
             self.btn_auto_split.setEnabled(True)
             self.btn_auto_split.setToolTip(
-                "用 nvidia-smi 查询每张卡总显存，按比例换算成整数权重\n"
-                "（如 24G+8G → 3,1），并同步填入 tensor-split 输入框。")
+                t('用 nvidia-smi 查询每张卡总显存，按比例换算成整数权重\n（如 24G+8G → 3,1），并同步填入 tensor-split 输入框。'))
         else:
             self.btn_auto_split.setEnabled(False)
             if not devices:
-                tip = "尚未检测到 GPU；点「检测 GPU」后可用"
+                tip = t('尚未检测到 GPU；点「检测 GPU」后可用')
             elif len(devices) == 1:
-                tip = "只检测到一张卡，无需分配（单卡不使用 tensor-split）"
+                tip = t('只检测到一张卡，无需分配（单卡不使用 tensor-split）')
             else:
-                tip = "未找到 nvidia-smi，无法查询显存，请手动填写 tensor-split"
+                tip = t('未找到 nvidia-smi，无法查询显存，请手动填写 tensor-split')
             self.btn_auto_split.setToolTip(tip)
         self.gpu_ratio_panel.setVisible(bool(devices))
 
@@ -1161,7 +1126,7 @@ class MainWindow(QMainWindow):
         def work():
             devs, err = [], None
             if not os.path.isfile(exe):
-                err = "未找到 llama-server.exe，无法检测设备"
+                err = t('未找到 llama-server.exe，无法检测设备')
             else:
                 import subprocess
                 proc = None
@@ -1201,10 +1166,10 @@ class MainWindow(QMainWindow):
         try:
             devs, err = getattr(self, "_gpu_result", ([], None))
             if err:
-                self.label_gpus.setText(f"检测失败：{err}")
+                self.label_gpus.setText(t('检测失败：{0}').format(err))
                 return
             if not devs:
-                self.label_gpus.setText("未检测到可用 GPU 设备")
+                self.label_gpus.setText(t('未检测到可用 GPU 设备'))
                 self._rebuild_gpu_checks([])
                 return
             self.label_gpus.setText(
@@ -1212,7 +1177,7 @@ class MainWindow(QMainWindow):
             self._rebuild_gpu_checks(devs)
         except Exception as e:
             try:
-                self.label_gpus.setText(f"GPU 处理出错：{e}")
+                self.label_gpus.setText(t('GPU 处理出错：{0}').format(e))
             except RuntimeError:
                 pass
 
@@ -1279,15 +1244,15 @@ class MainWindow(QMainWindow):
             spins = getattr(self, "gpu_ratio_spins", None) or []
             if not weights or len(weights) != len(spins):
                 self.statusBar().showMessage(
-                    "nvidia-smi 卡数与检测到的设备不一致，请手动填写 tensor-split", 5000)
+                    t('nvidia-smi 卡数与检测到的设备不一致，请手动填写 tensor-split'), 5000)
                 return
             for sp, w in zip(spins, weights):
                 sp.setValue(float(w))   # 触发 _on_gpu_ratio_changed → 同步 edit_tensor_split
             self.statusBar().showMessage(
-                f"已按显存分配: {','.join(str(int(round(w))) for w in weights)}", 4000)
+                t('已按显存分配: {0}').format(','.join((str(int(round(w))) for w in weights))), 4000)
         except Exception as e:
             try:
-                self.statusBar().showMessage(f"自动分配失败: {e}", 5000)
+                self.statusBar().showMessage(t('自动分配失败: {0}').format(e), 5000)
             except RuntimeError:
                 pass
 
@@ -1309,7 +1274,7 @@ class MainWindow(QMainWindow):
         self.monitor.mem_changed.connect(self._on_mem)
         self.monitor.vram_changed.connect(self._on_vram)
         self.monitor.model_changed.connect(
-            lambda n: (self.label_model.setText(f"模型 {n}"),
+            lambda n: (self.label_model.setText(t('模型 {0}').format(n)),
                        self._update_pill("model", n)))
         self.monitor.api_changed.connect(lambda t: self.label_api.setText(t))
 
@@ -1552,7 +1517,7 @@ class MainWindow(QMainWindow):
         d["hf_query_enabled"] = self.check_hf_query.isChecked()
         d["window_geometry"] = list(self.geometry().getRect())
         ok = self.cfg.save()
-        self.statusBar().showMessage("配置已保存" if ok else "配置保存失败", 3000)
+        self.statusBar().showMessage(t('配置已保存') if ok else t('配置保存失败'), 3000)
 
     def _save_startup_prefs(self, _checked=None):
         """残留检测 / 端口建议 两个开关立即落盘（无需点「保存配置」）。"""
@@ -1563,39 +1528,39 @@ class MainWindow(QMainWindow):
         self.cfg.save()
     def export_config(self):
         """导出完整配置为 .aic 文件（内容即 JSON，仅扩展名不同）。"""
-        default = os.path.join(self.base_dir, "LLama启动器配置.aic")
-        path, _ = QFileDialog.getSaveFileName(self, "导出配置", default, "LLama 启动器配置 (*.aic);;JSON (*.json)")
+        default = os.path.join(self.base_dir, t('LLama启动器配置.aic'))
+        path, _ = QFileDialog.getSaveFileName(self, t('导出配置'), default, t('LLama 启动器配置 (*.aic);;JSON (*.json)'))
         if not path:
             return
         self.save_config()
         try:
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(self.cfg.data, f, ensure_ascii=False, indent=2)
-            self.statusBar().showMessage(f"配置已导出: {path}", 5000)
-            self._on_server_log(f"[配置] 已导出到 {path}")
+            self.statusBar().showMessage(t('配置已导出: {0}').format(path), 5000)
+            self._on_server_log(t('[配置] 已导出到 {0}').format(path))
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"导出失败: {e}")
+            QMessageBox.critical(self, t('错误'), t('导出失败: {0}').format(e))
 
     def import_config(self):
         """从 .aic / .json 文件导入完整配置并应用到界面。"""
-        path, _ = QFileDialog.getOpenFileName(self, "导入配置", self.base_dir,
-                                              "LLama 启动器配置 (*.aic *.json);;所有文件 (*.*)")
+        path, _ = QFileDialog.getOpenFileName(self, t('导入配置'), self.base_dir,
+                                              t('LLama 启动器配置 (*.aic *.json);;所有文件 (*.*)'))
         if not path:
             return
         try:
             with open(path, "r", encoding="utf-8") as f:
                 loaded = json.load(f)
             if not isinstance(loaded, dict):
-                raise ValueError("文件内容不是有效的配置")
+                raise ValueError(t('文件内容不是有效的配置'))
             self.cfg.apply_loaded(loaded)   # 含旧键迁移（kv_cache_type → k/v）
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"导入失败: {e}")
+            QMessageBox.critical(self, t('错误'), t('导入失败: {0}').format(e))
             return
         self._apply_config()
         self._apply_theme()
         self.refresh_models(keep_selection=True)
-        self.statusBar().showMessage(f"配置已导入: {path}", 5000)
-        self._on_server_log(f"[配置] 已从 {path} 导入")
+        self.statusBar().showMessage(t('配置已导入: {0}').format(path), 5000)
+        self._on_server_log(t('[配置] 已从 {0} 导入').format(path))
 
     # ---------------------------------------------------------- 启动文件导入
     @staticmethod
@@ -1619,15 +1584,15 @@ class MainWindow(QMainWindow):
         """解析已有的启动文件（.bat/.cmd/.ps1/.sh/文本），把参数应用到当前界面。"""
         start_dir = self.edit_dir.text().strip() or self.base_dir
         path, _ = QFileDialog.getOpenFileName(
-            self, "导入启动文件", start_dir,
-            "启动文件 (*.bat *.cmd *.ps1 *.sh *.txt);;所有文件 (*.*)")
+            self, t('导入启动文件'), start_dir,
+            t('启动文件 (*.bat *.cmd *.ps1 *.sh *.txt);;所有文件 (*.*)'))
         if not path:
             return
         try:
             with open(path, "rb") as f:
                 raw = f.read()
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"读取失败: {e}")
+            QMessageBox.critical(self, t('错误'), t('读取失败: {0}').format(e))
             return
         text = None
         for enc in ("utf-8-sig", "gbk"):
@@ -1637,28 +1602,28 @@ class MainWindow(QMainWindow):
             except UnicodeDecodeError:
                 continue
         if text is None:
-            QMessageBox.critical(self, "错误", "无法识别文件编码（UTF-8 / GBK 均失败）")
+            QMessageBox.critical(self, t('错误'), t('无法识别文件编码（UTF-8 / GBK 均失败）'))
             return
         try:
             params = parse_script(text, path)
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"解析失败: {e}")
+            QMessageBox.critical(self, t('错误'), t('解析失败: {0}').format(e))
             return
         if not params:
-            QMessageBox.information(self, "提示", "未在文件中识别到任何 llama-server 参数")
+            QMessageBox.information(self, t('提示'), t('未在文件中识别到任何 llama-server 参数'))
             return
         applied, warns = self._apply_imported_params(params)
         self.update_preview()
         base = os.path.basename(path)
         if applied == 0:
-            QMessageBox.warning(self, "导入完成（未应用任何参数）",
-                                f"已解析 {base}，但没有可应用的参数。\n\n" + "\n".join(warns))
+            QMessageBox.warning(self, t('导入完成（未应用任何参数）'),
+                                t('已解析 {0}，但没有可应用的参数。\n\n').format(base) + "\n".join(warns))
             return
-        msg = f"已从 {base} 导入 {applied} 项参数"
-        self._on_server_log(f"[导入] {msg}")
+        msg = t('已从 {0} 导入 {1} 项参数').format(base, applied)
+        self._on_server_log(t('[导入] {0}').format(msg))
         if warns:
-            QMessageBox.warning(self, "导入完成（部分项未应用）",
-                                msg + "\n\n注意：\n" + "\n".join(warns))
+            QMessageBox.warning(self, t('导入完成（部分项未应用）'),
+                                msg + t('\n\n注意：\n') + "\n".join(warns))
         else:
             self.statusBar().showMessage(msg, 5000)
 
@@ -1676,7 +1641,7 @@ class MainWindow(QMainWindow):
             try:
                 v = int(float(str(value).strip()))
             except (TypeError, ValueError):
-                warns.append(f"{label}：无法解析“{value}”")
+                warns.append(t('{0}：无法解析“{1}”').format(label, value))
                 return None
             if lo is not None and v < lo:
                 v = lo
@@ -1690,7 +1655,7 @@ class MainWindow(QMainWindow):
             try:
                 v = float(str(value).strip())
             except (TypeError, ValueError):
-                warns.append(f"{label}：无法解析“{value}”")
+                warns.append(t('{0}：无法解析“{1}”').format(label, value))
                 return None
             if lo is not None and v < lo:
                 v = lo
@@ -1704,33 +1669,33 @@ class MainWindow(QMainWindow):
             if self._select_combo_by_path(self.combo_model, kv["model"]):
                 applied += 1
             else:
-                warns.append(f"主模型：列表中未找到“{os.path.basename(str(kv['model']))}”")
+                warns.append(t('主模型：列表中未找到“{0}”').format(os.path.basename(str(kv['model']))))
         if "mmproj" in kv:
             if self._select_combo_by_path(self.combo_mmproj, kv["mmproj"]):
                 applied += 1
             else:
-                warns.append(f"视觉模型：未找到“{os.path.basename(str(kv['mmproj']))}”")
+                warns.append(t('视觉模型：未找到“{0}”').format(os.path.basename(str(kv['mmproj']))))
 
         self._loading = True
         try:
             if "ctx" in kv:
-                v = _int(kv["ctx"], "上下文长度", 256, 1048576)
+                v = _int(kv["ctx"], t('上下文长度'), 256, 1048576)
                 if v is not None:
                     self.spin_ctx.setValue(v)
             if "predict" in kv:
-                v = _int(kv["predict"], "预测Token", -1, 1000000)
+                v = _int(kv["predict"], t('预测Token'), -1, 1000000)
                 if v is not None:
                     self.spin_np.setValue(v)
             if "batch" in kv:
-                v = _int(kv["batch"], "批大小", 1, 16384)
+                v = _int(kv["batch"], t('批大小'), 1, 16384)
                 if v is not None:
                     self.spin_batch.setValue(v)
             if "threads" in kv:
-                v = _int(kv["threads"], "CPU线程", -1, 256)
+                v = _int(kv["threads"], t('CPU线程'), -1, 256)
                 if v is not None:
                     self.spin_threads.setValue(v)
             if "slots" in kv:
-                v = _int(kv["slots"], "并行slots", -1, 64)
+                v = _int(kv["slots"], t('并行slots'), -1, 64)
                 if v is not None:
                     self.spin_slots.setValue(v)
             if "ngl" in kv:
@@ -1746,7 +1711,7 @@ class MainWindow(QMainWindow):
                 self.combo_kvc_v.setCurrentText(kv["kv_v"])
                 applied += 1
             if "temp" in kv:
-                v = _float(kv["temp"], "温度", 0.0, 2.0)
+                v = _float(kv["temp"], t('温度'), 0.0, 2.0)
                 if v is not None:
                     self.spin_temp.setValue(v)
             if "top_p" in kv:
@@ -1758,25 +1723,25 @@ class MainWindow(QMainWindow):
                 if v is not None:
                     self.spin_topk.setValue(v)
             if "repeat_penalty" in kv:
-                v = _float(kv["repeat_penalty"], "重复惩罚", 0.0, 2.0)
+                v = _float(kv["repeat_penalty"], t('重复惩罚'), 0.0, 2.0)
                 if v is not None:
                     self.spin_rp.setValue(v)
             if "timeout" in kv:
-                v = _int(kv["timeout"], "超时(秒)", 30, 86400)
+                v = _int(kv["timeout"], t('超时(秒)'), 30, 86400)
                 if v is not None:
                     self.spin_timeout.setValue(v)
             if "host" in kv:
                 self.edit_host.setText(str(kv["host"]))
                 applied += 1
             if "port" in kv:
-                v = _int(kv["port"], "端口", 1, 65535)
+                v = _int(kv["port"], t('端口'), 1, 65535)
                 if v is not None:
                     self.spin_port.setValue(v)
             if "split_mode" in kv and kv["split_mode"] in SPLIT_MODES:
                 self.combo_split_mode.setCurrentText(kv["split_mode"])
                 applied += 1
             if "main_gpu" in kv:
-                v = _int(kv["main_gpu"], "主GPU", 0, 63)
+                v = _int(kv["main_gpu"], t('主GPU'), 0, 63)
                 if v is not None:
                     self.spin_main_gpu.setValue(v)
             if "tensor_split" in kv:
@@ -1811,13 +1776,13 @@ class MainWindow(QMainWindow):
                         self.check_jinja.setChecked(True)
                         applied += 1
                 except Exception:
-                    warns.append("模板参数：JSON 解析失败，已跳过")
+                    warns.append(t('模板参数：JSON 解析失败，已跳过'))
             if "reasoning_budget" in kv:
-                v = _int(kv["reasoning_budget"], "推理预算", -1, 1000000)
+                v = _int(kv["reasoning_budget"], t('推理预算'), -1, 1000000)
                 if v is not None:
                     self.spin_reasoning_budget.setValue(v)
             if "api_key" in kv:
-                warns.append("API Key：出于安全考虑不导入（文件中为打码值）")
+                warns.append(t('API Key：出于安全考虑不导入（文件中为打码值）'))
             if "ssl_key_file" in kv or "ssl_cert_file" in kv:
                 self.check_ssl.setChecked(True)
                 applied += 1
@@ -1830,14 +1795,13 @@ class MainWindow(QMainWindow):
         """将当前配置导出为可双击启动的 .bat，并在桌面创建带软件图标的快捷方式。"""
         model = self.combo_model.currentData()
         if not model:
-            QMessageBox.information(self, "提示", "请先选择模型")
+            QMessageBox.information(self, t('提示'), t('请先选择模型'))
             return
         llama_dir = self.edit_dir.text().strip()
         launcher_exe = self._launcher_exe()
         if not os.path.isfile(launcher_exe):
-            QMessageBox.warning(self, "提示",
-                                "未找到启动器可执行文件（llama-server.exe）。\n"
-                                "请检查模型目录，或在「启动器文件」中用文件选择器指定。")
+            QMessageBox.warning(self, t('提示'),
+                                t('未找到启动器可执行文件（llama-server.exe）。\n请检查模型目录，或在「启动器文件」中用文件选择器指定。'))
             return
         self.save_config()
         s = self._gather_server_cfg()
@@ -1845,50 +1809,50 @@ class MainWindow(QMainWindow):
         try:
             content = build_bat_content(model, mmproj, s, llama_dir, launcher_exe=launcher_exe)
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"生成批处理失败: {e}")
+            QMessageBox.critical(self, t('错误'), t('生成批处理失败: {0}').format(e))
             return
-        default = os.path.join(self.base_dir, f"{model_alias(model)}-一键启动.bat")
-        path, _ = QFileDialog.getSaveFileName(self, "导出一键启动批处理", default, "批处理文件 (*.bat)")
+        default = os.path.join(self.base_dir, t('{0}-一键启动.bat').format(model_alias(model)))
+        path, _ = QFileDialog.getSaveFileName(self, t('导出一键启动批处理'), default, t('批处理文件 (*.bat)'))
         if not path:
             return
         try:
             with open(path, "w", encoding="utf-8", newline="\r\n") as f:
                 f.write(content)
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"导出失败: {e}")
+            QMessageBox.critical(self, t('错误'), t('导出失败: {0}').format(e))
             return
-        self.statusBar().showMessage(f"已导出: {path}", 5000)
-        self._on_server_log(f"[导出] 已生成一键启动脚本 {path}")
+        self.statusBar().showMessage(t('已导出: {0}').format(path), 5000)
+        self._on_server_log(t('[导出] 已生成一键启动脚本 {0}').format(path))
         self._create_desktop_shortcut(path)
 
     def export_preview_bat(self):
         """把「命令预览」页的完整命令行原样导出为 .bat，自选存储路径（功能 6）。"""
         preview = (self.preview_view.toPlainText() or "").strip()
         if not preview:
-            QMessageBox.information(self, "提示", "命令预览为空：请先选择模型并配置参数")
+            QMessageBox.information(self, t('提示'), t('命令预览为空：请先选择模型并配置参数'))
             return
         alias = model_alias(self.combo_model.currentData() or "") or "llama-server"
         default = os.path.join(
-            self._data_dir(), f"{alias}-命令预览.bat".replace("\\", "_"))
+            self._data_dir(), t("{0}-命令预览.bat").format(alias).replace("\\", "_"))
         path, _ = QFileDialog.getSaveFileName(
-            self, "导出命令预览为 .bat（可选择存储路径）", default,
-            "批处理文件 (*.bat);;所有文件 (*.*)")
+            self, t('导出命令预览为 .bat（可选择存储路径）'), default,
+            t('批处理文件 (*.bat);;所有文件 (*.*)'))
         if not path:
             return
         try:
             with open(path, "w", encoding="utf-8", newline="\r\n") as f:
                 f.write(build_preview_bat(preview, title=f"LLama Server - {alias}"))
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"导出失败: {e}")
+            QMessageBox.critical(self, t('错误'), t('导出失败: {0}').format(e))
             return
-        self.statusBar().showMessage(f"命令预览已导出: {path}", 5000)
-        self._on_server_log(f"[导出] 命令预览已保存为 {path}")
+        self.statusBar().showMessage(t('命令预览已导出: {0}').format(path), 5000)
+        self._on_server_log(t('[导出] 命令预览已保存为 {0}').format(path))
 
     def _create_desktop_shortcut(self, bat_path):
         """用 WScript.Shell 在桌面创建指向 bat 的快捷方式，图标取程序图标。"""
         desktop = self._desktop_dir()
         if not desktop:
-            QMessageBox.information(self, "提示", "导出成功，但无法定位桌面目录，跳过快捷方式")
+            QMessageBox.information(self, t('提示'), t('导出成功，但无法定位桌面目录，跳过快捷方式'))
             return
         import subprocess
         import base64
@@ -1906,7 +1870,7 @@ class MainWindow(QMainWindow):
             f"$s.TargetPath = '{_q(bat_path)}'",
             f"$s.WorkingDirectory = '{_q(os.path.dirname(bat_path))}'",
             f"$s.IconLocation = '{_q(icon_path)},0'" if icon_path else "",
-            "$s.Description = 'LLama 启动器一键启动'",
+            t("$s.Description = 'LLama 启动器一键启动'"),
             "$s.Save()",
         ]
         script = [line for line in script if line]
@@ -1917,12 +1881,12 @@ class MainWindow(QMainWindow):
                  "-ExecutionPolicy", "Bypass", "-EncodedCommand", encoded],
                 check=True, capture_output=True, timeout=60)
         except Exception as e:
-            QMessageBox.warning(self, "提示", f"创建桌面快捷方式失败: {e}")
+            QMessageBox.warning(self, t('提示'), t('创建桌面快捷方式失败: {0}').format(e))
             return
         QMessageBox.information(
-            self, "完成",
-            f"已导出：{bat_path}\n\n已在桌面创建快捷方式：\n{lnk_path}")
-        self.statusBar().showMessage(f"桌面快捷方式已创建: {lnk_path}", 6000)
+            self, t('完成'),
+            t('已导出：{0}\n\n已在桌面创建快捷方式：\n{1}').format(bat_path, lnk_path))
+        self.statusBar().showMessage(t('桌面快捷方式已创建: {0}').format(lnk_path), 6000)
 
     def _shortcut_icon(self):
         """快捷方式图标路径：优先使用启动器 exe 内嵌图标（不产生额外文件，且长期有效）。
@@ -1979,7 +1943,7 @@ class MainWindow(QMainWindow):
         llama_dir = self.edit_dir.text().strip()
         if not llama_dir or not os.path.isdir(llama_dir):
             self._models, self._mmprojs = [], []
-            self._scan_error = "模型目录无效"
+            self._scan_error = t('模型目录无效')
             self._rebuild_model_combos(None)
             return
 
@@ -2004,7 +1968,7 @@ class MainWindow(QMainWindow):
             self.model_scan_done.emit()
 
         threading.Thread(target=work, daemon=True).start()
-        self.statusBar().showMessage("正在扫描模型目录…", 2000)
+        self.statusBar().showMessage(t('正在扫描模型目录…'), 2000)
 
     def _on_model_scan_done(self):
         keep_path = self.cfg.data.get("model", "") if self._pending_keep else None
@@ -2013,10 +1977,10 @@ class MainWindow(QMainWindow):
         self._scan_error = None
         self._rebuild_model_combos(keep_path)
         if err:
-            self.statusBar().showMessage(f"扫描出错: {err}", 5000)
-            self._log_file(f"[扫描] 出错: {err}")
+            self.statusBar().showMessage(t('扫描出错: {0}').format(err), 5000)
+            self._log_file(t('[扫描] 出错: {0}').format(err))
         else:
-            self.statusBar().showMessage(f"发现 {len(self._models)} 个模型, {len(self._mmprojs)} 个视觉模型", 4000)
+            self.statusBar().showMessage(t('发现 {0} 个模型, {1} 个视觉模型').format(len(self._models), len(self._mmprojs)), 4000)
         self.update_preview()
 
     def _rebuild_model_combos(self, keep_path):
@@ -2030,7 +1994,7 @@ class MainWindow(QMainWindow):
             size = getattr(m, "group_size", None) or m.size
             label = f"{m.name}  ({human_size(size)})"
             if getattr(m, "shard_idx", None):
-                label += f"　[多文件 {m.shard_total} 片]"
+                label += t('\u3000[多文件 {0} 片]').format(m.shard_total)
             self.combo_model.addItem(label, m.path)
         self.combo_model.blockSignals(False)
         # 规范化路径匹配（兼容配置里 / 与 \ 混用），并保留下载页加入的外部模型
@@ -2047,7 +2011,7 @@ class MainWindow(QMainWindow):
             except OSError:
                 size = 0
             self.combo_model.addItem(
-                f"{os.path.basename(keep_path)}  ({human_size(size)})　[已下载]",
+                t('{0}  ({1})\u3000[已下载]').format(os.path.basename(keep_path), human_size(size)),
                 keep_path)
             self.combo_model.setCurrentIndex(self.combo_model.count() - 1)
         elif self._models:
@@ -2061,30 +2025,30 @@ class MainWindow(QMainWindow):
             return
         path = os.path.abspath(path)
         if not os.path.isfile(path):
-            QMessageBox.information(self, "提示", f"模型文件不存在：\n{path}")
+            QMessageBox.information(self, t('提示'), t('模型文件不存在：\n{0}').format(path))
             return
         for i in range(self.combo_model.count()):
             data = self.combo_model.itemData(i)
             if data and os.path.abspath(data) == path:
                 self.combo_model.setCurrentIndex(i)
-                self.statusBar().showMessage(f"已切换主模型：{os.path.basename(path)}", 5000)
+                self.statusBar().showMessage(t('已切换主模型：{0}').format(os.path.basename(path)), 5000)
                 return
         try:
             size = os.path.getsize(path)
         except OSError:
             size = 0
-        label = f"{os.path.basename(path)}  ({human_size(size)})　[已下载]"
+        label = t('{0}  ({1})\u3000[已下载]').format(os.path.basename(path), human_size(size))
         self._loading = True
         self.combo_model.addItem(label, path)
         self._loading = False
         self.combo_model.setCurrentIndex(self.combo_model.count() - 1)
-        self.statusBar().showMessage(f"已切换主模型：{os.path.basename(path)}", 5000)
+        self.statusBar().showMessage(t('已切换主模型：{0}').format(os.path.basename(path)), 5000)
 
     def _on_model_changed(self):
         path = self.combo_model.currentData()
         # A6: 显示当前选中模型的完整绝对路径（未选时显示「未选择模型」）
         if hasattr(self, "label_model_path"):
-            self.label_model_path.setText(os.path.abspath(path) if path else "未选择模型")
+            self.label_model_path.setText(os.path.abspath(path) if path else t('未选择模型'))
         if not path:
             self._clear_info()
             self._update_mmproj_warn()
@@ -2099,7 +2063,7 @@ class MainWindow(QMainWindow):
         self._loading = True
         self.combo_mmproj.blockSignals(True)
         self.combo_mmproj.clear()
-        self.combo_mmproj.addItem("（不使用）", None)
+        self.combo_mmproj.addItem(t('（不使用）'), None)
         sel = 0
         for m in same_dir:
             label = m.name
@@ -2134,7 +2098,7 @@ class MainWindow(QMainWindow):
         if not path or not hasattr(self, "check_mtp"):
             return
         if self._mtp_cache.get(path) is None:
-            self._mtp_status_label("MTP 检测中…")
+            self._mtp_status_label(t('MTP 检测中…'))
 
             def work():
                 try:
@@ -2165,16 +2129,16 @@ class MainWindow(QMainWindow):
             return
         if ok is None:
             # 无法检测：保持可用，允许用户手动决定
-            self._mtp_status_label("MTP 无法检测（文件不可读），可手动勾选", "#ff9f6a")
+            self._mtp_status_label(t('MTP 无法检测（文件不可读），可手动勾选'), "#ff9f6a")
             self.check_mtp.setEnabled(True)
             return
         if ok:
             # 支持 MTP：开放点选
-            self._mtp_status_label(f"✔ 检测到 MTP（{len(hits)} 个特征），可启用", "#7dffa8")
+            self._mtp_status_label(t('✔ 检测到 MTP（{0} 个特征），可启用').format(len(hits)), "#7dffa8")
             self.check_mtp.setEnabled(True)
         else:
             # 未检测到 MTP：给出提示但不强制禁用，避免误判导致支持 MTP 的模型无法启用
-            self._mtp_status_label("未检测到 MTP 张量，如确认支持可手动勾选", "#ff9f6a")
+            self._mtp_status_label(t('未检测到 MTP 张量，如确认支持可手动勾选'), "#ff9f6a")
             self._loading = True
             self.check_mtp.setChecked(False)
             self.check_mtp.setEnabled(True)
@@ -2191,7 +2155,7 @@ class MainWindow(QMainWindow):
         if not path or not hasattr(self, "check_jinja"):
             return
         if self._chat_cache.get(path) is None:
-            self._chat_status_label("模板检测中…")
+            self._chat_status_label(t('模板检测中…'))
 
             def work():
                 try:
@@ -2225,18 +2189,18 @@ class MainWindow(QMainWindow):
         self._loading = True
         if tpl is None:
             # 无法检测：保持可用，允许用户手动决定
-            self._chat_status_label("模板无法检测（文件不可读），可手动勾选", "#ff9f6a")
+            self._chat_status_label(t('模板无法检测（文件不可读），可手动勾选'), "#ff9f6a")
             self.check_jinja.setEnabled(True)
         elif tpl is False:
             # 模型没有内置对话模板：不支持 --jinja，强制禁用
-            self._chat_status_label("该模型无对话模板，不支持 --jinja", "#ff9f6a")
+            self._chat_status_label(t('该模型无对话模板，不支持 --jinja'), "#ff9f6a")
             self.check_jinja.setChecked(False)
             self.check_jinja.setEnabled(False)
         else:
             if self._chat_has_reasoning:
-                self._chat_status_label("✔ 支持 Jinja 模板与思考强度", "#7dffa8")
+                self._chat_status_label(t('✔ 支持 Jinja 模板与思考强度'), "#7dffa8")
             else:
-                self._chat_status_label("✔ 支持 Jinja 模板（未检测到思考强度）", "#7dffa8")
+                self._chat_status_label(t('✔ 支持 Jinja 模板（未检测到思考强度）'), "#7dffa8")
             self.check_jinja.setEnabled(True)
         self._loading = False
         self._update_chat_controls()
@@ -2259,15 +2223,13 @@ class MainWindow(QMainWindow):
         self.spin_reasoning_budget.setEnabled(reasoning_ok)
         if not jinja_on:
             self.combo_reasoning.setToolTip(
-                "思考强度需要先勾选「启用 Jinja 模板」才会生效。")
+                t('思考强度需要先勾选「启用 Jinja 模板」才会生效。'))
         elif not reasoning_ok:
             self.combo_reasoning.setToolTip(
-                "当前模型的对话模板未检测到思考强度（reasoning_effort）支持，暂不可用。")
+                t('当前模型的对话模板未检测到思考强度（reasoning_effort）支持，暂不可用。'))
         else:
             self.combo_reasoning.setToolTip(
-                "传给对话模板的 reasoning_effort 变量（--chat-template-kwargs）。\n"
-                "Qwen3 等支持思考的模型用它控制「思考深度」：low/medium/high。\n"
-                "「不设置」= 不传该参数（使用模板默认）。")
+                t('传给对话模板的 reasoning_effort 变量（--chat-template-kwargs）。\nQwen3 等支持思考的模型用它控制「思考深度」：low/medium/high。\n「不设置」= 不传该参数（使用模板默认）。'))
 
     def _on_mmproj_changed(self):
         self.cfg.data["mmproj"] = self.combo_mmproj.currentData() or None
@@ -2306,9 +2268,9 @@ class MainWindow(QMainWindow):
         mm = self._mmproj_mismatch(model_path, mmproj_path)
         if mm:
             self.label_mmproj_warn.setText(
-                f"⚠ 主模型与视觉模型维度不匹配 ({mm[0]} vs {mm[1]})，可能无法加载，请更换视觉模型")
+                t('⚠ 主模型与视觉模型维度不匹配 ({0} vs {1})，可能无法加载，请更换视觉模型').format(mm[0], mm[1]))
             self.label_mmproj_warn.setToolTip(
-                "llama.cpp 要求主模型与 mmproj 的嵌入维度（embedding_length）一致。")
+                t('llama.cpp 要求主模型与 mmproj 的嵌入维度（embedding_length）一致。'))
         else:
             self.label_mmproj_warn.setText("")
             self.label_mmproj_warn.setToolTip("")
@@ -2323,7 +2285,7 @@ class MainWindow(QMainWindow):
         threading.Thread(target=work, daemon=True).start()
 
     def _clear_info(self):
-        self.info_view.setPlainText("未选择模型")
+        self.info_view.setPlainText(t('未选择模型'))
 
     def _on_preset_changed(self):
         idx = self.combo_preset.currentIndex()
@@ -2335,7 +2297,7 @@ class MainWindow(QMainWindow):
             self.spin_ctx.setValue(ctx)
             self._loading = False
             self._sync_preset_combo()
-        self.statusBar().showMessage(f"已应用上下文预设: {PRESETS[idx][0]}", 3000)
+        self.statusBar().showMessage(t('已应用上下文预设: {0}').format(PRESETS[idx][0]), 3000)
 
     def _sync_preset_combo(self):
         """上下文长度变化时，让「上下文预设」下拉自动回显对应档位；非预设值显示「自定义」。"""
@@ -2361,7 +2323,7 @@ class MainWindow(QMainWindow):
             return
         model = self.combo_model.currentData()
         if not model:
-            self.preview_view.setPlainText("请选择模型")
+            self.preview_view.setPlainText(t('请选择模型'))
             return
         llama_dir = self.edit_dir.text().strip()
         s = self._gather_server_cfg()
@@ -2370,20 +2332,19 @@ class MainWindow(QMainWindow):
                               launcher_exe=self._launcher_exe())
             self.preview_view.setPlainText(build_command(args))
         except Exception as e:
-            self.preview_view.setPlainText(f"生成命令失败: {e}")
+            self.preview_view.setPlainText(t('生成命令失败: {0}').format(e))
 
     # ------------------------------------------------------------- 服务
     def start_server(self):
         model = self.combo_model.currentData()
         if not model:
-            QMessageBox.information(self, "提示", "请先选择模型")
+            QMessageBox.information(self, t('提示'), t('请先选择模型'))
             return
         llama_dir = self.edit_dir.text().strip()
         launcher_exe = self._launcher_exe()
         if not os.path.isfile(launcher_exe):
-            QMessageBox.warning(self, "提示",
-                                "未找到启动器可执行文件（llama-server.exe）。\n"
-                                "请检查模型目录，或在「启动器文件」中用文件选择器指定。")
+            QMessageBox.warning(self, t('提示'),
+                                t('未找到启动器可执行文件（llama-server.exe）。\n请检查模型目录，或在「启动器文件」中用文件选择器指定。'))
             return
         host = self.edit_host.text().strip() or "127.0.0.1"
         port = self.spin_port.value()
@@ -2391,17 +2352,15 @@ class MainWindow(QMainWindow):
             free = self._find_free_port(host, port) if self.check_port_hint.isChecked() else None
             if free:
                 ret = QMessageBox.question(
-                    self, "端口占用",
-                    f"端口 {port} 已被占用，可能已有服务在运行。\n"
-                    f"是否改用可用端口 {free}？\n\n"
-                    "选择「No」= 不更换端口，仍按原端口尝试启动。",
+                    self, t('端口占用'),
+                    t('端口 {0} 已被占用，可能已有服务在运行。\n是否改用可用端口 {1}？\n\n选择「No」= 不更换端口，仍按原端口尝试启动。').format(port, free),
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                 if ret == QMessageBox.StandardButton.Yes:
                     self.spin_port.setValue(free)
                     port = free
             else:
                 ret = QMessageBox.question(
-                    self, "端口占用", f"端口 {port} 已被占用，可能已有服务在运行。\n仍然尝试启动？",
+                    self, t('端口占用'), t('端口 {0} 已被占用，可能已有服务在运行。\n仍然尝试启动？').format(port),
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                 if ret != QMessageBox.StandardButton.Yes:
                     return
@@ -2411,17 +2370,14 @@ class MainWindow(QMainWindow):
         try:
             use_ssl = self._resolve_ssl(s)
         except Exception as e:
-            QMessageBox.critical(self, "HTTPS 证书生成失败", str(e))
+            QMessageBox.critical(self, t('HTTPS 证书生成失败'), str(e))
             return
         mmproj_path = self.combo_mmproj.currentData()
         mm = self._mmproj_mismatch(model, mmproj_path)
         if mm:
             ret = QMessageBox.warning(
-                self, "视觉模型不匹配",
-                f"主模型与视觉模型的嵌入维度不一致：主模型 {mm[0]} vs 视觉模型 {mm[1]}。\n"
-                "llama.cpp 会因此加载失败（error: mismatch between text model and mmproj）。\n\n"
-                "建议：切换一个配套的视觉模型，或选择「（不使用）」以纯文本模式运行。\n\n"
-                "仍要尝试启动吗？",
+                self, t('视觉模型不匹配'),
+                t('主模型与视觉模型的嵌入维度不一致：主模型 {0} vs 视觉模型 {1}。\nllama.cpp 会因此加载失败（error: mismatch between text model and mmproj）。\n\n建议：切换一个配套的视觉模型，或选择「（不使用）」以纯文本模式运行。\n\n仍要尝试启动吗？').format(mm[0], mm[1]),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
                 QMessageBox.StandardButton.No)
             if ret != QMessageBox.StandardButton.Yes:
@@ -2429,7 +2385,7 @@ class MainWindow(QMainWindow):
         try:
             args = build_args(model, mmproj_path, s, llama_dir, launcher_exe=self._launcher_exe())
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"构建命令失败: {e}")
+            QMessageBox.critical(self, t('错误'), t('构建命令失败: {0}').format(e))
             return
 
         self._log_file(">>> " + build_command(args))
@@ -2447,7 +2403,7 @@ class MainWindow(QMainWindow):
                 self._stats().record_open(self._running_model_name)
             except Exception:
                 pass
-            self.statusBar().showMessage("服务启动中…", 0)
+            self.statusBar().showMessage(t('服务启动中…'), 0)
 
     def stop_server(self):
         self.server.stop()
@@ -2470,18 +2426,18 @@ class MainWindow(QMainWindow):
 
     def _on_healthy(self, url):
         self._set_running_state(True)
-        self._log_file(f"服务已就绪: {url}")
+        self._log_file(t('服务已就绪: {0}').format(url))
         self.monitor.fetch_model_now()
         if self.check_browser.isChecked():
             webbrowser.open(url)
-        self.statusBar().showMessage(f"服务已就绪: {url}", 0)
+        self.statusBar().showMessage(t('服务已就绪: {0}').format(url), 0)
 
     def _on_exited(self, code):
         self._set_running_state(False)
         self.monitor.set_server(None)
         self._flush_usage()
         if not self.server.manual_stop and code != 0:
-            self.statusBar().showMessage(f"服务已退出（退出码 {code}）", 0)
+            self.statusBar().showMessage(t('服务已退出（退出码 {0}）').format(code), 0)
 
     def open_web(self):
         scheme = "https" if self.check_ssl.isChecked() else "http"
@@ -2498,14 +2454,14 @@ class MainWindow(QMainWindow):
         if os.path.isdir(d):
             os.startfile(d)  # noqa: S606
         else:
-            QMessageBox.information(self, "提示", "模型目录无效")
+            QMessageBox.information(self, t('提示'), t('模型目录无效'))
 
     def open_bat_validator(self):
         """C3: 打开启动文件校验报告对话框（bat_validator.ValidateBatDialog）。"""
         try:
             ValidateBatDialog(self).exec()
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"打开校验器失败：{e}")
+            QMessageBox.critical(self, t('错误'), t('打开校验器失败：{0}').format(e))
 
     # ------------------------------------------------------ Agent 工具
     def scan_tools(self):
@@ -2521,30 +2477,30 @@ class MainWindow(QMainWindow):
             self.tool_scan_done.emit()
 
         threading.Thread(target=work, daemon=True).start()
-        self.statusBar().showMessage("正在检测工具…", 2000)
+        self.statusBar().showMessage(t('正在检测工具…'), 2000)
 
     def _on_tool_scan_done(self):
         self._fill_tool_table()
-        self.statusBar().showMessage("工具检测完成", 3000)
+        self.statusBar().showMessage(t('工具检测完成'), 3000)
 
     def _fill_tool_table(self):
         rows = []
-        for t in tools_mod.ALL:
-            rows.append((t, self._tools_found.get(t["id"])))
+        for tool_def in tools_mod.ALL:
+            rows.append((tool_def, self._tools_found.get(tool_def["id"])))
         self._tool_rows = [r[0] for r in rows]
         self.tool_table.setRowCount(len(rows))
         for r, (tool, path) in enumerate(rows):
             name_item = QTableWidgetItem(tool.get("name", tool["id"]))
             name_item.setData(Qt.ItemDataRole.UserRole, tool.get("id"))
-            cat = "终端" if tool.get("category") == "terminal" else "应用"
+            cat = t('终端') if tool.get("category") == "terminal" else t('应用')
             desc_item = QTableWidgetItem(tool.get("desc", ""))
             type_item = QTableWidgetItem(cat)
-            status_item = QTableWidgetItem(path or "未找到")
+            status_item = QTableWidgetItem(path or t('未找到'))
             self.tool_table.setItem(r, 0, name_item)
             self.tool_table.setItem(r, 1, type_item)
             self.tool_table.setItem(r, 2, desc_item)
             self.tool_table.setItem(r, 3, status_item)
-            btn = QPushButton("打开" if path else "添加路径")
+            btn = QPushButton(t('打开') if path else t('添加路径'))
             btn.clicked.connect(lambda _=False, tid=tool["id"]: self._tool_open(tid))
             self.tool_table.setCellWidget(r, 4, btn)
         self._preserve_tool_selection()
@@ -2575,7 +2531,7 @@ class MainWindow(QMainWindow):
     def _tool_open(self, tid):
         if tools_mod is None:
             return
-        tool = next((t for t in tools_mod.ALL if t["id"] == tid), None)
+        tool = next((td for td in tools_mod.ALL if td["id"] == tid), None)
         if tool is None:
             return
         self._last_selected_tool = tid
@@ -2594,19 +2550,19 @@ class MainWindow(QMainWindow):
             args = (args + " " + extra_args).strip()
         ok = tools_mod.launch(path, tool, args, workdir, env)
         if ok:
-            msg = f"已打开 {tool['name']}"
+            msg = t('已打开 {0}').format(tool['name'])
             if conn_info:
                 msg += f"　·　{conn_info}"
             self.statusBar().showMessage(msg, 6000)
             self._on_server_log(msg)
         else:
-            QMessageBox.warning(self, "提示", "启动失败，请检查路径")
+            QMessageBox.warning(self, t('提示'), t('启动失败，请检查路径'))
 
     def _agent_connect(self, tool, workdir=None):
         """打开 Agent 工具时自动配置其连接当前 llama 服务。
         返回 (env, 连接说明文本, 附加启动参数)；服务未运行返回 (None, '服务未运行，无法自动连接', '')。"""
         if not self.server.running:
-            return None, "服务未运行，无法自动连接", ""
+            return None, t('服务未运行，无法自动连接'), ""
         s = self._gather_server_cfg()
         scheme = "https" if s.get("ssl_enabled") else "http"
         base = f"{scheme}://{s['host']}:{s['port']}"
@@ -2626,29 +2582,29 @@ class MainWindow(QMainWindow):
                   or self.edit_dir.text().strip())
             try:
                 opencode_launcher.write_config(wd, cfg)
-                return None, f"已自动配置 opencode 连接 {base_v1}（模型 {alias}）", ""
+                return None, t('已自动配置 opencode 连接 {0}（模型 {1}）').format(base_v1, alias), ""
             except Exception as e:
-                return None, f"opencode 配置写入失败: {e}", ""
+                return None, t('opencode 配置写入失败: {0}').format(e), ""
         if tid == "claude":
-            return None, "Claude Code 未自动连接（llama.cpp 的 Anthropic 接口兼容性有限），如需连接请手动配置 ANTHROPIC_BASE_URL", ""
+            return None, t('Claude Code 未自动连接（llama.cpp 的 Anthropic 接口兼容性有限），如需连接请手动配置 ANTHROPIC_BASE_URL'), ""
         if tid in ("codex", "aichat"):
             return {"OPENAI_BASE_URL": base_v1, "OPENAI_API_KEY": key,
-                    "OPENAI_MODEL": alias}, f"已连接 {base_v1}（OpenAI 接口，模型 {alias}）", ""
+                    "OPENAI_MODEL": alias}, t('已连接 {0}（OpenAI 接口，模型 {1}）').format(base_v1, alias), ""
 
         # 其他工具（含 GUI 应用）：复制连接信息到剪贴板
         try:
-            text = f"模型: {alias}\nAPI: {base_v1}\n"
+            text = t('模型: {0}\nAPI: {1}\n').format(alias, base_v1)
             if model_path:
-                text += f"文件: {model_path}\n"
+                text += t('文件: {0}\n').format(model_path)
             QApplication.clipboard().setText(text)
-            return None, f"已复制连接信息到剪贴板（{base_v1}，模型 {alias}）", ""
+            return None, t('已复制连接信息到剪贴板（{0}，模型 {1}）').format(base_v1, alias), ""
         except Exception:
-            return None, f"服务地址 {base_v1}（模型 {alias}）", ""
+            return None, t('服务地址 {0}（模型 {1}）').format(base_v1, alias), ""
 
     def open_selected_agent_tool(self):
         """打开 Agent 工具列表中当前高亮的工具（始终高亮选中行）。"""
         if not self._tool_rows:
-            QMessageBox.information(self, "提示", "Agent 工具列表为空")
+            QMessageBox.information(self, t('提示'), t('Agent 工具列表为空'))
             return
         row = self.tool_table.currentRow()
         if row < 0 or row >= len(self._tool_rows):
@@ -2657,24 +2613,24 @@ class MainWindow(QMainWindow):
 
     def _prompt_add_path(self, tool):
         ret = QMessageBox.question(
-            self, "未找到", f"未找到「{tool.get('name', tool['id'])}」，是否手动指定可执行文件路径？",
+            self, t('未找到'), t('未找到「{0}」，是否手动指定可执行文件路径？').format(tool.get('name', tool['id'])),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if ret != QMessageBox.StandardButton.Yes:
             return
         start = os.path.expanduser("~")
-        path, _ = QFileDialog.getOpenFileName(self, f"选择 {tool.get('name')} 可执行文件", start,
-                                              "可执行文件 (*.exe *.cmd *.bat *.ps1);;所有文件 (*.*)")
+        path, _ = QFileDialog.getOpenFileName(self, t('选择 {0} 可执行文件').format(tool.get('name')), start,
+                                              t('可执行文件 (*.exe *.cmd *.bat *.ps1);;所有文件 (*.*)'))
         if not path:
             return
         self.cfg.data.setdefault("tools", {})[tool["id"]] = {"path": path, "args": ""}
         self._tools_found[tool["id"]] = path
         self.cfg.save()
         self._fill_tool_table()
-        self.statusBar().showMessage(f"已记录 {tool['name']} 路径", 3000)
+        self.statusBar().showMessage(t('已记录 {0} 路径').format(tool['name']), 3000)
 
     # ---------------------------------------------------------- 其他
     def _browse_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "选择模型扫描目录", self.edit_dir.text() or os.path.expanduser("~"))
+        d = QFileDialog.getExistingDirectory(self, t('选择模型扫描目录'), self.edit_dir.text() or os.path.expanduser("~"))
         if d:
             self.edit_dir.setText(d)
             self.cfg.data["llama_dir"] = d
@@ -2690,15 +2646,15 @@ class MainWindow(QMainWindow):
 
     def _browse_launcher(self):
         start = os.path.join(self.edit_dir.text().strip() or self.base_dir, "llama-server.exe")
-        path, _ = QFileDialog.getOpenFileName(self, "选择启动器可执行文件", start,
-                                              "可执行文件 (*.exe);;所有文件 (*.*)")
+        path, _ = QFileDialog.getOpenFileName(self, t('选择启动器可执行文件'), start,
+                                              t('可执行文件 (*.exe);;所有文件 (*.*)'))
         if path:
             self.edit_launcher.setText(path)
             self.cfg.data["launcher_exe"] = path
             self.cfg.save()
             self.update_preview()
             self.scan_tools()
-            self.statusBar().showMessage(f"启动器文件: {path}", 4000)
+            self.statusBar().showMessage(t('启动器文件: {0}').format(path), 4000)
 
     def _clear_launcher(self):
         self.edit_launcher.setText("")
@@ -2706,28 +2662,28 @@ class MainWindow(QMainWindow):
         self.cfg.save()
         self.update_preview()
         self.scan_tools()
-        self.statusBar().showMessage("已恢复自动查找 llama-server.exe", 3000)
+        self.statusBar().showMessage(t('已恢复自动查找 llama-server.exe'), 3000)
 
     def _data_dir(self):
         """返回数据存储目录（config.json/日志/缓存），空则程序目录。"""
         return self.cfg.ensure_data_dir()
 
     def _browse_data_dir(self):
-        d = QFileDialog.getExistingDirectory(self, "选择数据存储目录", self._data_dir())
+        d = QFileDialog.getExistingDirectory(self, t('选择数据存储目录'), self._data_dir())
         if not d:
             return
         self.edit_data_dir.setText(d)
         if self.cfg.redirect_data_dir(d):
-            self.statusBar().showMessage(f"数据目录已切换到: {d}", 5000)
-            self._log_file(f"[配置] 数据目录切换到 {d}")
+            self.statusBar().showMessage(t('数据目录已切换到: {0}').format(d), 5000)
+            self._log_file(t('[配置] 数据目录切换到 {0}').format(d))
         else:
-            self.statusBar().showMessage("数据目录切换失败", 4000)
+            self.statusBar().showMessage(t('数据目录切换失败'), 4000)
 
     def _reset_data_dir(self):
         self.edit_data_dir.setText("")
         if self.cfg.redirect_data_dir(""):
-            self.statusBar().showMessage("数据目录已恢复为程序所在目录", 4000)
-            self._log_file("[配置] 数据目录恢复为程序目录")
+            self.statusBar().showMessage(t('数据目录已恢复为程序所在目录'), 4000)
+            self._log_file(t('[配置] 数据目录恢复为程序目录'))
 
     def _ensure_valid_llama_dir(self):
         """启动时校验模型目录；无效则弹窗让用户选择（浏览选择 / 使用默认上级目录）。"""
@@ -2735,10 +2691,8 @@ class MainWindow(QMainWindow):
         if llama_dir and os.path.isdir(llama_dir):
             return
         ret = QMessageBox.question(
-            self, "模型目录无效",
-            f"当前模型目录不存在或不可访问：\n{llama_dir or '（空）'}\n\n"
-            "是否立即重新选择模型目录？\n"
-            "（选「否」将使用启动器所在目录的上级目录）",
+            self, t('模型目录无效'),
+            t('当前模型目录不存在或不可访问：\n{0}\n\n是否立即重新选择模型目录？\n（选「否」将使用启动器所在目录的上级目录）').format(llama_dir or t('（空）')),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if ret == QMessageBox.StandardButton.Yes:
             self._browse_dir()
@@ -2748,10 +2702,10 @@ class MainWindow(QMainWindow):
                 self.edit_dir.setText(parent)
                 self.cfg.data["llama_dir"] = parent
                 self.cfg.save()
-                self.statusBar().showMessage(f"模型目录已设为: {parent}", 4000)
+                self.statusBar().showMessage(t('模型目录已设为: {0}').format(parent), 4000)
 
     def _on_llama_version(self, ver):
-        base = f"LLama 启动器 v{__version__}"
+        base = t('LLama 启动器 v{0}').format(__version__)
         self.setWindowTitle(f"{base} · llama {ver}" if ver else base)
 
     def recheck_llama_version(self):
@@ -2770,14 +2724,14 @@ class MainWindow(QMainWindow):
         AboutDialog(self.resource_dir, self).exec()
 
     def open_docs(self):
-        doc = os.path.join(self.resource_dir, "参数说明.md")
+        doc = os.path.join(self.resource_dir, t('参数说明.md'))
         if os.path.isfile(doc):
             try:
                 os.startfile(doc)  # noqa: S606
             except Exception:
                 webbrowser.open(doc)
         else:
-            QMessageBox.information(self, "提示", "未找到参数说明文档")
+            QMessageBox.information(self, t('提示'), t('未找到参数说明文档'))
 
     # ---------------------------------------------------------- 主题
     def set_theme(self, key):
@@ -2988,7 +2942,7 @@ class MainWindow(QMainWindow):
             logdir = os.path.join(self._data_dir(), "logs")
             os.makedirs(logdir, exist_ok=True)
             date = time.strftime("%Y%m%d")
-            with open(os.path.join(logdir, f"运行日志-{date}.log"), "a", encoding="utf-8") as f:
+            with open(os.path.join(logdir, t('运行日志-{0}.log').format(date)), "a", encoding="utf-8") as f:
                 f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {text}\n")
         except Exception:
             pass
@@ -3016,16 +2970,16 @@ class MainWindow(QMainWindow):
             os.makedirs(logdir, exist_ok=True)
             os.startfile(logdir)  # noqa: S606
         except Exception as e:
-            QMessageBox.information(self, "提示", f"无法打开日志目录: {e}")
+            QMessageBox.information(self, t('提示'), t('无法打开日志目录: {0}').format(e))
 
     # ---------------------------------------------------------- 状态栏监控
     def _on_mem(self, percent, tip):
-        self.label_mem.setText(f"内存 {percent:.0f}%")
+        self.label_mem.setText(t('内存 {0:.0f}%').format(percent))
         self.label_mem.setToolTip(tip)
 
     def _on_vram(self, text):
         if text:
-            self.label_vram.setText(f"显存 {text}")
+            self.label_vram.setText(t('显存 {0}').format(text))
             self.label_vram.setVisible(True)
         else:
             self.label_vram.setText("")
@@ -3049,7 +3003,7 @@ class MainWindow(QMainWindow):
     def _query_hf_info(self):
         model = self.combo_model.currentData()
         if not model:
-            QMessageBox.information(self, "提示", "请先选择模型")
+            QMessageBox.information(self, t('提示'), t('请先选择模型'))
             return
         # 查询词优先用 GGUF 里的基础模型名（更贴近 HF 仓库名），否则退回文件名去量化后缀
         query = ""
@@ -3062,7 +3016,7 @@ class MainWindow(QMainWindow):
             query = os.path.basename(model)
             if query.lower().endswith(".gguf"):
                 query = query[:-5]
-        self.statusBar().showMessage(f"正在联网查询 {query} …", 3000)
+        self.statusBar().showMessage(t('正在联网查询 {0} …').format(query), 3000)
 
         def work():
             text = hf_info.format_info(self._data_dir(), query)
@@ -3088,7 +3042,7 @@ class MainWindow(QMainWindow):
         self.spin_rp.setValue(vals["repeat_penalty"])
         self._loading = False
         self.update_preview()
-        self.statusBar().showMessage(f"已应用采样预设: {SAMPLING_PRESETS[idx][0]}", 3000)
+        self.statusBar().showMessage(t('已应用采样预设: {0}').format(SAMPLING_PRESETS[idx][0]), 3000)
 
     def _on_sampling_manual(self, _v):
         if self._loading:
@@ -3131,9 +3085,9 @@ class MainWindow(QMainWindow):
         scheme = "https" if self.check_ssl.isChecked() else "http"
         port = self.spin_port.value()
         if self.check_lan.isChecked():
-            self.label_local_ip.setText(f"局域网访问：{scheme}://{ip}:{port}")
+            self.label_local_ip.setText(t('局域网访问：{0}://{1}:{2}').format(scheme, ip, port))
         else:
-            self.label_local_ip.setText(f"本机 IP：{ip}")
+            self.label_local_ip.setText(t('本机 IP：{0}').format(ip))
 
     def _resolve_ssl(self, s):
         """按配置确保 HTTPS 证书存在并写回 ssl_key_file/ssl_cert_file。
@@ -3164,17 +3118,17 @@ class MainWindow(QMainWindow):
         """端口被占用时建议一个可用端口，确认后更新主界面端口号。"""
         free = self._find_free_port(host, port)
         if not free:
-            self.statusBar().showMessage(f"端口 {port} 被占用，且未找到可用端口", 6000)
+            self.statusBar().showMessage(t('端口 {0} 被占用，且未找到可用端口').format(port), 6000)
             return
         ret = QMessageBox.question(
-            self, "端口被占用",
-            f"端口 {port} 已被占用，可能已有服务在运行。\n是否改用可用端口 {free}？",
+            self, t('端口被占用'),
+            t('端口 {0} 已被占用，可能已有服务在运行。\n是否改用可用端口 {1}？').format(port, free),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if ret == QMessageBox.StandardButton.Yes:
             self.spin_port.setValue(free)
             self.save_config()
-            self._log_file(f"[端口] {port} 被占用，已改用 {free}")
-            self.statusBar().showMessage(f"已改用端口 {free}", 5000)
+            self._log_file(t('[端口] {0} 被占用，已改用 {1}').format(port, free))
+            self.statusBar().showMessage(t('已改用端口 {0}').format(free), 5000)
 
     def _check_residual(self):
         if self.server.running:
@@ -3196,14 +3150,13 @@ class MainWindow(QMainWindow):
         port = self.spin_port.value()
         if procs:
             box = QMessageBox(self)
-            box.setWindowTitle("检测到残留进程")
+            box.setWindowTitle(t('检测到残留进程'))
             box.setIcon(QMessageBox.Icon.Question)
             box.setText(
-                f"检测到 {len(procs)} 个可能残留的 llama-server 进程\n"
-                "（上次未正常退出，可能仍在占用显存/内存）。\n是否强制结束它们？")
+                t('检测到 {0} 个可能残留的 llama-server 进程\n（上次未正常退出，可能仍在占用显存/内存）。\n是否强制结束它们？').format(len(procs)))
             box.setStandardButtons(
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-            cb = QCheckBox("不再提示（可在「高级参数」中重新开启）")
+            cb = QCheckBox(t('不再提示（可在「高级参数」中重新开启）'))
             box.setCheckBox(cb)
             ret = box.exec()
             if cb.isChecked():
@@ -3214,8 +3167,8 @@ class MainWindow(QMainWindow):
                 self.cfg.save()
             if ret == QMessageBox.StandardButton.Yes:
                 kill_all_llama_server()
-                self._log_file("已强制清理残留的 llama-server 进程")
-                self.statusBar().showMessage("已清理残留进程，显存已释放", 4000)
+                self._log_file(t('已强制清理残留的 llama-server 进程'))
+                self.statusBar().showMessage(t('已清理残留进程，显存已释放'), 4000)
         # 端口占用 → 建议更换端口（与残留进程分开处理）
         if self.check_port_hint.isChecked() and port_in_use(host, port):
             self._suggest_free_port(host, port)
@@ -3252,20 +3205,20 @@ class MainWindow(QMainWindow):
             self._tray = None
             return
         self._tray = QSystemTrayIcon(self._load_icon(), self)
-        self._tray.setToolTip("LLama 启动器")
+        self._tray.setToolTip(t('LLama 启动器'))
         menu = QMenu()
-        act_show = menu.addAction("打开主界面")
+        act_show = menu.addAction(t('打开主界面'))
         act_show.triggered.connect(self._show_from_tray)
-        self._tray_act_pill = menu.addAction("显示悬浮窗")
+        self._tray_act_pill = menu.addAction(t('显示悬浮窗'))
         self._tray_act_pill.setToolTip(
-            "立即在屏幕右下角显示悬浮小窗（若之前被 ✕ 停用或右键隐藏，会一并恢复）")
+            t('立即在屏幕右下角显示悬浮小窗（若之前被 ✕ 停用或右键隐藏，会一并恢复）'))
         self._tray_act_pill.triggered.connect(self._tray_show_pill)
-        self._tray_act_start = menu.addAction("启动模型")
+        self._tray_act_start = menu.addAction(t('启动模型'))
         self._tray_act_start.triggered.connect(self.start_server)
-        self._tray_act_stop = menu.addAction("停止模型")
+        self._tray_act_stop = menu.addAction(t('停止模型'))
         self._tray_act_stop.triggered.connect(self.stop_server)
         menu.addSeparator()
-        act_quit = menu.addAction("退出")
+        act_quit = menu.addAction(t('退出'))
         act_quit.triggered.connect(self.quit_app)
         menu.aboutToShow.connect(self._set_tray_menu_state)
         self._tray.setContextMenu(menu)
@@ -3291,6 +3244,35 @@ class MainWindow(QMainWindow):
         self._pill_session_hidden = False
         super().showEvent(event)
 
+    def _switch_language(self, code):
+        """切换界面语言：写入配置并提示重启生效。"""
+        cur = self.cfg.data.get("language") or "auto"
+        if code == cur:
+            return
+        self.cfg.data["language"] = code
+        self.cfg.save()
+        if i18n.resolve(code) == i18n.lang():
+            self.statusBar().showMessage(t('界面已是该语言，无需重启'), 5000)
+            return
+        ret = QMessageBox.question(
+            self, t('切换语言'),
+            t('语言设置已保存。\n切换语言需要重启启动器才能完全生效，是否立即重启？\n（正在运行的模型服务会被停止）'),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if ret == QMessageBox.StandardButton.Yes:
+            self._restart_app()
+
+    def _restart_app(self):
+        import subprocess
+        if getattr(sys, "frozen", False):
+            cmd = [sys.executable]
+        else:
+            cmd = [sys.executable, os.path.join(self.base_dir, "main.py")]
+        try:
+            subprocess.Popen(cmd, cwd=self.base_dir)
+        except Exception:
+            return
+        self.quit_app()
+
     def quit_app(self):
         self._quitting = True
         if self._pill is not None:
@@ -3306,16 +3288,16 @@ class MainWindow(QMainWindow):
             self.hide()
             self._update_tray_hover()
             self._tray.showMessage(
-                "LLama 启动器", "已最小化到托盘，双击图标或小窗返回主界面。服务仍在后台运行。",
+                t('LLama 启动器'), t('已最小化到托盘，双击图标或小窗返回主界面。服务仍在后台运行。'),
                 QSystemTrayIcon.MessageIcon.Information, 2000)
             event.ignore()
             return
         self._flush_usage()
         self.save_config()
-        self._log_file("程序退出")
+        self._log_file(t('程序退出'))
         if self.server.running:
             ret = QMessageBox.question(
-                self, "退出", "服务正在运行，退出时是否同时停止服务？",
+                self, t('退出'), t('服务正在运行，退出时是否同时停止服务？'),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No |
                 QMessageBox.StandardButton.Cancel)
             if ret == QMessageBox.StandardButton.Cancel:

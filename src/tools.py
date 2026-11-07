@@ -1,17 +1,18 @@
 import os
 import shutil
 import subprocess
+from .i18n import t
 
 CREATE_NO_WINDOW = 0x08000000
 
 BUILTIN_TOOLS = [
-    {"id": "opencode", "name": "OpenCode (终端)", "desc": "AI 编程 Agent，终端界面（自动连接本服务）",
+    {"id": "opencode", "name": t('OpenCode (终端)'), "desc": t('AI 编程 Agent，终端界面（自动连接本服务）'),
      "category": "terminal", "cmds": ["opencode", "opencode.cmd", "opencode.exe"]},
-    {"id": "opencode-desktop", "name": "OpenCode 桌面版", "desc": "OpenCode 桌面客户端",
+    {"id": "opencode-desktop", "name": t('OpenCode 桌面版'), "desc": t('OpenCode 桌面客户端'),
      "category": "app", "cmds": ["OpenCode.exe"], "search_dirs": ["@opencode-aidesktop"]},
-    {"id": "claude", "name": "Claude Code", "desc": "Anthropic 官方 CLI（未自动连接本服务）",
+    {"id": "claude", "name": "Claude Code", "desc": t('Anthropic 官方 CLI（未自动连接本服务）'),
      "category": "terminal", "cmds": ["claude", "claude.exe", "claude.cmd"]},
-    {"id": "llama-server", "name": "llama-server", "desc": "由本启动器管理的本地服务",
+    {"id": "llama-server", "name": "llama-server", "desc": t('由本启动器管理的本地服务'),
      "category": "app", "cmds": ["llama-server.exe"]},
 ]
 

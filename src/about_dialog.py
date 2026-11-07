@@ -5,15 +5,16 @@ from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (QDialog, QLabel, QPushButton, QVBoxLayout, QHBoxLayout, QFrame)
 
 from . import __version__, APP_NAME
+from .i18n import t
 
 BILIBILI_URL = "https://space.bilibili.com/3493265957456549"
-DEVELOPER_NAME = "AI创客师"
+DEVELOPER_NAME = t('AI创客师')
 
 
 class AboutDialog(QDialog):
     def __init__(self, base_dir, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("开发者信息")
+        self.setWindowTitle(t('开发者信息'))
         self.setMinimumWidth(360)
         ico = os.path.join(base_dir, "assets", "icon.ico")
         if os.path.isfile(ico):
@@ -28,17 +29,13 @@ class AboutDialog(QDialog):
         lay.addWidget(title)
 
         info = QLabel(
-            f"开发者: {DEVELOPER_NAME}<br/>"
-            f"哔哩入口: <a href='{BILIBILI_URL}' style='color:#4a7fdb;'>{BILIBILI_URL}</a><br/>"
-            f"版本: v{__version__}<br/><br/>"
-            "本地大模型启动器<br/>"
-            "基于 llama.cpp 构建"
+            t("开发者: {0}<br/>哔哩入口: <a href='{1}' style='color:#4a7fdb;'>{2}</a><br/>版本: v{3}<br/><br/>本地大模型启动器<br/>基于 llama.cpp 构建").format(DEVELOPER_NAME, BILIBILI_URL, BILIBILI_URL, __version__)
         )
         info.setTextFormat(Qt.TextFormat.RichText)
         info.setOpenExternalLinks(True)
         info.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
         info.setWordWrap(True)
-        info.setToolTip("点击哔哩哔哩链接即可打开主页")
+        info.setToolTip(t('点击哔哩哔哩链接即可打开主页'))
         lay.addWidget(info)
 
         qr_path = None
@@ -55,9 +52,9 @@ class AboutDialog(QDialog):
                                Qt.TransformationMode.SmoothTransformation)
                 qr.setPixmap(pm)
                 qr.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                qr.setToolTip("谢谢支持")
+                qr.setToolTip(t('谢谢支持'))
                 lay.addWidget(qr)
-                tip = QLabel("如有帮助，欢迎打赏支持")
+                tip = QLabel(t('如有帮助，欢迎打赏支持'))
                 tip.setAlignment(Qt.AlignmentFlag.AlignCenter)
                 lay.addWidget(tip)
 
@@ -66,7 +63,7 @@ class AboutDialog(QDialog):
         lay.addWidget(sep)
 
         btn_row = QHBoxLayout()
-        btn_close = QPushButton("关闭")
+        btn_close = QPushButton(t('关闭'))
         btn_close.clicked.connect(self.accept)
         btn_row.addStretch(1)
         btn_row.addWidget(btn_close)

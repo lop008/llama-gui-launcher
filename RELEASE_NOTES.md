@@ -1,6 +1,60 @@
 # LLama 启动器 发布说明 / Release Notes
 
-> 最新版本 / Latest release: **v0.5.01** · 发布日期 / Released: 2026-11-07
+> 最新版本 / Latest release: **v0.5.13** · 发布日期 / Released: 2026-11-08
+
+---
+
+# LLama 启动器 v0.5.13 发布说明 / Release Notes
+
+## English
+
+### New Features
+
+- **Full multilingual interface** — a new "Language" menu offers 8 UI languages: 简体中文 / 繁體中文 / English / 日本語 / 한국어 / Русский / Español / Français, plus "Follow system language" which auto-matches the OS language on first launch. Switching applies after a confirmed restart and is remembered in `config.json` (`language`). Around 730 UI strings are translated through a lightweight built-in engine (`src/i18n.py` + `src/locales/`, the Chinese source text doubles as the lookup key); all languages ship inside the exe.
+
+### Improvements
+
+- Bottom action buttons and the theme button use minimum widths instead of fixed widths, so long Russian / French labels are no longer clipped and windows auto-size.
+- Version number centralized: `__version__` in `src/__init__.py` is now the single source; the Windows version resource is generated at build time (hand-maintained `version_info*.txt` files removed).
+
+### Fixes
+
+- Fixed a startup crash caused by a loop variable shadowing the translation function in the tool-scan callback.
+- Fixed swapped Korean translations for the "Browse…" and "Dark" entries.
+
+### Downloads
+
+| File | Description |
+|------|-------------|
+| `LLama-Launcher-v0.5.13-win-x64.exe` | Single-file build — no Python required |
+| `LLama-Launcher-v0.5.13-win-x64-portable.zip` | Portable build — extract and run |
+| Source code (zip / tar.gz) | Full source |
+
+---
+
+## 中文
+
+### 🆕 新增功能
+
+- **多语言界面**：新增「语言」菜单，支持 8 种界面语言（简体中文 / 繁體中文 / English / 日本語 / 한국어 / Русский / Español / Français），并提供「跟随系统语言」首次启动自动匹配系统语言；切换后确认重启即时生效，选择记入 `config.json` 的 `language`。约 730 条界面文案全量翻译（`src/i18n.py` + `src/locales/`，中文原文即索引键，缺失译文自动回退中文），所有语言随 exe 分发。
+
+### 🔧 改进
+
+- 底部按钮与主题按钮改用最小宽度替代固定宽度，俄/法等长文案不再裁字，窗口自适应加宽。
+- 版本号集中化：`src/__init__.py` 的 `__version__` 为唯一来源，打包时自动生成 exe 版本资源，不再手工维护 `version_info*.txt`。
+
+### 🐛 修复
+
+- 修复工具扫描回调中循环变量遮蔽翻译函数导致的闪退。
+- 修复韩语「浏览… / 深色」两条译文错位。
+
+### 下载
+
+| 文件 | 说明 |
+|------|------|
+| `LLama-Launcher-v0.5.13-win-x64.exe` | 单文件版，无需安装 Python，双击即用 |
+| `LLama-Launcher-v0.5.13-win-x64-portable.zip` | 便携版，解压即用 |
+| Source code (zip / tar.gz) | 源码 |
 
 ---
 

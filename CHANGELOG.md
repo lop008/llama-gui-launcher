@@ -2,6 +2,22 @@
 
 All notable changes to LLama 启动器 / LLama Launcher.
 
+## [0.5.13] - 2026-11-08
+
+### New Features
+
+- **Multilingual UI** — new "Language" menu with 8 UI languages (Simplified Chinese built-in; 繁體中文 / English / 日本語 / 한국어 / Русский / Español / Français shipped as translation tables in `src/locales/`, ~730 strings each) plus "Follow system language" which auto-matches the OS language on first launch. Switching prompts a confirmed restart and persists to `config.json` (`language`). Lightweight engine in `src/i18n.py` uses the Chinese source text as the lookup key (missing translations fall back to Chinese), `main.py` bootstraps i18n before any UI import, and all language modules are bundled into the packaged exe.
+
+### Improvements
+
+- Bottom action buttons and the theme button now use minimum widths instead of fixed widths — long Russian / French labels are no longer clipped and windows auto-widen.
+- Version centralization: `__version__` in `src/__init__.py` is the single source of truth; the Windows version resource for all three build specs is generated at PyInstaller build time from it (hand-maintained `version_info.txt` / `version_info_portable.txt` removed).
+
+### Fixes
+
+- Fixed a native crash (`0xC0000409`) while scanning tools: a loop variable `t` shadowed the `t()` translator inside a Qt slot callback.
+- Fixed swapped Korean translations for the "Browse…" and "Dark" entries.
+
 ## [0.5.01] - 2026-11-07
 
 ### New Features

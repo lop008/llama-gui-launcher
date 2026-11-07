@@ -20,6 +20,7 @@ from PyQt6.QtWidgets import (
 from . import hf_browse
 from .model_downloader import ModelDownloader
 from .model_scanner import human_size, natural_key
+from .i18n import t
 
 
 class HFDownloadTab(QWidget):
@@ -55,62 +56,62 @@ class HFDownloadTab(QWidget):
 
         # ---- 搜索行：A 组织 / B 模型名称 / C 关键词 + 匹配方式 ----
         search = QHBoxLayout()
-        search.addWidget(QLabel("组织/作者:"))
+        search.addWidget(QLabel(t('组织/作者:')))
         self.edit_org = QLineEdit("unsloth")
-        self.edit_org.setPlaceholderText("A 组织/作者，如 unsloth")
-        self.edit_org.setToolTip("按发布者/组织过滤仓库（对应 HF author 参数），例如 unsloth、Qwen。")
+        self.edit_org.setPlaceholderText(t('A 组织/作者，如 unsloth'))
+        self.edit_org.setToolTip(t('按发布者/组织过滤仓库（对应 HF author 参数），例如 unsloth、Qwen。'))
         search.addWidget(self.edit_org, 1)
 
-        search.addWidget(QLabel("模型名称/版本:"))
+        search.addWidget(QLabel(t('模型名称/版本:')))
         self.edit_name = QLineEdit()
-        self.edit_name.setPlaceholderText("B 模型名称/版本，如 Qwen3-8B")
-        self.edit_name.setToolTip("按仓库名称/版本关键词检索（对应 HF search 参数），例如 Qwen3-8B、GLM-4.5。")
+        self.edit_name.setPlaceholderText(t('B 模型名称/版本，如 Qwen3-8B'))
+        self.edit_name.setToolTip(t('按仓库名称/版本关键词检索（对应 HF search 参数），例如 Qwen3-8B、GLM-4.5。'))
         search.addWidget(self.edit_name, 1)
 
-        search.addWidget(QLabel("辅助关键词:"))
+        search.addWidget(QLabel(t('辅助关键词:')))
         self.edit_kw = QLineEdit()
-        self.edit_kw.setPlaceholderText("C 辅助关键词，如 GGUF")
-        self.edit_kw.setToolTip("辅助过滤词：在返回的仓库名中再做一次本地过滤，用于收窄结果。")
+        self.edit_kw.setPlaceholderText(t('C 辅助关键词，如 GGUF'))
+        self.edit_kw.setToolTip(t('辅助过滤词：在返回的仓库名中再做一次本地过滤，用于收窄结果。'))
         search.addWidget(self.edit_kw, 1)
 
-        search.addWidget(QLabel("匹配:"))
+        search.addWidget(QLabel(t('匹配:')))
         self.combo_match = QComboBox()
-        self.combo_match.addItems(["并（同时满足）", "或（任一满足）"])
-        self.combo_match.setToolTip("A/B/C 三个条件的组合方式：并=全部满足；或=任一满足。")
+        self.combo_match.addItems([t('并（同时满足）'), t('或（任一满足）')])
+        self.combo_match.setToolTip(t('A/B/C 三个条件的组合方式：并=全部满足；或=任一满足。'))
         search.addWidget(self.combo_match)
 
-        self.btn_search = QPushButton("检索仓库")
-        self.btn_search.setToolTip("在 HuggingFace 上按 A/B/C 条件检索 GGUF 模型仓库（联网）")
+        self.btn_search = QPushButton(t('检索仓库'))
+        self.btn_search.setToolTip(t('在 HuggingFace 上按 A/B/C 条件检索 GGUF 模型仓库（联网）'))
         search.addWidget(self.btn_search)
         root.addLayout(search)
 
         # ---- 工具栏行 ----
         bar = QHBoxLayout()
-        self.btn_more = QPushButton("↓ 加载更多")
-        self.btn_more.setToolTip("增大每页数量，追加更多仓库结果（最多 500 条）")
-        self.btn_open_dir = QPushButton("打开下载目录")
-        self.btn_open_dir.setToolTip("打开模型下载目录（已选仓库时打开其子目录）")
-        self.btn_cancel = QPushButton("取消当前")
-        self.btn_cancel.setToolTip("停止当前下载（保留已下载的 .part，下次可续传）")
-        self.btn_clearq = QPushButton("清空队列")
+        self.btn_more = QPushButton(t('↓ 加载更多'))
+        self.btn_more.setToolTip(t('增大每页数量，追加更多仓库结果（最多 500 条）'))
+        self.btn_open_dir = QPushButton(t('打开下载目录'))
+        self.btn_open_dir.setToolTip(t('打开模型下载目录（已选仓库时打开其子目录）'))
+        self.btn_cancel = QPushButton(t('取消当前'))
+        self.btn_cancel.setToolTip(t('停止当前下载（保留已下载的 .part，下次可续传）'))
+        self.btn_clearq = QPushButton(t('清空队列'))
         bar.addWidget(self.btn_more)
         bar.addWidget(self.btn_open_dir)
         bar.addWidget(self.btn_cancel)
         bar.addWidget(self.btn_clearq)
         bar.addStretch(1)
-        bar.addWidget(QLabel("每页:"))
+        bar.addWidget(QLabel(t('每页:')))
         self.combo_page = QComboBox()
         for n in (20, 50, 100, 200, 500):
             self.combo_page.addItem(str(n), n)
         self.combo_page.setCurrentText("50")
-        self.combo_page.setToolTip("每次检索显示的仓库数量（点击「检索仓库」后生效；「加载更多」按此数量累加）")
+        self.combo_page.setToolTip(t('每次检索显示的仓库数量（点击「检索仓库」后生效；「加载更多」按此数量累加）'))
         bar.addWidget(self.combo_page)
-        bar.addWidget(QLabel("排序:"))
+        bar.addWidget(QLabel(t('排序:')))
         self.combo_sort = QComboBox()
-        for name in ("下载量 ↓", "点赞 ↓", "名称 ↑", "最近更新"):
+        for name in (t('下载量 ↓'), t('点赞 ↓'), t('名称 ↑'), t('最近更新')):
             self.combo_sort.addItem(name)
-        self.combo_sort.setCurrentText("下载量 ↓")
-        self.combo_sort.setToolTip("与点击仓库表表头排序等效")
+        self.combo_sort.setCurrentText(t('下载量 ↓'))
+        self.combo_sort.setToolTip(t('与点击仓库表表头排序等效'))
         bar.addWidget(self.combo_sort)
         self.label_status = QLabel("")
         self.label_status.setStyleSheet("color: #8fd0ff;")
@@ -127,16 +128,16 @@ class HFDownloadTab(QWidget):
         left = QWidget()
         lv = QVBoxLayout(left)
         lv.setContentsMargins(0, 0, 0, 0)
-        lv.addWidget(QLabel("模型仓库"))
+        lv.addWidget(QLabel(t('模型仓库')))
         self.table_repo = QTableWidget(0, 4)
-        self.table_repo.setHorizontalHeaderLabels(["模型仓库", "下载量", "点赞", "最近更新"])
+        self.table_repo.setHorizontalHeaderLabels([t('模型仓库'), t('下载量'), t('点赞'), t('最近更新')])
         self._setup_table(self.table_repo, [190, 84, 56, 86])
         self.table_repo.horizontalHeader().setSectionsClickable(True)
         self.table_repo.horizontalHeader().sectionClicked.connect(self._on_repo_header_clicked)
         self.table_repo.horizontalHeader().sectionDoubleClicked.connect(
             lambda c: self.table_repo.resizeColumnToContents(c))
         self.table_repo.horizontalHeaderItem(3).setToolTip(
-            "仓库在 HuggingFace 上最近一次提交更新的日期（lastModified）")
+            t('仓库在 HuggingFace 上最近一次提交更新的日期（lastModified）'))
         lv.addWidget(self.table_repo)
         hsplit.addWidget(left)
 
@@ -144,13 +145,13 @@ class HFDownloadTab(QWidget):
         rv = QVBoxLayout(right)
         rv.setContentsMargins(0, 0, 0, 0)
         file_bar = QHBoxLayout()
-        self.label_repo_files = QLabel("未选择仓库")
+        self.label_repo_files = QLabel(t('未选择仓库'))
         self.label_repo_files.setStyleSheet("color: #8fd0ff;")
         file_bar.addWidget(self.label_repo_files, 1)
         rv.addLayout(file_bar)
         self.table_files = QTableWidget(0, 5)
         self.table_files.setHorizontalHeaderLabels(
-            ["文件名", "大小", "已安装", "下载", "进度"])
+            [t('文件名'), t('大小'), t('已安装'), t('下载'), t('进度')])
         self._setup_table(self.table_files, [320, 90, 70, 64, 150])
         self.table_files.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table_files.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -173,27 +174,27 @@ class HFDownloadTab(QWidget):
         bl.setSpacing(4)
 
         dir_row = QHBoxLayout()
-        dir_row.addWidget(QLabel("保存到:"))
+        dir_row.addWidget(QLabel(t('保存到:')))
         self.edit_save_dir = QLineEdit()
-        self.edit_save_dir.setPlaceholderText("默认 = 主页的模型目录；下载时按仓库名建子文件夹")
+        self.edit_save_dir.setPlaceholderText(t('默认 = 主页的模型目录；下载时按仓库名建子文件夹'))
         self.edit_save_dir.setToolTip(
-            "模型下载根目录。默认显示主页「模型目录」；下载时会在其下按「仓库名」建立子文件夹。")
-        btn_browse = QPushButton("浏览…")
+            t('模型下载根目录。默认显示主页「模型目录」；下载时会在其下按「仓库名」建立子文件夹。'))
+        btn_browse = QPushButton(t('浏览…'))
         dir_row.addWidget(self.edit_save_dir, 1)
         dir_row.addWidget(btn_browse)
         bl.addLayout(dir_row)
 
         info_log = QHBoxLayout()
-        self.group_repo_info = QGroupBox("仓库信息")
+        self.group_repo_info = QGroupBox(t('仓库信息'))
         gv = QVBoxLayout(self.group_repo_info)
         gv.setContentsMargins(6, 4, 6, 4)
         self.repo_info_view = QTextEdit()
         self.repo_info_view.setReadOnly(True)
-        self.repo_info_view.setPlaceholderText("点击左侧仓库查看信息")
+        self.repo_info_view.setPlaceholderText(t('点击左侧仓库查看信息'))
         gv.addWidget(self.repo_info_view)
         info_log.addWidget(self.group_repo_info, 1)
 
-        self.group_log = QGroupBox("操作日志")
+        self.group_log = QGroupBox(t('操作日志'))
         gl = QVBoxLayout(self.group_log)
         gl.setContentsMargins(6, 4, 6, 4)
         self.log_view = QPlainTextEdit()
@@ -215,9 +216,9 @@ class HFDownloadTab(QWidget):
         self.btn_open_dir.clicked.connect(self._open_download_dir)
         self.combo_page.currentIndexChanged.connect(self._on_page_size_changed)
         self.btn_cancel.clicked.connect(
-            lambda: (self.downloader.cancel_current(), self._log("已请求取消当前下载")))
+            lambda: (self.downloader.cancel_current(), self._log(t('已请求取消当前下载'))))
         self.btn_clearq.clicked.connect(
-            lambda: (self.downloader.clear_queue(), self._log("队列已清空")))
+            lambda: (self.downloader.clear_queue(), self._log(t('队列已清空'))))
         self.combo_sort.currentIndexChanged.connect(self._on_sort_combo)
         self.table_repo.currentItemChanged.connect(self._on_repo_selected)
         self.table_files.itemClicked.connect(self._on_file_clicked)
@@ -296,8 +297,8 @@ class HFDownloadTab(QWidget):
         mode = self.combo_match.currentIndex()   # 0=并, 1=或
         self._limit = int(self.combo_page.currentData() or 50)
         self.btn_search.setEnabled(False)
-        self.label_status.setText("检索中…")
-        self._log(f"正在检索 组织='{org}' 名称='{name}' 关键词='{kw}'（{'并' if mode == 0 else '或'}）…")
+        self.label_status.setText(t('检索中…'))
+        self._log(t("正在检索 组织='{0}' 名称='{1}' 关键词='{2}'（{3}）…").format(org, name, kw, t('并') if mode == 0 else t('或')))
 
         def work():
             # 服务器端只用一个「种子」条件，A/B/C 的并/或语义统一在本地过滤
@@ -330,7 +331,7 @@ class HFDownloadTab(QWidget):
 
     def load_more(self):
         if self._limit >= 1000:
-            self._log("已到加载上限（1000 条）")
+            self._log(t('已到加载上限（1000 条）'))
             return
         step = int(self.combo_page.currentData() or 50)
         self._limit = min(1000, self._limit + step)
@@ -345,14 +346,14 @@ class HFDownloadTab(QWidget):
         self.btn_search.setEnabled(True)
         err = getattr(self, "_repos_error", None)
         if err:
-            self.label_status.setText("检索失败")
-            self._log(f"检索失败: {err}")
+            self.label_status.setText(t('检索失败'))
+            self._log(t('检索失败: {0}').format(err))
             return
         repos = getattr(self, "_repos_result", None) or []
         self._repos_all = list(repos)
         self._fill_repo_table()
-        self.label_status.setText(f"共 {len(repos)} 个仓库（每页 {self._limit}）")
-        self._log(f"找到 {len(repos)} 个仓库")
+        self.label_status.setText(t('共 {0} 个仓库（每页 {1}）').format(len(repos), self._limit))
+        self._log(t('找到 {0} 个仓库').format(len(repos)))
 
     # ------------------------------------------------------------- 仓库排序
     def _on_sort_combo(self, idx):
@@ -415,7 +416,7 @@ class HFDownloadTab(QWidget):
         if cached is not None:
             self._show_files(rid, cached)
             return
-        self.label_repo_files.setText(f"仓库 {rid} 的文件（加载中…）")
+        self.label_repo_files.setText(t('仓库 {0} 的文件（加载中…）').format(rid))
 
         def work():
             try:
@@ -441,8 +442,8 @@ class HFDownloadTab(QWidget):
         err = getattr(self, "_files_error", None)
         if err:
             rid, msg = err
-            self.label_repo_files.setText(f"仓库 {rid} 加载失败")
-            self._log(f"获取文件列表失败: {msg}")
+            self.label_repo_files.setText(t('仓库 {0} 加载失败').format(rid))
+            self._log(t('获取文件列表失败: {0}').format(msg))
             return
         rid, info = getattr(self, "_files_result", (None, None))
         if info is not None:
@@ -456,11 +457,11 @@ class HFDownloadTab(QWidget):
             self._render_files()
             if self._cur_files:
                 self.label_repo_files.setText(
-                    f"仓库 {rid}：{len(self._cur_files)} 个 GGUF 文件（下载量 {info['downloads']:,}）")
+                    t('仓库 {0}：{1} 个 GGUF 文件（下载量 {2:,}）').format(rid, len(self._cur_files), info['downloads']))
             else:
                 self.label_repo_files.setText(
-                    f"仓库 {rid}：未找到 .gguf 文件（该仓库可能不是 GGUF 仓库）")
-                self._log(f"{rid} 内没有 .gguf 文件")
+                    t('仓库 {0}：未找到 .gguf 文件（该仓库可能不是 GGUF 仓库）').format(rid))
+                self._log(t('{0} 内没有 .gguf 文件').format(rid))
             self._show_repo_info(rid, info)
         finally:
             self._building = False
@@ -501,20 +502,20 @@ class HFDownloadTab(QWidget):
         key = f"{rid}::{f['path']}"
         dest = self._dest_for(rid, f["path"])
         installed = os.path.isfile(dest) and os.path.getsize(dest) > 0
-        status = QTableWidgetItem("已安装" if installed else "未安装")
+        status = QTableWidgetItem(t('已安装') if installed else t('未安装'))
         status.setForeground(Qt.GlobalColor.green if installed
                              else Qt.GlobalColor.gray)
         self.table_files.setItem(r, 2, status)
 
-        btn = QPushButton("下载")
-        btn.setToolTip("下载该文件（支持断点续传）；已安装的模型点击文件名可直接设为主模型")
+        btn = QPushButton(t('下载'))
+        btn.setToolTip(t('下载该文件（支持断点续传）；已安装的模型点击文件名可直接设为主模型'))
         btn.clicked.connect(lambda _=False, r_=rid, f_=f: self._enqueue_file(r_, f_))
         self.table_files.setCellWidget(r, 3, btn)
 
         pb = QProgressBar()
         pb.setRange(0, 100)
         pb.setValue(100 if installed else 0)
-        pb.setFormat("已安装" if installed else "")
+        pb.setFormat(t('已安装') if installed else "")
         self.table_files.setCellWidget(r, 4, pb)
 
         self._file_state[key] = {
@@ -526,11 +527,7 @@ class HFDownloadTab(QWidget):
         tags = info.get("tags") or []
         tag_txt = "、".join(tags[:12]) if tags else "—"
         html = (
-            f"<b>{rid}</b><br>"
-            f"下载量: {info.get('downloads', 0):,}　|　点赞: {info.get('likes', 0)}　|　"
-            f"最近更新: {info.get('last_modified') or '—'}<br>"
-            f"流水线: {info.get('pipeline_tag') or '—'}<br>"
-            f"标签: {tag_txt}")
+            t('<b>{0}</b><br>下载量: {1:,}\u3000|\u3000点赞: {2}\u3000|\u3000最近更新: {3}<br>流水线: {4}<br>标签: {5}').format(rid, info.get('downloads', 0), info.get('likes', 0), info.get('last_modified') or '—', info.get('pipeline_tag') or '—', tag_txt))
         self.repo_info_view.setHtml(html)
 
     # ------------------------------------------------------------- 下载队列
@@ -548,16 +545,16 @@ class HFDownloadTab(QWidget):
         try:
             os.makedirs(os.path.dirname(dest) or ".", exist_ok=True)
         except OSError as e:
-            QMessageBox.warning(self.mw, "提示", f"无法创建目录：\n{e}")
+            QMessageBox.warning(self.mw, t('提示'), t('无法创建目录：\n{0}').format(e))
             return
         key = f"{rid}::{f['path']}"
         st = self._file_state.get(key)
         if st:
             st["progress"].setRange(0, 100)
             st["progress"].setValue(0)
-            st["progress"].setFormat("排队中…")
+            st["progress"].setFormat(t('排队中…'))
         url = hf_browse.file_url(rid, f["path"])
-        self._log(f"加入下载: {f['path']} → {dest}")
+        self._log(t('加入下载: {0} → {1}').format(f['path'], dest))
         self.downloader.enqueue(url, dest, label=key)
 
     # ------------------------------------------------------------- 进度回调
@@ -567,7 +564,7 @@ class HFDownloadTab(QWidget):
             st["progress"].setRange(0, 100)
             st["progress"].setValue(0)
             st["progress"].setFormat("0%")
-        self._log("开始下载: " + label)
+        self._log(t('开始下载: ') + label)
 
     def _on_progress(self, label, done, total, speed):
         st = self._file_state.get(label)
@@ -591,10 +588,10 @@ class HFDownloadTab(QWidget):
             st["installed"] = True
             st["progress"].setRange(0, 100)
             st["progress"].setValue(100)
-            st["progress"].setFormat("已安装")
-            st["status"].setText("已安装")
+            st["progress"].setFormat(t('已安装'))
+            st["status"].setText(t('已安装'))
             st["status"].setForeground(Qt.GlobalColor.green)
-        self._log(f"✔ 下载完成: {path}")
+        self._log(t('✔ 下载完成: {0}').format(path))
         self.models_changed.emit()
 
     def _on_task_failed(self, label, err):
@@ -602,12 +599,12 @@ class HFDownloadTab(QWidget):
         if st:
             st["progress"].setRange(0, 100)
             st["progress"].setValue(0)
-            st["progress"].setFormat("失败")
-        self._log(f"✘ 下载失败: {label} — {err}")
+            st["progress"].setFormat(t('失败'))
+        self._log(t('✘ 下载失败: {0} — {1}').format(label, err))
 
     def _on_queue_empty(self):
         self.btn_search.setEnabled(True)
-        self._log("队列已全部完成")
+        self._log(t('队列已全部完成'))
 
     # ------------------------------------------------------------- 其他
     def _on_file_clicked(self, item):
@@ -630,11 +627,11 @@ class HFDownloadTab(QWidget):
                 os.makedirs(d, exist_ok=True)
             os.startfile(d)  # type: ignore[attr-defined]
         except OSError as e:
-            QMessageBox.critical(self.mw, "错误", f"无法打开下载目录：\n{e}")
+            QMessageBox.critical(self.mw, t('错误'), t('无法打开下载目录：\n{0}').format(e))
 
     def _browse_dir(self):
         d = QFileDialog.getExistingDirectory(
-            self.mw, "选择模型保存目录", self._save_dir() or os.path.expanduser("~"))
+            self.mw, t('选择模型保存目录'), self._save_dir() or os.path.expanduser("~"))
         if d:
             self._auto_save_dir = False
             self.edit_save_dir.setText(d)

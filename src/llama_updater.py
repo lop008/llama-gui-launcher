@@ -18,6 +18,7 @@ import zipfile
 import requests
 
 from .model_downloader import HEADERS as _DL_HEADERS
+from .i18n import t
 
 GH_API = "https://api.github.com/repos/ggml-org/llama.cpp"
 HEADERS = {**_DL_HEADERS(), "Accept": "application/vnd.github+json"}
@@ -95,10 +96,10 @@ def list_releases(per_page=30, include_prerelease=True, page=1):
     try:
         r = requests.get(url, params=params, headers=HEADERS, timeout=30)
     except requests.exceptions.RequestException as e:
-        raise UpdaterError(f"网络请求失败: {e}") from e
+        raise UpdaterError(t('网络请求失败: {0}').format(e)) from e
     if not (200 <= r.status_code < 300):
-        raise UpdaterError(f"GitHub API 返回 HTTP {r.status_code}"
-                           + ("（未认证时每小时限 60 次，请稍后再试）" if r.status_code == 403 else ""))
+        raise UpdaterError(t('GitHub API 返回 HTTP {0}').format(r.status_code)
+                           + (t('（未认证时每小时限 60 次，请稍后再试）') if r.status_code == 403 else ""))
     out = []
     for rel in r.json() or []:
         assets = [{
@@ -121,13 +122,12 @@ def release_by_tag(tag):
     try:
         r = requests.get(f"{GH_API}/releases/tags/{tag}", headers=HEADERS, timeout=30)
     except requests.exceptions.RequestException as e:
-        raise UpdaterError(f"网络请求失败: {e}") from e
+        raise UpdaterError(t('网络请求失败: {0}').format(e)) from e
     if r.status_code == 404:
         raise UpdaterError(
-            f"未找到 Release「{tag}」。\n注意：官方仅提供 Release（版本号）的预编译包，"
-            "分支/源码没有可直接运行的 Windows 二进制。")
+            t('未找到 Release「{0}」。\n注意：官方仅提供 Release（版本号）的预编译包，分支/源码没有可直接运行的 Windows 二进制。').format(tag))
     if not (200 <= r.status_code < 300):
-        raise UpdaterError(f"GitHub API 返回 HTTP {r.status_code}")
+        raise UpdaterError(t('GitHub API 返回 HTTP {0}').format(r.status_code))
     rel = r.json()
     return [{
         "tag": rel.get("tag_name", ""),
@@ -148,10 +148,10 @@ def list_branches(per_page=100):
     try:
         r = requests.get(url, params={"per_page": int(per_page)}, headers=HEADERS, timeout=30)
     except requests.exceptions.RequestException as e:
-        raise UpdaterError(f"网络请求失败: {e}") from e
+        raise UpdaterError(t('网络请求失败: {0}').format(e)) from e
     if not (200 <= r.status_code < 300):
-        raise UpdaterError(f"GitHub API 返回 HTTP {r.status_code}"
-                           + ("（未认证时每小时限 60 次，请稍后再试）" if r.status_code == 403 else ""))
+        raise UpdaterError(t('GitHub API 返回 HTTP {0}').format(r.status_code)
+                           + (t('（未认证时每小时限 60 次，请稍后再试）') if r.status_code == 403 else ""))
 
     def _key(n):
         return (0 if n.lower() in ("main", "master") else 1, n.lower())
@@ -177,7 +177,7 @@ def install_branch_source(zip_path, dest_dir):
     - 返回写入的文件数。
     """
     if not os.path.isdir(dest_dir):
-        raise UpdaterError(f"目标目录不存在: {dest_dir}")
+        raise UpdaterError(t('目标目录不存在: {0}').format(dest_dir))
     tmpdir = tempfile.mkdtemp(prefix="llama_src_")
     try:
         with zipfile.ZipFile(zip_path) as z:
@@ -277,7 +277,7 @@ def install_from_zip(zip_path, target_dir, mode=MODE_SERVER, progress_cb=None):
         skipped=未选中的数量, pending=[被占用而写成 .new 的文件名]。
     """
     if not os.path.isdir(target_dir):
-        raise UpdaterError(f"目标目录不存在: {target_dir}")
+        raise UpdaterError(t('目标目录不存在: {0}').format(target_dir))
     entries = list_zip_entries(zip_path)
     want = _wanted_files(entries, mode)
 
@@ -363,7 +363,7 @@ def backup_launcher_dir(dir_path, tag, progress_cb=None):
     - 返回备份 zip 的路径（若无任何可备份文件则返回 None）。
     """
     if not os.path.isdir(dir_path):
-        raise UpdaterError(f"目录不存在: {dir_path}")
+        raise UpdaterError(t('目录不存在: {0}').format(dir_path))
     tag = re.sub(r'[\\/:*?"<>|\r\n]+', "_", str(tag).strip()) or "backup"
     bak_dir = os.path.join(dir_path, "bak")
     os.makedirs(bak_dir, exist_ok=True)

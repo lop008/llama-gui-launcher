@@ -10,16 +10,16 @@ A GUI launcher for llama.cpp local large language models. It turns the whole wor
 
 **[中文文档 / Chinese](README.zh-CN.md)**
 
-> **Latest release: v0.5.01** — a tray hover pill with live stats, real-time output speed (tok/s), HTTPS with self-signed certificates + LAN sharing, richer GGUF metadata, reorderable tabs and more. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
+> **Latest release: v0.5.13** — a full multilingual interface (8 UI languages + follow-system), plus the v0.5.01 tray hover pill, live tok/s, HTTPS + LAN sharing, richer GGUF metadata and more. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
 
-## What's New in v0.5.01
+## What's New in v0.5.13
 
-1. **Tray hover pill** — after minimizing to the tray, a small capsule stays above the taskbar (status dot + live tok/s + API dot). Hover/click expands a data card (speed, CPU, memory, GPU load, VRAM, API busy, model); drag to move, double-click to restore, right-click for a menu.
-2. **Live output speed** — real-time tok/s from `/metrics` counter diffing, with a log `eval time` fallback; adds GPU core utilization and API busy-slot count.
-3. **HTTPS + LAN sharing** — one-click self-signed certificate (via `cryptography`), `--ssl-key-file` / `--ssl-cert-file` wired end-to-end; LAN toggle sets host `0.0.0.0` and shows the reachable `http(s)://<local-ip>:<port>` address.
-4. **Richer GGUF info** — Unsloth dynamic quantization (`UD-*`), faster parsing by skipping giant arrays, plus params / license / base model / heads+GQA / RoPE / MTP / SSM / vocab / tensor count / GGUF version and more.
-5. **Reorderable tabs** — drag bottom tabs to reorder; the order is remembered.
-6. **Online model query toggle**, **custom updater target directory**, and a more robust **one-click launch** script.
+1. **Multilingual interface** — new "Language" menu with 8 UI languages: 简体中文 / 繁體中文 / English / 日本語 / 한국어 / Русский / Español / Français.
+2. **Follow system language** — first launch auto-matches your OS language; your manual choice is remembered (`config.json` → `language`).
+3. **Instant switch** — picking a language prompts a restart and the whole UI (menus, buttons, dialogs, tray, validation messages) follows.
+4. **~730 translated strings per language** via a tiny built-in engine (`src/i18n.py` + `src/locales/`); missing entries fall back to Chinese, and all languages ship inside the exe.
+5. **No clipped labels** — buttons use minimum widths so long Russian / French texts display fully.
+6. **Single source of truth for the version** — `__version__` in `src/__init__.py`; the Windows version resource is now generated automatically at build time.
 
 ## What Problem Does It Solve?
 
@@ -113,8 +113,8 @@ Download from the [Releases](https://github.com/lop008/llama-gui-launcher/releas
 
 | File | Description |
 |------|-------------|
-| `LLama-Launcher-v0.5.01-win-x64.exe` | **Single-file** build (~43 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
-| `LLama-Launcher-v0.5.01-win-x64-portable.zip` | **Portable** build — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
+| `LLama-Launcher-v0.5.13-win-x64.exe` | **Single-file** build (~47 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
+| `LLama-Launcher-v0.5.13-win-x64-portable.zip` | **Portable** build — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
 
 Put `llama-server.exe` and its DLLs in the same directory (or set the launcher path in the UI).
 

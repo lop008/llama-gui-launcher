@@ -12,6 +12,7 @@ from collections import deque
 import requests
 
 from PyQt6.QtCore import QObject, pyqtSignal
+from .i18n import t
 
 CHUNK = 1024 * 1024          # 每次读取 1MB
 PROGRESS_INTERVAL = 0.5      # 进度信号最小间隔（秒）
@@ -123,7 +124,7 @@ class ModelDownloader(QObject):
                 last_err = e
                 if attempt < MAX_RETRY:
                     time.sleep(1.5 * (attempt + 1))
-        raise RuntimeError(f"下载失败（已重试 {MAX_RETRY} 次）: {last_err}")
+        raise RuntimeError(t('下载失败（已重试 {0} 次）: {1}').format(MAX_RETRY, last_err))
 
     def _download_once(self, url, part, dest, label, pos):
         headers = HEADERS()
@@ -184,7 +185,7 @@ class ModelDownloader(QObject):
         # 校验并落盘
         final_size = os.path.getsize(part)
         if total and final_size != total:
-            raise RuntimeError(f"文件大小不符（{final_size} / {total}），已保留 .part 可重试")
+            raise RuntimeError(t('文件大小不符（{0} / {1}），已保留 .part 可重试').format(final_size, total))
         tmp = dest + ".done.tmp"
         os.replace(part, tmp)      # 先改名避免与旧文件混淆
         os.replace(tmp, dest)

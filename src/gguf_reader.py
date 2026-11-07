@@ -1,6 +1,7 @@
 import os
 import re
 import struct
+from .i18n import t
 
 GGUF_MAGIC = b"GGUF"
 
@@ -350,7 +351,7 @@ def _quant_label(name, info):
         return m.group(1).upper(), True
     ft = info.get("general.file_type")
     if ft is not None:
-        return FILE_TYPE_NAMES.get(ft, "未知"), False
+        return FILE_TYPE_NAMES.get(ft, t('未知')), False
     return None, False
 
 
@@ -360,53 +361,52 @@ def format_gguf_info(path):
     name = os.path.basename(path)
     abs_path = os.path.abspath(path)   # A6: 首行包含绝对路径，保留原「模型文件」行
     if info is None:
-        return (f"文件路径: {abs_path}\n模型文件: {name}\n"
-                f"无法解析 GGUF 头部（可能不是有效的 GGUF 文件）。\n文件大小: {human_size(size)}")
+        return (t('文件路径: {0}\n模型文件: {1}\n无法解析 GGUF 头部（可能不是有效的 GGUF 文件）。\n文件大小: {2}').format(abs_path, name, human_size(size)))
 
-    lines = [f"文件路径: {abs_path}", f"模型文件: {name}",
-             f"文件大小: {human_size(size)}"]
+    lines = [t('文件路径: {0}').format(abs_path), t('模型文件: {0}').format(name),
+             t('文件大小: {0}').format(human_size(size))]
 
     arch = info.get("general.architecture")
     if arch:
-        lines.append(f"架构: {arch}")
+        lines.append(t('架构: {0}').format(arch))
     gname = info.get("general.name")
     if gname:
-        lines.append(f"模型名称: {gname}")
+        lines.append(t('模型名称: {0}').format(gname))
 
     qname, from_name = _quant_label(name, info)
-    qt = f"量化格式: {qname or '未知'}"
+    qt = t('量化格式: {0}').format(qname or t('未知'))
     if from_name:
-        qt += "（取自文件名）"
+        qt += t('（取自文件名）')
     elif info.get("general.file_type") is not None:
-        qt += "（取自元数据，动态量化可能不准）"
+        qt += t('（取自元数据，动态量化可能不准）')
     lines.append(qt)
 
     if info.get("general.quantized_by"):
-        lines.append(f"量化者: {info['general.quantized_by']}")
+        lines.append(t('量化者: {0}').format(info['general.quantized_by']))
 
     if info.get("parameter_count"):
-        lines.append(f"参数量: {human_params(info['parameter_count'])}")
+        lines.append(t('参数量: {0}').format(human_params(info['parameter_count'])))
     elif info.get("general.size_label"):
-        lines.append(f"参数量: {info['general.size_label']}")
+        lines.append(t('参数量: {0}').format(info['general.size_label']))
 
     if info.get("general.license"):
-        lines.append(f"许可证: {info['general.license']}")
+        lines.append(t('许可证: {0}').format(info['general.license']))
 
     bm = " / ".join(x for x in (info.get("base_model_org"), info.get("base_model_name")) if x)
     if bm:
-        lines.append(f"基础模型: {bm}")
+        lines.append(t('基础模型: {0}').format(bm))
 
     ctx = info.get("context_length")
     if ctx is not None:
-        lines.append(f"模型训练上下文(token): {ctx}")
-        lines.append("（即模型本身原生支持的最大上下文长度，供参考）")
+        lines.append(t('模型训练上下文(token): {0}').format(ctx))
+        lines.append(t('（即模型本身原生支持的最大上下文长度，供参考）'))
 
     if info.get("block_count") is not None:
-        lines.append(f"层数(block): {info['block_count']}")
+        lines.append(t('层数(block): {0}').format(info['block_count']))
     if info.get("embedding_length") is not None:
-        lines.append(f"嵌入维度: {info['embedding_length']}")
+        lines.append(t('嵌入维度: {0}').format(info['embedding_length']))
     if info.get("feed_forward_length") is not None:
-        lines.append(f"前馈维度: {info['feed_forward_length']}")
+        lines.append(t('前馈维度: {0}').format(info['feed_forward_length']))
 
     def _first_int(v):
         if isinstance(v, (list, tuple)):
@@ -419,32 +419,32 @@ def format_gguf_info(path):
         if hkv and hkv != hc:
             gqa = (hc // hkv) if hkv else 0
             extra = f"（KV {hkv}，GQA {gqa}x）"
-        lines.append(f"注意力头: {hc}{extra}")
+        lines.append(t('注意力头: {0}{1}').format(hc, extra))
     if info.get("key_length") is not None and info.get("value_length") is not None:
-        lines.append(f"头维度: K {info['key_length']} / V {info['value_length']}")
+        lines.append(t('头维度: K {0} / V {1}').format(info['key_length'], info['value_length']))
     if info.get("rope_freq_base") is not None:
         try:
-            lines.append(f"RoPE 频率基数: {int(info['rope_freq_base'])}")
+            lines.append(t('RoPE 频率基数: {0}').format(int(info['rope_freq_base'])))
         except (TypeError, ValueError):
             pass
 
     if info.get("nextn_layers"):
-        lines.append(f"MTP/NextN 预测层: {info['nextn_layers']}")
+        lines.append(t('MTP/NextN 预测层: {0}').format(info['nextn_layers']))
     if info.get("ssm_state") is not None:
-        lines.append(f"状态空间(SSM) state: {info['ssm_state']}")
+        lines.append(t('状态空间(SSM) state: {0}').format(info['ssm_state']))
     if info.get("vocab_size"):
-        lines.append(f"词表大小: {info['vocab_size']}")
+        lines.append(t('词表大小: {0}').format(info['vocab_size']))
     if info.get("tensor_count"):
-        lines.append(f"张量数量: {info['tensor_count']}")
+        lines.append(t('张量数量: {0}').format(info['tensor_count']))
     if info.get("version") is not None:
-        lines.append(f"GGUF 版本: {info['version']}")
+        lines.append(t('GGUF 版本: {0}').format(info['version']))
 
     if info.get("general.description"):
-        lines.append(f"模型简介: {info['general.description']}")
+        lines.append(t('模型简介: {0}').format(info['general.description']))
 
     repo = info.get("base_model_url") or info.get("general.repo_url")
     if repo:
-        lines.append(f"模型主页: {repo}")
+        lines.append(t('模型主页: {0}').format(repo))
 
     return "\n".join(lines)
 

@@ -1,19 +1,24 @@
 import os
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+_BASE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _BASE)
 
-from PyQt6.QtWidgets import QApplication
+from src import i18n
 
-from src.main_window import MainWindow
+# 必须在导入任何界面模块之前应用语言（模块级被包裹的文案在 import 时求值）
+i18n.bootstrap(_BASE)
 
 
 def main():
+    from PyQt6.QtWidgets import QApplication
+
+    from src.i18n import t
     app = QApplication(sys.argv)
-    app.setApplicationName("LLama 启动器")
+    app.setApplicationName(t("LLama 启动器"))
     app.setQuitOnLastWindowClosed(True)
-    base = os.path.dirname(os.path.abspath(__file__))
-    win = MainWindow(base)
+    from src.main_window import MainWindow
+    win = MainWindow(_BASE)
     win.show()
     sys.exit(app.exec())
 

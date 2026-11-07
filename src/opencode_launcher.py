@@ -4,6 +4,7 @@ import shutil
 import time
 
 from . import tools
+from .i18n import t
 
 
 def build_config(host, port, alias, ctx, n_predict, api_key="", scheme="http"):
@@ -60,6 +61,6 @@ def launch_tui(workdir):
     if not found:
         found = tools.find_executable("opencode.cmd")
     if not found:
-        return False, "未找到 opencode，请在「Agent工具」中添加路径"
+        return False, t('未找到 opencode，请在「Agent工具」中添加路径')
     ok = tools.open_terminal(f'"{found}"', workdir)
-    return ok, ("已启动 opencode" if ok else "启动终端失败")
+    return ok, (t('已启动 opencode') if ok else t('启动终端失败'))

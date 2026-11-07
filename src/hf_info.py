@@ -4,6 +4,7 @@ import os
 import time
 
 import requests
+from .i18n import t
 
 CACHE_FILE = "hf_model_cache.json"
 CACHE_TTL = 7 * 24 * 3600  # 7 天
@@ -78,7 +79,7 @@ def get_model_info(base_dir, query):
     try:
         models = _search_models(query, limit=3)
         if not models:
-            data = {"error": "未找到匹配的模型仓库"}
+            data = {"error": t('未找到匹配的模型仓库')}
             cache[query] = {"ts": time.time(), "data": data}
             _save_cache(base_dir, cache)
             return data
@@ -89,28 +90,28 @@ def get_model_info(base_dir, query):
         _save_cache(base_dir, cache)
         return data
     except requests.exceptions.RequestException as e:
-        return {"error": f"网络请求失败: {e}"}
+        return {"error": t('网络请求失败: {0}').format(e)}
     except Exception as e:
-        return {"error": f"查询失败: {e}"}
+        return {"error": t('查询失败: {0}').format(e)}
 
 
 def format_info(base_dir, query):
     """把查询结果格式化为可显示的文本。"""
     info = get_model_info(base_dir, query)
     if "error" in info:
-        return f"联网查询失败：{info['error']}"
+        return t('联网查询失败：{0}').format(info['error'])
     lines = []
     top = info["top"]
-    lines.append("== 联网查询结果 ==")
-    lines.append(f"推荐匹配: {top['id']}")
-    lines.append(f"下载量: {top['downloads']:,} | 点赞: {top['likes']}")
+    lines.append(t('== 联网查询结果 =='))
+    lines.append(t('推荐匹配: {0}').format(top['id']))
+    lines.append(t('下载量: {0:,} | 点赞: {1}').format(top['downloads'], top['likes']))
     if top.get("tags"):
-        lines.append("标签: " + ", ".join(top["tags"]))
+        lines.append(t('标签: ') + ", ".join(top["tags"]))
     if info.get("desc"):
-        lines.append("\n模型简介:\n" + info["desc"])
+        lines.append(t('\n模型简介:\n') + info["desc"])
     if len(info["models"]) > 1:
-        lines.append("\n其他候选:")
+        lines.append(t('\n其他候选:'))
         for m in info["models"][1:]:
-            lines.append(f"  {m['id']}  (下载 {m['downloads']:,}, 点赞 {m['likes']})")
-    lines.append("\n(数据来自 HuggingFace，缓存 7 天)")
+            lines.append(t('  {0}  (下载 {1:,}, 点赞 {2})').format(m['id'], m['downloads'], m['likes']))
+    lines.append(t('\n(数据来自 HuggingFace，缓存 7 天)'))
     return "\n".join(lines)
