@@ -6,7 +6,7 @@ import time
 import webbrowser
 from collections import Counter
 
-from PyQt6.QtCore import QEvent, QThread, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, QThread, Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QAction, QCloseEvent, QColor, QFont, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import (
     QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog,
@@ -29,7 +29,9 @@ from . import hf_info
 from .hf_download_tab import HFDownloadTab
 from .llama_updater import get_local_version
 from .model_scanner import find_mmproj_for, human_size, scan_models, sort_models
+from .net_utils import default_cert_paths, ensure_self_signed_cert, local_ipv4
 from .presets import PRESETS, SAMPLING_PRESETS
+from .pill import HoverPill
 from .server import (
     ServerManager, find_llama_server_processes, kill_all_llama_server, port_in_use,
 )
@@ -171,6 +173,7 @@ class MainWindow(QMainWindow):
         self.cfg = Config(self.base_dir)
         self.server = ServerManager()
         self.monitor = SystemMonitor(self)
+        self.monitor.log_dir = os.path.join(self.cfg.data_dir(), "logs")
         self._loading = False
         self._quitting = False
         self._models = []
@@ -179,8 +182,14 @@ class MainWindow(QMainWindow):
         self._tool_rows = []
         self._last_selected_tool = None
         self._tray = None
+        self._tray_act_pill = None
+        self._tray_act_start = None
+        self._tray_act_stop = None
+        self._pill = None
+        self._pill_session_hidden = False
+        self._pill_cache = {}            # 悬浮窗最近一次数据（未创建时缓存，创建后回填）
 
-        # ---- 模型统计（功能 9）----
+        # ---- 数据统计（功能 9）----
         self._stats_store = None
         self._stats_path = None
         self._running_model_name = ""    # 当前服务运行的模型名（统计归属）
@@ -203,6 +212,7 @@ class MainWindow(QMainWindow):
         self._connect()
         self._apply_config()
         self._apply_theme()
+        self._restore_geometry()
         self._setup_tray()
         self.monitor.start()
 
@@ -229,7 +239,7 @@ class MainWindow(QMainWindow):
         if not os.environ.get("LLAMA_LAUNCHER_NO_GPU_DETECT"):
             QTimer.singleShot(2000, self.detect_gpus)   # 启动时自动检测多显卡（功能 3）
 
-    # ---------------------------------------------------------- 模型统计（功能 9）
+    # ---------------------------------------------------------- 数据统计（功能 9）
     def _stats(self):
         """惰性创建 StatsStore；数据目录变化时自动重建。"""
         path = os.path.join(self._data_dir(), "stats.json")
@@ -265,7 +275,7 @@ class MainWindow(QMainWindow):
             pass
 
     def show_stats(self):
-        """打开独立的模型统计界面（功能 9）。"""
+        """打开独立的数据统计界面（功能 9）。"""
         if getattr(self, "_stats_dlg", None) is None:
             self._stats_dlg = StatsDialog(self._stats(), self)
         else:
@@ -319,9 +329,9 @@ class MainWindow(QMainWindow):
         self.act_export_preview_bat = QAction("导出命令预览 (.bat)…", self)
         self.act_export_preview_bat.setToolTip(
             "把「命令预览」页里的完整命令行原样保存为 .bat 文件，可自选存储路径（功能 6）")
-        self.act_stats = QAction("模型统计…", self)
+        self.act_stats = QAction("数据统计…", self)
         self.act_stats.setToolTip(
-            "打开独立的模型统计界面：打开次数、使用时长、输入/输出 token，"
+            "打开独立的数据统计界面：打开次数、使用时长、输入/输出 token，"
             "支持按小时 / 日 / 月查看（功能 9）")
         menu_tools.addAction(self.act_refresh)
         menu_tools.addAction(self.act_open_dir)
@@ -367,15 +377,15 @@ class MainWindow(QMainWindow):
 
         self.box_basic = CollapsibleBox("基本参数")
         self._build_basic(self.box_basic.layout())
-        self.box_gpu = CollapsibleBox("多显卡 (Multi-GPU)")
-        self.box_gpu.set_collapsed(True)
-        self._build_gpu(self.box_gpu.layout())
         self.box_advanced = CollapsibleBox("高级参数")
         self.box_advanced.set_collapsed(True)
         self._build_advanced(self.box_advanced.layout())
+        self.box_gpu = CollapsibleBox("多显卡 (Multi-GPU)")
+        self.box_gpu.set_collapsed(True)
+        self._build_gpu(self.box_gpu.layout())
         pw.addWidget(self.box_basic)
-        pw.addWidget(self.box_gpu)
         pw.addWidget(self.box_advanced)
+        pw.addWidget(self.box_gpu)
         pw.addStretch(1)
 
         self.box_basic.toggled.connect(self._reflow_window)
@@ -386,6 +396,8 @@ class MainWindow(QMainWindow):
 
         # ---- 底部 Tab 区 ----
         tabs = QTabWidget()
+        tabs.setMovable(True)   # 标签可拖动调整顺序
+        self.tabs = tabs
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
         self.preview_view = QPlainTextEdit()
@@ -416,6 +428,12 @@ class MainWindow(QMainWindow):
         it = QVBoxLayout(info_tab)
         it.setContentsMargins(0, 0, 0, 0)
         info_bar = QHBoxLayout()
+        self.check_hf_query = QCheckBox("联网查询")
+        self.check_hf_query.setToolTip(
+            "勾选后，每次选择模型都会自动联网查询 HuggingFace 补充信息"
+            "（简介 / 下载量 / 点赞 / 标签等，结果本地缓存 7 天）。\n"
+            "不勾选则只显示从本地 GGUF 头部解析的信息。")
+        info_bar.addWidget(self.check_hf_query)
         self.btn_hf = QPushButton("联网查询该模型")
         self.btn_hf.setToolTip("用模型名联网搜索 HuggingFace，拉取简介/下载量/点赞等公开信息（本地缓存 7 天）")
         info_bar.addWidget(self.btn_hf)
@@ -429,14 +447,23 @@ class MainWindow(QMainWindow):
         # ---- 更新 llama.cpp Tab（功能 10）----
         self.updater_tab = UpdaterTab(self)
 
-        tabs.addTab(self.log_view, "运行日志")
-        tabs.addTab(self.preview_view, "命令预览")
-        tabs.addTab(tool_tab, "Agent 工具")
-        tabs.addTab(info_tab, "模型信息")
-        tabs.addTab(self.download_tab, "模型下载")
-        tabs.addTab(self.updater_tab, "更新 llama.cpp")
+        self._tab_widgets = {}
+
+        def _add_tab(widget, title, key):
+            tabs.addTab(widget, title)
+            self._tab_widgets[key] = widget
+
+        _add_tab(self.log_view, "运行日志", "log")
+        _add_tab(self.preview_view, "命令预览", "preview")
+        _add_tab(tool_tab, "Agent 工具", "tools")
+        _add_tab(info_tab, "模型信息", "info")
+        _add_tab(self.download_tab, "模型下载", "download")
+        _add_tab(self.updater_tab, "更新 llama.cpp", "updater")
         self.tabs = tabs
         self.tabs.setMinimumHeight(280)
+        # 恢复上次的标签顺序，并在拖动后持久化
+        self._restore_tab_order()
+        tabs.tabBar().tabMoved.connect(self._on_tab_moved)
         splitter_layout.addWidget(self.tabs, 1)
         root.addWidget(splitter_widget)
 
@@ -464,18 +491,22 @@ class MainWindow(QMainWindow):
         self.btn_export_file.setToolTip(
             "把当前模型与全部参数导出为可双击直接启动 llama-server 的 .bat 一键启动脚本，"
             "并在桌面创建带软件图标的快捷方式（等同「工具 → 导出一键启动 (.bat)」）")
-        for _i in range(2, 4):
-            _b = QPushButton("预留功能")
-            _b.setEnabled(False)
-            _b.setToolTip("预留功能（暂未开放）")
-            setattr(self, f"btn_ph_{_i}", _b)
+        # C1: 第 2 排 —— 校验启动文件 + 导入启动文件 + 导出启动文件 + 数据统计 + 1 个预留
+        self.btn_stats = QPushButton("数据统计")
+        self.btn_stats.setToolTip(
+            "打开数据统计窗口：打开次数、使用时长、输入/输出 token，"
+            "支持按小时 / 日 / 月查看（等同「工具 → 数据统计…」）")
+        _b = QPushButton("预留功能")
+        _b.setEnabled(False)
+        _b.setToolTip("预留功能（暂未开放）")
+        self.btn_ph_3 = _b
 
         btn_grid = QGridLayout()
         btn_grid.setHorizontalSpacing(8)
         btn_grid.setVerticalSpacing(8)
         _row0 = [self.btn_start, self.btn_stop, self.btn_web, self.btn_agent, self.btn_save]
         _row1 = [self.btn_validate_bat, self.btn_import_file, self.btn_export_file,
-                 self.btn_ph_2, self.btn_ph_3]
+                 self.btn_stats, self.btn_ph_3]
         for _r, _row in enumerate((_row0, _row1)):
             for _c, _b in enumerate(_row):
                 _b.setFixedWidth(120)   # 压缩按钮宽度（原 150）
@@ -559,19 +590,28 @@ class MainWindow(QMainWindow):
         self._gen_grid.setContentsMargins(8, 2, 8, 6)
         self._gen_grid.setHorizontalSpacing(10)
         self._gen_grid.setVerticalSpacing(6)
-        # 标签列不伸缩、控件列平均伸缩：三组「标签+控件」均匀铺满整行，标签完整可见
-        for _c in (0, 2, 4):
+        # 标签列不伸缩、控件列平均伸缩：四组「标签+控件」均匀铺满整行，标签完整可见
+        for _c in (0, 2, 4, 6):
             self._gen_grid.setColumnStretch(_c, 0)
-        for _c in (1, 3, 5):
+        for _c in (1, 3, 5, 7):
             self._gen_grid.setColumnStretch(_c, 1)
 
         grid = QGridLayout()
-        grid.setHorizontalSpacing(8)
-        grid.setVerticalSpacing(6)
+        grid.setHorizontalSpacing(6)
+        grid.setVerticalSpacing(4)
+        # 标签列/按钮列不伸缩；监听地址(1)与 API Key(5) 两列平分多余宽度
+        grid.setColumnStretch(0, 0)
+        grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 0)
+        grid.setColumnStretch(3, 0)
+        grid.setColumnStretch(4, 0)
+        grid.setColumnStretch(5, 1)
+        for _c in (6, 7, 8):
+            grid.setColumnStretch(_c, 0)
 
-        grid.addWidget(QLabel("模型目录:"), 0, 0)
+        # ---- 目录类设置（模型 / 启动器 / 数据）并排一行，充分利用横向宽度 ----
         self.edit_dir = QLineEdit()
-        self.edit_dir.setPlaceholderText("扫描模型的根目录（2~3 级子目录内的 .gguf）")
+        self.edit_dir.setPlaceholderText("扫描模型的根目录")
         self.edit_dir.setToolTip("模型扫描根目录。程序会在此目录的 2~3 级子目录内扫描 .gguf 模型（自动跳过 .venv/.git 等无关目录）。")
         btn_dir = QPushButton("浏览…")
         btn_dir.clicked.connect(self._browse_dir)
@@ -579,23 +619,9 @@ class MainWindow(QMainWindow):
         self.btn_refresh = QPushButton("刷新模型")
         self.btn_refresh.clicked.connect(lambda: self.refresh_models())
         self.btn_refresh.setToolTip("重新扫描模型目录下的所有 GGUF 模型文件")
-        grid.addWidget(self.edit_dir, 0, 1)
-        grid.addWidget(btn_dir, 0, 2)
-        grid.addWidget(self.btn_refresh, 0, 3)
 
-        # ---- A2: 排序方式移到「主模型」行末尾（功能 1）----
-        self.combo_sort = QComboBox()
-        for name in ("目录+文件名", "大小降序", "名称"):
-            self.combo_sort.addItem(name)
-        self.combo_sort.setToolTip(
-            "模型列表排序方式：\n"
-            "· 目录+文件名 = 先按所在目录、再按文件名从小到大（自然排序，默认）；\n"
-            "· 大小降序 = 大文件在前；\n"
-            "· 名称 = 仅按文件名从小到大。")
-
-        grid.addWidget(QLabel("启动器文件:"), 1, 0)
         self.edit_launcher = QLineEdit()
-        self.edit_launcher.setPlaceholderText("留空自动用 模型目录\\llama-server.exe")
+        self.edit_launcher.setPlaceholderText("留空 = 模型目录\\llama-server.exe")
         self.edit_launcher.setToolTip(
             "启动服务时使用的可执行文件（默认 llama-server.exe）。\n"
             "若将来 llama 改名字或路径不同，可在此直接用文件选择器指定新文件。\n"
@@ -606,11 +632,7 @@ class MainWindow(QMainWindow):
         btn_launcher_clear = QPushButton("清除")
         btn_launcher_clear.clicked.connect(self._clear_launcher)
         btn_launcher_clear.setToolTip("清除自定义启动器文件，恢复为自动查找")
-        grid.addWidget(self.edit_launcher, 1, 1)
-        grid.addWidget(btn_launcher, 1, 2)
-        grid.addWidget(btn_launcher_clear, 1, 3)
 
-        grid.addWidget(QLabel("数据目录:"), 2, 0)
         self.edit_data_dir = QLineEdit()
         self.edit_data_dir.setPlaceholderText("留空 = 程序所在目录")
         # A3: tooltip 按实际行为撰写（redirect_data_dir 只迁移 config.json，不复制旧统计/日志）
@@ -625,40 +647,98 @@ class MainWindow(QMainWindow):
         btn_data_reset = QPushButton("恢复默认")
         btn_data_reset.clicked.connect(self._reset_data_dir)
         btn_data_reset.setToolTip("恢复为程序所在目录")
-        grid.addWidget(self.edit_data_dir, 2, 1)
-        grid.addWidget(btn_data_dir, 2, 2)
-        grid.addWidget(btn_data_reset, 2, 3)
 
-        # ---- 功能 5：主模型与排序同一行，排序放在主模型右侧，保持原有功能 ----
-        grid.addWidget(QLabel("主模型:"), 3, 0)
+        def _path_group(label_text, edit, *buttons):
+            box = QWidget()
+            h = QHBoxLayout(box)
+            h.setContentsMargins(0, 0, 0, 0)
+            h.setSpacing(4)
+            h.addWidget(QLabel(label_text))
+            h.addWidget(edit, 1)
+            for b in buttons:
+                h.addWidget(b)
+            return box
+
+        dir_row = QWidget()
+        dir_lay = QHBoxLayout(dir_row)
+        dir_lay.setContentsMargins(0, 0, 0, 0)
+        dir_lay.setSpacing(10)
+        dir_lay.addWidget(_path_group("模型目录:", self.edit_dir, btn_dir, self.btn_refresh), 1)
+        dir_lay.addWidget(_path_group("启动器文件:", self.edit_launcher, btn_launcher, btn_launcher_clear), 1)
+        dir_lay.addWidget(_path_group("数据目录:", self.edit_data_dir, btn_data_dir, btn_data_reset), 1)
+        grid.addWidget(dir_row, 0, 0, 1, 9)
+
+        # ---- A2: 排序方式移到「主模型」行末尾（功能 1）----
+        self.combo_sort = QComboBox()
+        for name in ("目录+文件名", "大小降序", "名称"):
+            self.combo_sort.addItem(name)
+        self.combo_sort.setToolTip(
+            "模型列表排序方式：\n"
+            "· 目录+文件名 = 先按所在目录、再按文件名从小到大（自然排序，默认）；\n"
+            "· 大小降序 = 大文件在前；\n"
+            "· 名称 = 仅按文件名从小到大。")
+        self.combo_sort.setMinimumWidth(118)
+
+        # ---- 功能 5：主模型 / 视觉模型 / 排序 并排一行（功能不变）----
         self.combo_model = QComboBox()
         self.combo_model.setToolTip("选择要加载的 GGUF 主模型（自动扫描目录得到）")
-        grid.addWidget(self.combo_model, 3, 1)
-        grid.addWidget(QLabel("排序:"), 3, 2)
-        self.combo_sort.setMinimumWidth(118)
-        grid.addWidget(self.combo_sort, 3, 3)
-
-        grid.addWidget(QLabel("视觉模型:"), 4, 0)
         self.combo_mmproj = QComboBox()
         self.combo_mmproj.setToolTip("视觉模型（mmproj）文件，负责把图像编码成模型能理解的向量。\n只列出与主模型同一目录下的 mmproj（保证配套一致），或选择「（不使用）」以纯文本模式运行。\n鼠标悬停可查看完整路径。")
         self.combo_mmproj.addItem("（不使用）", None)
-        grid.addWidget(self.combo_mmproj, 4, 1, 1, 2)
         self.label_mmproj_warn = QLabel("")
         self.label_mmproj_warn.setStyleSheet("color: #ff6a6a;")
         self.label_mmproj_warn.setWordWrap(True)
-        grid.addWidget(self.label_mmproj_warn, 4, 3)
 
-        grid.addWidget(QLabel("监听地址:"), 5, 0)
+        model_row = QWidget()
+        mrow = QHBoxLayout(model_row)
+        mrow.setContentsMargins(0, 0, 0, 0)
+        mrow.setSpacing(6)
+        mrow.addWidget(QLabel("主模型:"))
+        mrow.addWidget(self.combo_model, 4)
+        mrow.addWidget(QLabel("视觉模型:"))
+        mrow.addWidget(self.combo_mmproj, 4)
+        mrow.addWidget(QLabel("排序:"))
+        mrow.addWidget(self.combo_sort, 1)
+        mrow.addWidget(self.label_mmproj_warn, 2)
+        grid.addWidget(model_row, 1, 0, 1, 9)
+
+        grid.addWidget(QLabel("监听地址:"), 2, 0)
         self.edit_host = QLineEdit()
         self.edit_host.setToolTip("服务监听的地址（Host）。\n127.0.0.1 = 仅本机访问；0.0.0.0 = 局域网内其他设备也能访问。")
-        grid.addWidget(self.edit_host, 5, 1)
+        grid.addWidget(self.edit_host, 2, 1)
 
-        grid.addWidget(QLabel("端口:"), 5, 2)
+        grid.addWidget(QLabel("端口:"), 2, 2)
         self.spin_port = QSpinBox()
         self.spin_port.setRange(1, 65535)
         self.spin_port.setValue(8080)
-        self.spin_port.setToolTip("服务监听的端口（默认 8080）。\nOpenAI 兼容接口地址为 http://监听地址:端口/v1")
-        grid.addWidget(self.spin_port, 5, 3)
+        self.spin_port.setToolTip("服务监听的端口（默认 8080）。\nOpenAI 兼容接口地址为 http(s)://监听地址:端口/v1")
+        grid.addWidget(self.spin_port, 2, 3)
+
+        # ---- API Key：从高级参数移到此处（端口之后、局域网共享之前）----
+        grid.addWidget(QLabel("API Key:"), 2, 4)
+        self.edit_apikey = QLineEdit()
+        self.edit_apikey.setEchoMode(QLineEdit.EchoMode.Password)
+        self.edit_apikey.setToolTip("API 密钥（--api-key）。\n设置后客户端调用接口必须携带此 Key，否则会被拒绝。\n留空 = 不设密钥，任何人都能访问。")
+        grid.addWidget(self.edit_apikey, 2, 5)
+
+        # ---- 局域网共享 / HTTPS / 本机 IP：与监听地址同一行，紧凑排布 ----
+        self.check_lan = QCheckBox("局域网共享")
+        self.check_lan.setToolTip(
+            "勾选后监听地址自动设为 0.0.0.0，局域网内其他电脑可通过「本机IP:端口」访问本服务。\n"
+            "取消勾选恢复为 127.0.0.1（仅本机可访问）。")
+        grid.addWidget(self.check_lan, 2, 6)
+
+        self.check_ssl = QCheckBox("启用 HTTPS")
+        self.check_ssl.setToolTip(
+            "勾选后以 HTTPS 协议提供服务，并自动生成自签名证书。\n"
+            "若数据目录含中文等非 ASCII 字符，证书会改放到英文目录（避免 llama-server 无法读取）。\n"
+            "浏览器首次访问会提示「不安全」，手动信任即可；对外正式使用建议换成受信任证书。")
+        grid.addWidget(self.check_ssl, 2, 7)
+
+        self.label_local_ip = QLabel("")
+        self.label_local_ip.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.label_local_ip.setToolTip("本机在局域网中的访问地址，可直接复制给其他设备使用。")
+        grid.addWidget(self.label_local_ip, 2, 8)
 
         # GPU层数(-ngl) 已移入「生成参数」分组（见 _build_advanced）
 
@@ -702,7 +782,7 @@ class MainWindow(QMainWindow):
         for _c in (1, 3, 5, 7):
             grid.setColumnStretch(_c, 1)
 
-        # ---- 第 0 行：CPU线程 / 闪存注意力 / KV缓存K(-ctk) V(-ctv) 同一行 ----
+        # ---- 第 0 行：计算 / 服务（CPU线程 / 闪存注意力 / 超时 / 自动打开浏览器）----
         grid.addWidget(QLabel("CPU线程:"), 0, 0)
         self.spin_threads = QSpinBox()
         self.spin_threads.setRange(-1, 256)
@@ -717,23 +797,17 @@ class MainWindow(QMainWindow):
         self.combo_fa.setToolTip("Flash Attention 闪存注意力（-fa）。\non = 开启，省显存且更快（N 卡 / 新架构推荐）；\noff = 关闭，兼容性更好。")
         grid.addWidget(self.combo_fa, 0, 3)
 
-        # ---- A1: KV 缓存 K/V 同一行，标签直接标明 -ctk / -ctv（功能 2）----
-        grid.addWidget(QLabel("KV缓存K(-ctk):"), 0, 4)
-        self.combo_kvc_k = QComboBox()
-        self.combo_kvc_k.addItems(KV_CACHE_TYPES)
-        self.combo_kvc_k.setCurrentText("f16")
-        self.combo_kvc_k.setToolTip(
-            "KV 缓存 K（Key）部分的量化类型，对应参数 -ctk，可与 V 独立设置。\n"
-            "f16 = 默认质量好；q8_0/q4_0 = 更省显存但精度略降；f32 = 最占显存。")
-        grid.addWidget(self.combo_kvc_k, 0, 5)
-        grid.addWidget(QLabel("V(-ctv):"), 0, 6)
-        self.combo_kvc_v = QComboBox()
-        self.combo_kvc_v.addItems(KV_CACHE_TYPES)
-        self.combo_kvc_v.setCurrentText("f16")
-        self.combo_kvc_v.setToolTip(
-            "KV 缓存 V（Value）部分的量化类型，对应参数 -ctv，可与 K 独立设置。\n"
-            "K/V 可分别选不同精度；常见做法：K 用 q8_0、V 用 f16，兼顾精度与显存。")
-        grid.addWidget(self.combo_kvc_v, 0, 7)
+        grid.addWidget(QLabel("超时(秒):"), 0, 4)
+        self.spin_timeout = QSpinBox()
+        self.spin_timeout.setRange(30, 86400)
+        self.spin_timeout.setValue(3600)
+        self.spin_timeout.setToolTip("服务读写超时（--timeout）。\n单个请求超过该秒数会被强制断开，默认 3600。")
+        grid.addWidget(self.spin_timeout, 0, 5)
+
+        self.check_browser = QCheckBox("启动成功后自动打开浏览器")
+        self.check_browser.setChecked(True)
+        self.check_browser.setToolTip("服务就绪后自动用默认浏览器打开 Web 界面。")
+        grid.addWidget(self.check_browser, 0, 6, 1, 2)
 
         # ---- 功能 6/7：连续批处理 / mlock / mmap / MTP + MTP 说明压缩到同一行 ----
         self.check_cont = QCheckBox("连续批处理")
@@ -762,33 +836,16 @@ class MainWindow(QMainWindow):
         grid.addWidget(self.check_mtp, 1, 4)
         grid.addWidget(self.label_mtp_status, 1, 5, 1, 3)
 
-        # ---- 第 2 行：API Key / 超时 / 自动打开浏览器（压缩高级区，功能不变）----
-        grid.addWidget(QLabel("API Key:"), 2, 0)
-        self.edit_apikey = QLineEdit()
-        self.edit_apikey.setEchoMode(QLineEdit.EchoMode.Password)
-        self.edit_apikey.setToolTip("API 密钥（--api-key）。\n设置后客户端调用接口必须携带此 Key，否则会被拒绝。\n留空 = 不设密钥，任何人都能访问。")
-        grid.addWidget(self.edit_apikey, 2, 1)
-        grid.addWidget(QLabel("超时(秒):"), 2, 2)
-        self.spin_timeout = QSpinBox()
-        self.spin_timeout.setRange(30, 86400)
-        self.spin_timeout.setValue(3600)
-        self.spin_timeout.setToolTip("服务读写超时（--timeout）。\n单个请求超过该秒数会被强制断开，默认 3600。")
-        grid.addWidget(self.spin_timeout, 2, 3)
-        self.check_browser = QCheckBox("启动成功后自动打开浏览器")
-        self.check_browser.setChecked(True)
-        self.check_browser.setToolTip("服务就绪后自动用默认浏览器打开 Web 界面。")
-        grid.addWidget(self.check_browser, 2, 4, 1, 4)
-
-        # ---- 功能 8：对话模板（Jinja 模板 / 思考强度 / 推理预算）第 3 行 ----
+        # ---- 第 2 行：对话模板（Jinja 模板 / 思考强度 / 推理预算）----
         self.check_jinja = QCheckBox("启用 Jinja 模板")
         self.check_jinja.setToolTip(
             "启用模型自带的 Jinja 对话模板（--jinja）。\n"
             "llama-server 默认用内置的硬编码模板；开启后改用模型 GGUF 元数据里的\n"
             "tokenizer.chat_template，能正确套用新版模型（Qwen3.x 等）自己的对话格式，\n"
             "并且是「思考强度」(--chat-template-kwargs) 生效的前提。")
-        grid.addWidget(self.check_jinja, 3, 0, 1, 2)
+        grid.addWidget(self.check_jinja, 2, 0, 1, 2)
 
-        grid.addWidget(QLabel("思考强度:"), 3, 2)
+        grid.addWidget(QLabel("思考强度:"), 2, 2)
         self.combo_reasoning = QComboBox()
         for _name, _val in (("不设置", ""), ("低 (low)", "low"),
                             ("中 (medium)", "medium"), ("高 (high)", "high")):
@@ -798,9 +855,9 @@ class MainWindow(QMainWindow):
             "Qwen3 等支持思考的模型用它控制「思考深度」：low/medium/high。\n"
             "「不设置」= 不传该参数（使用模板默认）。\n"
             "需同时勾选「启用 Jinja 模板」才会生效。")
-        grid.addWidget(self.combo_reasoning, 3, 3)
+        grid.addWidget(self.combo_reasoning, 2, 3)
 
-        grid.addWidget(QLabel("推理预算:"), 3, 4)
+        grid.addWidget(QLabel("推理预算:"), 2, 4)
         self.spin_reasoning_budget = QSpinBox()
         self.spin_reasoning_budget.setRange(-1, 1000000)
         self.spin_reasoning_budget.setValue(-1)
@@ -809,78 +866,96 @@ class MainWindow(QMainWindow):
             "思考段最多能消耗的 token 数（--reasoning-budget）。\n"
             "模型在 reasoning/thinking 里用完这么多 token 后会被强制收尾、输出正式答案。\n"
             "-1 = 不限制（默认）。与「思考强度」是两套机制：一个是软引导，一个是硬上限。")
-        grid.addWidget(self.spin_reasoning_budget, 3, 5)
+        grid.addWidget(self.spin_reasoning_budget, 2, 5)
         self.label_chat_status = QLabel("")
         self.label_chat_status.setStyleSheet("color: #8fd0ff;")
         self.label_chat_status.setToolTip("对话模板检测结果（读取模型 GGUF 的 tokenizer.chat_template）：绿色=支持，橙色=不支持/无法检测")
-        grid.addWidget(self.label_chat_status, 3, 6, 1, 2)
+        grid.addWidget(self.label_chat_status, 2, 6, 1, 2)
 
-        # ---- 第 4 行：启动时行为（残留进程检测 / 端口占用建议）----
+        # ---- 第 3 行：启动时行为（残留进程检测 / 端口占用建议）----
         self.check_residual = QCheckBox("启动时检测残留进程")
         self.check_residual.setToolTip(
             "启动时扫描系统中残留的 llama-server 进程并询问是否清理。\n"
             "若在弹窗中勾选了「不再提示」，可在此重新开启。")
-        grid.addWidget(self.check_residual, 4, 0, 1, 4)
+        grid.addWidget(self.check_residual, 3, 0, 1, 4)
 
         self.check_port_hint = QCheckBox("端口被占用时建议更换端口")
         self.check_port_hint.setToolTip(
             "启动时若发现配置的端口已被占用，则建议一个可用端口，\n"
             "确认后自动更新主界面的端口号。")
-        grid.addWidget(self.check_port_hint, 4, 4, 1, 4)
+        grid.addWidget(self.check_port_hint, 3, 4, 1, 2)
 
-        # ---- A4: 批大小 / 并行slots → 「生成参数」分组 ----
-        self._gen_grid.addWidget(QLabel("批大小:"), 1, 0)
+        self.check_hover_pill = QCheckBox("缩到托盘时显示悬浮小窗")
+        self.check_hover_pill.setToolTip(
+            "点 X 收起主窗口后，屏幕右下角显示一个小胶囊：状态圆点 + 实时输出速度(tok/s)。\n"
+            "鼠标停留展开数据卡片：速度 / CPU / 内存 / GPU 负载 / 显存 / API 接入数 / 模型名；\n"
+            "单击=展开或收起，拖动=移动位置，双击=返回主界面，右键=菜单（打开主界面/启动模型/停止模型/隐藏图标/退出），"
+            "✕=停用（可再勾选恢复）。")
+        grid.addWidget(self.check_hover_pill, 3, 6, 1, 2)
+
+        # ---- 「生成参数」分组：每行 4 组 ----
+        # 第 0 行末尾：批大小（前三组 上下文预设/上下文长度/预测Token 在 _build_basic）
+        self._gen_grid.addWidget(QLabel("批大小:"), 0, 6)
         self.spin_batch = QSpinBox()
         self.spin_batch.setRange(1, 16384)
         self.spin_batch.setValue(2048)
         self.spin_batch.setToolTip("逻辑批大小（-b），影响 prompt 处理速度。默认 2048 即可。")
-        self._gen_grid.addWidget(self.spin_batch, 1, 1)
+        self._gen_grid.addWidget(self.spin_batch, 0, 7)
 
-        self._gen_grid.addWidget(QLabel("并行slots:"), 1, 2)
+        # 第 1 行：并行slots / 采样预设 / 温度 / Top-P
+        self._gen_grid.addWidget(QLabel("并行slots:"), 1, 0)
         self.spin_slots = QSpinBox()
         self.spin_slots.setRange(-1, 64)
         self.spin_slots.setValue(-1)
         self.spin_slots.setSpecialValueText("-1 = 自动")
         self.spin_slots.setToolTip("同时处理的并发请求数（-np）。\n多个客户端同时使用时建议 ≥2；每个 slot 会额外占用上下文内存。\n-1 = 自动。")
-        self._gen_grid.addWidget(self.spin_slots, 1, 3)
+        self._gen_grid.addWidget(self.spin_slots, 1, 1)
 
-        # ---- A4: 温度 / Top-P / Top-K → 「生成参数」分组 ----
-        self._gen_grid.addWidget(QLabel("温度:"), 2, 0)
+        self._gen_grid.addWidget(QLabel("采样预设:"), 1, 2)
+        self.combo_sampling = QComboBox()
+        for name, _v in SAMPLING_PRESETS:
+            self.combo_sampling.addItem(name)
+        self.combo_sampling.setToolTip(
+            "一键应用一组采样参数（温度/Top-P/Top-K/重复惩罚）。\n"
+            "严谨=低温度适合写代码/翻译；均衡=日常对话；创意=高温度适合写作/脑洞。\n"
+            "手动修改任一采样参数后会自动回到「自定义」。")
+        self._gen_grid.addWidget(self.combo_sampling, 1, 3)
+
+        self._gen_grid.addWidget(QLabel("温度:"), 1, 4)
         self.spin_temp = QDoubleSpinBox()
         self.spin_temp.setRange(0.0, 2.0)
         self.spin_temp.setSingleStep(0.05)
         self.spin_temp.setValue(0.8)
         self.spin_temp.setToolTip("温度（--temp）：控制随机性/创造力。\n越低越保守严谨（0 = 每次都选最可能的词，趋于复读）；\n越高越发散创意（可能胡言乱语）。\n建议 0.3~1.2。")
-        self._gen_grid.addWidget(self.spin_temp, 2, 1)
+        self._gen_grid.addWidget(self.spin_temp, 1, 5)
 
-        self._gen_grid.addWidget(QLabel("Top-P:"), 2, 2)
+        self._gen_grid.addWidget(QLabel("Top-P:"), 1, 6)
         self.spin_topp = QDoubleSpinBox()
         self.spin_topp.setRange(0.0, 1.0)
         self.spin_topp.setSingleStep(0.05)
         self.spin_topp.setValue(0.95)
         self.spin_topp.setToolTip("核采样（--top-p）：只从累计概率达到该值的候选词中选。\n0.95 = 默认；1.0 = 关闭；越小越保守。")
-        self._gen_grid.addWidget(self.spin_topp, 2, 3)
+        self._gen_grid.addWidget(self.spin_topp, 1, 7)
 
-        self._gen_grid.addWidget(QLabel("Top-K:"), 2, 4)
+        # 第 2 行：Top-K / 重复惩罚 / GPU层数 / KV缓存(K/V)
+        self._gen_grid.addWidget(QLabel("Top-K:"), 2, 0)
         self.spin_topk = QSpinBox()
         self.spin_topk.setRange(0, 200)
         self.spin_topk.setValue(40)
         self.spin_topk.setSpecialValueText("0 = 默认")
         self.spin_topk.setToolTip("（--top-k）：只从概率最高的前 K 个候选词中选。\n40 = 默认；0 = 关闭；越小越保守。")
-        self._gen_grid.addWidget(self.spin_topk, 2, 5)
+        self._gen_grid.addWidget(self.spin_topk, 2, 1)
 
-        # ---- A4: 重复惩罚 → 「生成参数」分组 ----
-        self._gen_grid.addWidget(QLabel("重复惩罚:"), 3, 0)
+        self._gen_grid.addWidget(QLabel("重复惩罚:"), 2, 2)
         self.spin_rp = QDoubleSpinBox()
         self.spin_rp.setRange(0.0, 2.0)
         self.spin_rp.setSingleStep(0.1)
         self.spin_rp.setValue(1.0)
         self.spin_rp.setSpecialValueText("0 = 默认")
         self.spin_rp.setToolTip("重复惩罚（--repeat-penalty）。\n>1 抑制重复输出，有助于缓解「无限复读/幻觉循环」；\n1.0 = 关闭；建议 1.0~1.3。")
-        self._gen_grid.addWidget(self.spin_rp, 3, 1)
+        self._gen_grid.addWidget(self.spin_rp, 2, 3)
 
-        # ---- GPU层数(-ngl)：从基本参数移入「生成参数」分组（与重复惩罚同行）----
-        self._gen_grid.addWidget(QLabel("GPU层数:"), 3, 2)
+        self._gen_grid.addWidget(QLabel("GPU层数:"), 2, 4)
         self.combo_ngl = QComboBox()
         self.combo_ngl.setEditable(True)
         self.combo_ngl.addItems(["all", "auto", "0", "1", "10", "20", "32", "40", "64"])
@@ -889,18 +964,31 @@ class MainWindow(QMainWindow):
             "all = 尽可能全部放入显存；auto = 自动判断；0 = 纯 CPU 运行；也可填具体层数。\n"
             "与多显卡部署不冲突：ngl 决定总共卸载多少层，\n"
             "-ts/-sm（多显卡区）再决定这些层如何在多张卡之间分配。")
-        self._gen_grid.addWidget(self.combo_ngl, 3, 3)
+        self._gen_grid.addWidget(self.combo_ngl, 2, 5)
 
-        # ---- A4: 采样预设 → 「生成参数」分组 ----
-        self._gen_grid.addWidget(QLabel("采样预设:"), 1, 4)
-        self.combo_sampling = QComboBox()
-        for name, _v in SAMPLING_PRESETS:
-            self.combo_sampling.addItem(name)
-        self.combo_sampling.setToolTip(
-            "一键应用一组采样参数（温度/Top-P/Top-K/重复惩罚）。\n"
-            "严谨=低温度适合写代码/翻译；均衡=日常对话；创意=高温度适合写作/脑洞。\n"
-            "手动修改任一采样参数后会自动回到「自定义」。")
-        self._gen_grid.addWidget(self.combo_sampling, 1, 5)
+        # ---- KV 缓存 K/V：从「高级参数」移入「生成参数」----
+        self.combo_kvc_k = QComboBox()
+        self.combo_kvc_k.addItems(KV_CACHE_TYPES)
+        self.combo_kvc_k.setCurrentText("f16")
+        self.combo_kvc_k.setToolTip(
+            "KV 缓存 K（Key）部分的量化类型，对应参数 -ctk，可与 V 独立设置。\n"
+            "f16 = 默认质量好；q8_0/q4_0 = 更省显存但精度略降；f32 = 最占显存。")
+        self.combo_kvc_v = QComboBox()
+        self.combo_kvc_v.addItems(KV_CACHE_TYPES)
+        self.combo_kvc_v.setCurrentText("f16")
+        self.combo_kvc_v.setToolTip(
+            "KV 缓存 V（Value）部分的量化类型，对应参数 -ctv，可与 K 独立设置。\n"
+            "K/V 可分别选不同精度；常见做法：K 用 q8_0、V 用 f16，兼顾精度与显存。")
+        kv_box = QWidget()
+        kv_lay = QHBoxLayout(kv_box)
+        kv_lay.setContentsMargins(0, 0, 0, 0)
+        kv_lay.setSpacing(4)
+        kv_lay.addWidget(self.combo_kvc_k, 1)
+        kv_lay.addWidget(self.combo_kvc_v, 1)
+        kv_label = QLabel("KV缓存K/V:")
+        kv_label.setToolTip("KV 缓存量化类型（K=-ctk / V=-ctv），可分别设置；\n常见做法：K 用 q8_0、V 用 f16，兼顾精度与显存。")
+        self._gen_grid.addWidget(kv_label, 2, 6)
+        self._gen_grid.addWidget(kv_box, 2, 7)
 
         lay.addLayout(grid)
 
@@ -1211,14 +1299,31 @@ class MainWindow(QMainWindow):
         self.server.exited.connect(self._on_exited)
         self.model_scan_done.connect(self._on_model_scan_done)
         self.tool_scan_done.connect(self._on_tool_scan_done)
-        self.model_info.connect(self.info_view.setPlainText)
+        self.model_info.connect(self._on_model_info)
         self.hf_info_done.connect(self._on_hf_info)
 
         self.monitor.cpu_changed.connect(lambda v: self.label_cpu.setText(f"CPU {v:.0f}%"))
+        # 悬浮窗 CPU：系统整体负载（所有核心平均占用率）
+        self.monitor.cpu_load_changed.connect(
+            lambda v: self._update_pill("cpu", v))
         self.monitor.mem_changed.connect(self._on_mem)
         self.monitor.vram_changed.connect(self._on_vram)
-        self.monitor.model_changed.connect(lambda n: self.label_model.setText(f"模型 {n}"))
+        self.monitor.model_changed.connect(
+            lambda n: (self.label_model.setText(f"模型 {n}"),
+                       self._update_pill("model", n)))
         self.monitor.api_changed.connect(lambda t: self.label_api.setText(t))
+
+        # 悬浮小窗：把监控信号缓存并转发到小窗（小窗尚未创建时先缓存，创建后回填）
+        self.monitor.mem_raw_changed.connect(
+            lambda u, t: self._update_pill("mem", u, t))
+        self.monitor.vram_raw_changed.connect(
+            lambda u, t: self._update_pill("vram", u, t))
+        self.monitor.gpu_util_changed.connect(
+            lambda v: self._update_pill("gpu", v))
+        self.monitor.speed_changed.connect(
+            lambda v: self._update_pill("speed", v))
+        self.monitor.api_busy_changed.connect(
+            lambda n: self._update_pill("api_busy", n))
 
         self.btn_start.clicked.connect(self.start_server)
         self.btn_stop.clicked.connect(self.stop_server)
@@ -1228,8 +1333,10 @@ class MainWindow(QMainWindow):
         self.btn_validate_bat.clicked.connect(self.open_bat_validator)   # C3
         self.btn_import_file.clicked.connect(self.import_bat)            # 7 号位：导入启动文件
         self.btn_export_file.clicked.connect(self.export_bat)            # 8 号位：导出启动文件
+        self.btn_stats.clicked.connect(self.show_stats)                  # 9 号位：数据统计
         # 主题按钮改为弹出菜单（见 _build_ui 的 setMenu），无需 clicked 连接
         self.btn_hf.clicked.connect(self._query_hf_info)
+        self.check_hf_query.toggled.connect(self._on_hf_query_toggled)
 
         self.act_start.triggered.connect(self.start_server)
         self.act_stop.triggered.connect(self.stop_server)
@@ -1258,6 +1365,12 @@ class MainWindow(QMainWindow):
         self.check_jinja.toggled.connect(self._update_chat_controls)
         self.check_residual.toggled.connect(self._save_startup_prefs)
         self.check_port_hint.toggled.connect(self._save_startup_prefs)
+        self.check_hover_pill.toggled.connect(self._on_pill_hover_toggled)
+        # 局域网共享 / HTTPS / 本机 IP 提示
+        self.check_lan.toggled.connect(self._on_lan_toggled)
+        self.check_ssl.toggled.connect(self._on_ssl_toggled)
+        self.edit_host.textChanged.connect(self._on_host_edited)
+        self.spin_port.valueChanged.connect(self._update_local_ip_label)
         self.btn_detect_gpus.clicked.connect(self.detect_gpus)
         self.vram_weights.connect(self._on_vram_weights)
         self.combo_sort.currentIndexChanged.connect(self._on_sort_changed)
@@ -1288,15 +1401,22 @@ class MainWindow(QMainWindow):
             self.check_cont, self.spin_temp, self.spin_topp, self.spin_topk,
             self.spin_rp, self.edit_apikey, self.check_mlock, self.check_mmap,
             self.check_browser, self.spin_timeout, self.edit_host, self.spin_port,
+            self.check_lan, self.check_ssl,
             self.combo_split_mode, self.edit_tensor_split, self.spin_main_gpu,
             self.check_mtp,
             self.check_jinja, self.combo_reasoning, self.spin_reasoning_budget,
         ]
 
     def _gather_server_cfg(self):
+        ssl_on = self.check_ssl.isChecked()
+        ssl_key, ssl_cert = self._ssl_paths() if ssl_on else ("", "")
         return {
             "host": self.edit_host.text().strip() or "127.0.0.1",
             "port": self.spin_port.value(),
+            "lan_share": self.check_lan.isChecked(),
+            "ssl_enabled": ssl_on,
+            "ssl_key_file": ssl_key,
+            "ssl_cert_file": ssl_cert,
             "ngl": self.combo_ngl.currentText().strip() or "all",
             "ctx": self.spin_ctx.value(),
             "n_predict": self.spin_np.value(),
@@ -1340,6 +1460,9 @@ class MainWindow(QMainWindow):
         s = d.get("server", {})
         self.edit_host.setText(s.get("host", "127.0.0.1"))
         self.spin_port.setValue(int(s.get("port", 8080)))
+        self.check_lan.setChecked(bool(
+            s.get("lan_share", str(s.get("host", "")).strip() == "0.0.0.0")))
+        self.check_ssl.setChecked(bool(s.get("ssl_enabled", False)))
         ngl = str(s.get("ngl", "all"))
         idx = self.combo_ngl.findText(ngl)
         if idx >= 0:
@@ -1393,6 +1516,8 @@ class MainWindow(QMainWindow):
         # 启动时行为：残留进程检测 / 端口占用建议
         self.check_residual.setChecked(bool(d.get("check_residual", True)))
         self.check_port_hint.setChecked(bool(d.get("port_hint", True)))
+        self.check_hover_pill.setChecked(bool(d.get("hover_pill", True)))
+        self.check_hf_query.setChecked(bool(d.get("hf_query_enabled", False)))
 
         # 模型排序（功能 1）
         sort_mode = d.get("model_sort", "dir_name")
@@ -1407,6 +1532,7 @@ class MainWindow(QMainWindow):
             self.download_tab.sync_default_dir()
         self._loading = False
         self._sync_preset_combo()
+        self._update_local_ip_label()
 
     def save_config(self):
         d = self.cfg.data
@@ -1416,11 +1542,14 @@ class MainWindow(QMainWindow):
         if new_data_dir != (d.get("data_dir", "") or ""):
             self.cfg.redirect_data_dir(new_data_dir)
             d = self.cfg.data
+            self.monitor.log_dir = os.path.join(self.cfg.data_dir(), "logs")
         d["server"] = self._gather_server_cfg()
         d["model"] = self.combo_model.currentData() or ""
         d["mmproj"] = self.combo_mmproj.currentData() or ""
         d["check_residual"] = self.check_residual.isChecked()
         d["port_hint"] = self.check_port_hint.isChecked()
+        d["hover_pill"] = self.check_hover_pill.isChecked()
+        d["hf_query_enabled"] = self.check_hf_query.isChecked()
         d["window_geometry"] = list(self.geometry().getRect())
         ok = self.cfg.save()
         self.statusBar().showMessage("配置已保存" if ok else "配置保存失败", 3000)
@@ -1432,7 +1561,6 @@ class MainWindow(QMainWindow):
         self.cfg.data["check_residual"] = self.check_residual.isChecked()
         self.cfg.data["port_hint"] = self.check_port_hint.isChecked()
         self.cfg.save()
-
     def export_config(self):
         """导出完整配置为 .aic 文件（内容即 JSON，仅扩展名不同）。"""
         default = os.path.join(self.base_dir, "LLama启动器配置.aic")
@@ -1690,6 +1818,9 @@ class MainWindow(QMainWindow):
                     self.spin_reasoning_budget.setValue(v)
             if "api_key" in kv:
                 warns.append("API Key：出于安全考虑不导入（文件中为打码值）")
+            if "ssl_key_file" in kv or "ssl_cert_file" in kv:
+                self.check_ssl.setChecked(True)
+                applied += 1
         finally:
             self._loading = False
         return applied, warns
@@ -2277,6 +2408,11 @@ class MainWindow(QMainWindow):
 
         self.save_config()
         s = self._gather_server_cfg()
+        try:
+            use_ssl = self._resolve_ssl(s)
+        except Exception as e:
+            QMessageBox.critical(self, "HTTPS 证书生成失败", str(e))
+            return
         mmproj_path = self.combo_mmproj.currentData()
         mm = self._mmproj_mismatch(model, mmproj_path)
         if mm:
@@ -2297,10 +2433,13 @@ class MainWindow(QMainWindow):
             return
 
         self._log_file(">>> " + build_command(args))
-        ok = self.server.start(args, llama_dir, host, port)
+        ok = self.server.start(args, llama_dir, host, port,
+                               scheme="https" if use_ssl else "http",
+                               verify=not use_ssl)
         if ok:
             self._set_running_state(True)
-            self.monitor.set_server(self.server.proc, self.server.url, os.path.basename(model))
+            self.monitor.set_server(self.server.proc, self.server.url,
+                                    os.path.basename(model), verify=not use_ssl)
             # 统计：一次启动计为一次「打开」（功能 9）
             self._running_model_name = os.path.basename(model)
             self._usage_pending = 0.0
@@ -2322,6 +2461,8 @@ class MainWindow(QMainWindow):
         self.btn_stop.setEnabled(running)
         self.act_stop.setEnabled(running)
         self.btn_web.setEnabled(running)
+        self._set_tray_menu_state()
+        self._sync_pill_running()
 
     def _on_server_state(self, msg):
         self.statusBar().showMessage(msg, 0)
@@ -2343,11 +2484,13 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"服务已退出（退出码 {code}）", 0)
 
     def open_web(self):
-        url = f"http://{self.edit_host.text().strip() or '127.0.0.1'}:{self.spin_port.value()}"
+        scheme = "https" if self.check_ssl.isChecked() else "http"
+        url = f"{scheme}://{self.edit_host.text().strip() or '127.0.0.1'}:{self.spin_port.value()}"
         webbrowser.open(url)
 
     def open_api(self):
-        url = f"http://{self.edit_host.text().strip() or '127.0.0.1'}:{self.spin_port.value()}/v1/models"
+        scheme = "https" if self.check_ssl.isChecked() else "http"
+        url = f"{scheme}://{self.edit_host.text().strip() or '127.0.0.1'}:{self.spin_port.value()}/v1/models"
         webbrowser.open(url)
 
     def open_model_dir(self):
@@ -2465,7 +2608,8 @@ class MainWindow(QMainWindow):
         if not self.server.running:
             return None, "服务未运行，无法自动连接", ""
         s = self._gather_server_cfg()
-        base = f"http://{s['host']}:{s['port']}"
+        scheme = "https" if s.get("ssl_enabled") else "http"
+        base = f"{scheme}://{s['host']}:{s['port']}"
         base_v1 = base + "/v1"
         alias = model_alias(self.combo_model.currentData() or "")
         api_key = s.get("api_key", "")
@@ -2475,8 +2619,11 @@ class MainWindow(QMainWindow):
 
         if tid == "opencode" and opencode_launcher is not None:
             cfg = opencode_launcher.build_config(
-                s["host"], s["port"], alias, s["ctx"], s["n_predict"], s["api_key"])
-            wd = workdir or self.edit_dir.text().strip()
+                s["host"], s["port"], alias, s["ctx"], s["n_predict"], s["api_key"],
+                scheme=scheme)
+            wd = (workdir
+                  or str(self.cfg.data.get("opencode_workdir") or "").strip()
+                  or self.edit_dir.text().strip())
             try:
                 opencode_launcher.write_config(wd, cfg)
                 return None, f"已自动配置 opencode 连接 {base_v1}（模型 {alias}）", ""
@@ -2648,6 +2795,51 @@ class MainWindow(QMainWindow):
         # 所有主题共用同一套尺寸度量，切换不会改变窗口布局大小
         QApplication.instance().setStyleSheet(build_qss(key))
         self.btn_theme.setText(f"{THEMES[key]['icon']} {THEMES[key]['name']}")
+        if self._pill is not None:
+            self._pill.apply_theme(key)
+
+    def _restore_geometry(self):
+        """启动时恢复上次的窗口位置/大小（配置里存的是 [x, y, w, h]）。
+
+        若保存的窗口中心已不在任何屏幕上（换显示器/分辨率变化），则忽略，
+        避免窗口出现在屏幕外无法操作。"""
+        geo = self.cfg.data.get("window_geometry")
+        if not (isinstance(geo, (list, tuple)) and len(geo) == 4):
+            return
+        try:
+            x, y, w, h = (int(v) for v in geo)
+        except (TypeError, ValueError):
+            return
+        if w < 640 or h < 480:
+            return
+        if QApplication.screenAt(QPoint(x + w // 2, y + h // 2)) is None:
+            return
+        self.setGeometry(x, y, w, h)
+
+    def _current_tab_order(self):
+        order = []
+        for i in range(self.tabs.count()):
+            wdg = self.tabs.widget(i)
+            for key, w in self._tab_widgets.items():
+                if w is wdg:
+                    order.append(key)
+                    break
+        return order
+
+    def _restore_tab_order(self):
+        """按配置里的 tab_order 恢复底部标签顺序（缺项/新标签自动追加到末尾）。"""
+        order = self.cfg.data.get("tab_order")
+        if not isinstance(order, list):
+            return
+        order = [k for k in order if k in self._tab_widgets]
+        for target, key in enumerate(order):
+            cur = self.tabs.indexOf(self._tab_widgets[key])
+            if cur >= 0 and cur != target:
+                self.tabs.tabBar().moveTab(cur, target)
+
+    def _on_tab_moved(self, _from, _to):
+        self.cfg.data["tab_order"] = self._current_tab_order()
+        self.cfg.save()
 
     def _reflow_window(self, checked=None):
         """折叠/展开参数区后，让窗口高度随内容伸缩（双向自适应）。
@@ -2675,6 +2867,120 @@ class MainWindow(QMainWindow):
             self.resize(self.width(), needed)
         QApplication.processEvents()
         self.setMinimumSize(self.minimumSizeHint())  # 恢复为内容实际最小尺寸
+
+    # ---------------------------------------------------------- 悬浮小窗（托盘胶囊）
+    def _pill_set(self, updater):
+        """把监控数据转发到悬浮窗（未创建时忽略）。"""
+        if self._pill is not None:
+            try:
+                updater(self._pill)
+            except Exception:
+                pass
+
+    def _update_pill(self, kind, *args):
+        """缓存并转发悬浮窗数据（小窗未创建时先存起来，创建后回填）。"""
+        self._pill_cache[kind] = args
+        if self._pill is not None:
+            try:
+                getattr(self._pill, "set_" + kind)(*args)
+            except Exception:
+                pass
+
+    def _seed_pill(self):
+        """用缓存的最新数据初始化刚创建的悬浮窗（避免出现一片「—」）。"""
+        if self._pill is None:
+            return
+        for kind, args in self._pill_cache.items():
+            try:
+                getattr(self._pill, "set_" + kind)(*args)
+            except Exception:
+                pass
+
+    def _sync_pill_running(self):
+        """悬浮窗运行状态 = 服务运行 且 主窗口不可见（可见时隐藏数据）。"""
+        if self._pill is not None:
+            running = self.server.running and not self.isVisible()
+            self._pill.set_running(running)
+            if running and self._running_model_name:
+                self._pill.set_model(self._running_model_name)
+
+    def _ensure_pill(self):
+        """惰性创建悬浮窗并接好信号。"""
+        if self._pill is None:
+            self._pill = HoverPill(
+                self.cfg, self.cfg.data.get("theme", "dark"),
+                icon=self._load_icon(),
+                save_pos=lambda x, y: self._save_pill_pos(x, y),
+                on_hidden=self._on_pill_hidden)
+            self._pill.open_main.connect(self._show_from_tray)
+            self._pill.start_requested.connect(self.start_server)
+            self._pill.stop_requested.connect(self.stop_server)
+            self._pill.quit_requested.connect(self.quit_app)
+            self._pill.hide_requested.connect(self._on_pill_session_hidden)
+            self._seed_pill()
+        return self._pill
+
+    def _update_tray_hover(self):
+        """按「配置开关 + 窗口是否隐藏」创建/显示/隐藏悬浮胶囊。"""
+        if not self.cfg.data.get("hover_pill", True) or self._tray is None \
+                or self.isVisible():
+            if self._pill is not None:
+                self._pill.hide()
+            return
+        pill = self._ensure_pill()
+        if self._pill_session_hidden:
+            return   # 右键「隐藏图标」后：本次最小化期间不再显示
+        pill.apply_theme(self.cfg.data.get("theme", "dark"))
+        pill.show_at_default()
+        self._sync_pill_running()
+
+    def _tray_show_pill(self):
+        """托盘菜单「显示悬浮窗」：无视隐藏/停用状态，立即显示小窗。"""
+        if not self.cfg.data.get("hover_pill", True):
+            self.cfg.data["hover_pill"] = True
+            self.cfg.save()
+            self._loading = True
+            self.check_hover_pill.setChecked(True)
+            self._loading = False
+        self._pill_session_hidden = False
+        pill = self._ensure_pill()
+        pill.apply_theme(self.cfg.data.get("theme", "dark"))
+        pill.show_at_default()
+        self._sync_pill_running()
+
+    def _on_pill_session_hidden(self):
+        """右键菜单「隐藏图标」：本次最小化期间不再显示，恢复主界面后清除。"""
+        self._pill_session_hidden = True
+
+    def _on_pill_hidden(self):
+        """胶囊上点 ✕ 后：同步取消「高级参数」里的勾选（配置已被胶囊写为 False）。"""
+        if self.check_hover_pill.isChecked():
+            self._loading = True
+            self.check_hover_pill.setChecked(False)
+            self._loading = False
+
+    def _save_pill_pos(self, x, y):
+        self.cfg.data["hover_pill_pos"] = [int(x), int(y)]
+        self.cfg.save()
+
+    def _on_pill_hover_toggled(self, _checked=None):
+        if self._loading:
+            return
+        self.cfg.data["hover_pill"] = self.check_hover_pill.isChecked()
+        self.cfg.save()
+        if self.check_hover_pill.isChecked():
+            self._pill_session_hidden = False   # 重新勾选后忽略「隐藏图标」的临时状态
+        self._update_tray_hover()
+
+    def _set_tray_menu_state(self):
+        """托盘右键菜单状态：启动/停止按服务状态置灰；小窗已显示时「显示悬浮窗」置灰。"""
+        if self._tray is None or self._tray_act_start is None:
+            return
+        running = self.server.running
+        self._tray_act_start.setEnabled(not running)
+        self._tray_act_stop.setEnabled(running)
+        visible = self._pill is not None and self._pill.isVisible()
+        self._tray_act_pill.setEnabled(not visible)
 
     # ---------------------------------------------------------- 日志落盘
     def _log_file(self, text):
@@ -2726,14 +3032,36 @@ class MainWindow(QMainWindow):
             self.label_vram.setVisible(False)
 
     # ---------------------------------------------------------- 联网查询
+    def _on_model_info(self, text):
+        """本地 GGUF 信息就绪：先显示，若勾选了「联网查询」再自动补充 HF 信息。"""
+        self.info_view.setPlainText(text)
+        if getattr(self, "check_hf_query", None) is not None and self.check_hf_query.isChecked():
+            self._query_hf_info()
+
+    def _on_hf_query_toggled(self, checked):
+        if self._loading:
+            return
+        self.cfg.data["hf_query_enabled"] = bool(checked)
+        self.cfg.save()
+        if checked and self.combo_model.currentData():
+            self._query_hf_info()
+
     def _query_hf_info(self):
         model = self.combo_model.currentData()
         if not model:
             QMessageBox.information(self, "提示", "请先选择模型")
             return
-        query = os.path.basename(model)
-        if query.lower().endswith(".gguf"):
-            query = query[:-5]
+        # 查询词优先用 GGUF 里的基础模型名（更贴近 HF 仓库名），否则退回文件名去量化后缀
+        query = ""
+        try:
+            info = read_gguf_info(model) or {}
+            query = info.get("base_model_name") or info.get("general.name") or ""
+        except Exception:
+            query = ""
+        if not query:
+            query = os.path.basename(model)
+            if query.lower().endswith(".gguf"):
+                query = query[:-5]
         self.statusBar().showMessage(f"正在联网查询 {query} …", 3000)
 
         def work():
@@ -2767,6 +3095,60 @@ class MainWindow(QMainWindow):
             return
         if self.combo_sampling.currentIndex() > 0:
             self.combo_sampling.setCurrentIndex(0)
+
+    # ------------------------------------------------- 局域网共享 / HTTPS
+    def _ssl_paths(self):
+        """返回自签名证书的 (私钥, 证书) 路径（数据目录 certs/，非英文路径自动回退）。"""
+        return default_cert_paths(self.cfg.data_dir())
+
+    def _on_lan_toggled(self, checked):
+        """勾选「局域网共享」→ host 填 0.0.0.0；取消 → 回 127.0.0.1。"""
+        if not self._loading:
+            host = self.edit_host.text().strip().lower()
+            if checked and host in ("", "127.0.0.1", "localhost", "::1"):
+                self.edit_host.setText("0.0.0.0")
+            elif not checked and host in ("0.0.0.0", "::"):
+                self.edit_host.setText("127.0.0.1")
+        self._update_local_ip_label()
+
+    def _on_ssl_toggled(self, _checked):
+        self._update_local_ip_label()
+
+    def _on_host_edited(self, _text):
+        """手动改监听地址时反向同步「局域网共享」勾选状态。"""
+        if not self._loading:
+            is_lan = self.edit_host.text().strip() in ("0.0.0.0", "::")
+            if self.check_lan.isChecked() != is_lan:
+                self.check_lan.blockSignals(True)
+                self.check_lan.setChecked(is_lan)
+                self.check_lan.blockSignals(False)
+        self._update_local_ip_label()
+
+    def _update_local_ip_label(self):
+        if not hasattr(self, "label_local_ip"):
+            return
+        ip = local_ipv4()
+        scheme = "https" if self.check_ssl.isChecked() else "http"
+        port = self.spin_port.value()
+        if self.check_lan.isChecked():
+            self.label_local_ip.setText(f"局域网访问：{scheme}://{ip}:{port}")
+        else:
+            self.label_local_ip.setText(f"本机 IP：{ip}")
+
+    def _resolve_ssl(self, s):
+        """按配置确保 HTTPS 证书存在并写回 ssl_key_file/ssl_cert_file。
+
+        成功返回 True（scheme 用 https）；未启用 HTTPS 返回 False；
+        生成失败抛出 RuntimeError 由调用方提示。"""
+        if not s.get("ssl_enabled"):
+            s["ssl_key_file"] = ""
+            s["ssl_cert_file"] = ""
+            return False
+        key_path, cert_path = self._ssl_paths()
+        ensure_self_signed_cert(key_path, cert_path)
+        s["ssl_key_file"] = key_path
+        s["ssl_cert_file"] = cert_path
+        return True
 
     # ---------------------------------------------------------- 残留检测
     def _find_free_port(self, host, start, limit=50):
@@ -2872,30 +3254,47 @@ class MainWindow(QMainWindow):
         self._tray = QSystemTrayIcon(self._load_icon(), self)
         self._tray.setToolTip("LLama 启动器")
         menu = QMenu()
-        act_show = menu.addAction("显示主窗口")
+        act_show = menu.addAction("打开主界面")
         act_show.triggered.connect(self._show_from_tray)
-        act_start = menu.addAction("启动服务")
-        act_start.triggered.connect(self.start_server)
-        act_stop = menu.addAction("停止服务")
-        act_stop.triggered.connect(self.stop_server)
+        self._tray_act_pill = menu.addAction("显示悬浮窗")
+        self._tray_act_pill.setToolTip(
+            "立即在屏幕右下角显示悬浮小窗（若之前被 ✕ 停用或右键隐藏，会一并恢复）")
+        self._tray_act_pill.triggered.connect(self._tray_show_pill)
+        self._tray_act_start = menu.addAction("启动模型")
+        self._tray_act_start.triggered.connect(self.start_server)
+        self._tray_act_stop = menu.addAction("停止模型")
+        self._tray_act_stop.triggered.connect(self.stop_server)
         menu.addSeparator()
         act_quit = menu.addAction("退出")
         act_quit.triggered.connect(self.quit_app)
+        menu.aboutToShow.connect(self._set_tray_menu_state)
         self._tray.setContextMenu(menu)
         self._tray.activated.connect(self._on_tray_activated)
         self._tray.show()
+        self._set_tray_menu_state()
 
     def _show_from_tray(self):
+        if self._pill is not None:
+            self._pill.hide()
+        self._pill_session_hidden = False
         self.showNormal()
         self.raise_()
         self.activateWindow()
+        self._sync_pill_running()
 
     def _on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self._show_from_tray()
 
+    def showEvent(self, event):
+        # 主窗口任何时候重新可见：清除悬浮窗「本次隐藏」状态
+        self._pill_session_hidden = False
+        super().showEvent(event)
+
     def quit_app(self):
         self._quitting = True
+        if self._pill is not None:
+            self._pill.hide()
         closed = self.close()
         if closed:
             # 隐藏到托盘后 close() 不会触发 lastWindowClosed，需显式退出事件循环
@@ -2905,8 +3304,9 @@ class MainWindow(QMainWindow):
         if (not self._quitting and self._tray is not None
                 and self.cfg.data.get("minimize_to_tray", True)):
             self.hide()
+            self._update_tray_hover()
             self._tray.showMessage(
-                "LLama 启动器", "已最小化到托盘，点击图标恢复窗口。服务仍在后台运行。",
+                "LLama 启动器", "已最小化到托盘，双击图标或小窗返回主界面。服务仍在后台运行。",
                 QSystemTrayIcon.MessageIcon.Information, 2000)
             event.ignore()
             return

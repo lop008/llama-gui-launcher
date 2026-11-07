@@ -10,16 +10,16 @@
 
 基于 llama.cpp 的本地大模型图形化启动器。让「选模型 → 配参数 → 后台启动 → 实时监控 → 连接 Agent 工具」整条链路一键搞定，不再需要手敲命令行。
 
-> **最新版本：v0.4.25** —— 对话模板支持（Jinja / 思考强度 / 推理预算）、导入启动文件、更友好的残留进程提示与端口占用建议，以及按比例缩放的广告位图片。详见 [发布说明](RELEASE_NOTES.md) 与 [更新日志](CHANGELOG.md)。
+> **最新版本：v0.5.01** —— 带实时数据的托盘悬浮小窗、实时输出速度（tok/s）、HTTPS 自签名证书 + 局域网共享、更完整的 GGUF 元数据、可拖动标签页等。详见 [发布说明](RELEASE_NOTES.md) 与 [更新日志](CHANGELOG.md)。
 
-## 最新版本 v0.4.25 更新
+## 最新版本 v0.5.01 更新
 
-- **对话模板支持**：高级参数新增一行，支持 `--jinja`、思考强度（`--chat-template-kwargs {"reasoning_effort":"low|medium|high"}`）与推理预算（`--reasoning-budget`）。选择模型后自动检测 GGUF 的 `tokenizer.chat_template`：无模板则禁用 Jinja 勾选；无 `reasoning_effort`/`enable_thinking` 则禁用思考强度与推理预算。思考强度与 Jinja 强绑定。
-- **导入启动文件**：底部 7 号位（及菜单「工具 → 导入启动文件 (.bat)…」），解析已有 `.bat/.cmd/.ps1/.sh/文本` 文件并把参数（模型、视觉模型、上下文、采样、KV 缓存、对话模板等）回填到界面，自动兼容 UTF-8/GBK。
-- **残留进程提示优化**：弹窗新增「不再提示」（写入 `config.json`）；高级参数新增「启动时检测残留进程」开关，可随时重新开启。
-- **端口占用建议**：端口被占用时建议一个可用端口，确认后自动更新主界面端口号。
-- **广告位图片按比例缩放**：右侧图片仅横向铺满、保持原始比例，不再纵向拉伸。
-- **启动文件校验器** 识别 `--jinja`、`--chat-template-kwargs`、`--reasoning-budget`。
+1. **托盘悬浮小窗**：点「×」收进托盘后，屏幕右下角常驻置顶胶囊（状态圆点 + 实时 tok/s + API 圆点）。悬停/单击展开数据卡片（速度、CPU、内存、GPU 负载、显存、API 接入数、模型名）；可拖动记忆位置、双击返回主界面、右键菜单。
+2. **实时输出速度**：对 `/metrics` 计数器差分得到 tok/s，旧版自动回退解析 `eval time` 日志行；新增 GPU 核心利用率与 API 并发占用数。
+3. **HTTPS + 局域网共享**：一键生成自签名证书（`cryptography`，惰性加载），`--ssl-key-file` / `--ssl-cert-file` 全链路生效；勾选局域网共享时 host 自动设为 `0.0.0.0`，并显示可访问的 `http(s)://<本机IP>:<端口>`。
+4. **更完整的 GGUF 信息**：支持 Unsloth 动态量化（`UD-*`），跳过超大数组提速，并展示参数量/许可证/基础模型/注意力头+GQA/RoPE/MTP/SSM/词表/张量数/GGUF 版本等。
+5. **底部标签可拖动排序**：顺序持久化到 `config.json`，下次启动恢复。
+6. **联网查询开关**、**更新器自定义目标目录**，以及更健壮的**一键启动脚本**。
 
 ## 一、这个项目解决什么问题？
 
@@ -41,7 +41,7 @@
 - **自动扫描**：递归扫描 llama 目录下所有 `.gguf`，自动跳过未下载完成的文件（`.xltd` 等）
 - **列表排序**：目录+文件名升序（自然排序，默认）/ 大小降序 / 仅名称
 - **视觉模型按目录配对**：选择主模型后**只列出同目录下的 mmproj**；自动选中配套项并做**嵌入维度一致性校验**——不匹配时红字警告 + 启动前拦截，避免"加载失败"报错
-- **模型信息**：离线解析 GGUF 头，显示架构/训练上下文/量化格式/参数量
+- **模型信息**：离线解析 GGUF 头，显示架构/训练上下文/量化格式/参数量，并新增许可证、量化者、基础模型、层数、嵌入/前馈维度、注意力头与 GQA、头维度、RoPE 基数、MTP/NextN 层、SSM state、词表大小、张量数、GGUF 版本、简介与模型主页；支持 Unsloth 动态量化（`UD-*`、`Q4_K_XL` 等），跳过超大数组以加快解析
 
 ### 参数配置
 - **基本参数**：监听地址、端口、上下文预设（按显存一键推荐 16K~512K）、GPU 层数、上下文长度、预测 Token
@@ -55,7 +55,13 @@
 - **隐藏窗口后台启动**：`/health` 就绪后自动打开浏览器 Web 界面
 - **一键停止**：`taskkill /T` 清理进程树（模型跑飞/无限复读时救命）
 - **崩溃防残留（显存自动释放）**：服务进程放入 Windows 作业对象（KILL_ON_JOB_CLOSE），本程序无论崩溃还是被强杀，系统都会自动清理 llama-server 进程树，立即释放显存
-- **实时状态监控**：状态栏显示 CPU、内存、显存（nvidia-smi）、运行模型、API 活动
+- **实时状态监控**：状态栏显示 CPU、内存、显存（nvidia-smi）、**GPU 核心利用率**、运行模型、API 活动与**实时输出速度（tok/s）**
+- **托盘悬浮小窗**：点「×」收进托盘后，屏幕右下角常驻置顶胶囊（状态圆点 + 实时 tok/s + API 圆点）；悬停/单击展开速度、CPU、内存、GPU 负载、显存、API 接入数、模型名；可拖动记忆位置、双击返回主界面、右键菜单打开/启动/停止/隐藏/退出
+
+### 网络与安全
+- **HTTPS**：一键在 `certs/` 生成自签名证书（`cryptography` 惰性加载），`--ssl-key-file` / `--ssl-cert-file` 贯通服务启动、健康检查、浏览器地址与 opencode 配置（启用 `https`，本地对自签名证书跳过校验）
+- **局域网共享**：勾选后 host 自动设为 `0.0.0.0`，并显示供其他设备访问的 `http(s)://<本机IP>:<端口>` 地址
+- **联网查询开关**：选择模型时自动向 HuggingFace 补充信息（可关闭以保持纯离线）
 
 ### Agent 工具
 - 内置 4 个：**opencode**（自动生成 opencode.json 连接服务）、**opencode 桌面版**（自动复制连接信息到剪贴板）、**Claude Code**（保留，不自动连接）、**llama-server**
@@ -67,7 +73,7 @@
 - **更新 llama.cpp 页**：选择任意 GitHub **Release 版本**（或手输 tag）→ 下载 Windows x64 预编译包 → **安全安装**：只覆盖目标目录同名文件并自动备份 `.bak`，模型/配置等其他文件一律不动；也可切到**分支源码模式**：任选分支（如 `main`），断点续传下载源码 zip 到自选目录下的 `llama.cpp-<分支>` 子目录
 - **导出命令预览为 .bat**（工具菜单）：把「命令预览」页的完整命令行原样存成 `.bat`，存储路径任选；另有「导出一键启动(.bat)」并创建桌面快捷方式
 
-### 模型统计（独立窗口：工具 → 模型统计…）
+### 数据统计（独立窗口：工具 → 数据统计…，或首页第 9 个按钮）
 - 按模型统计：**打开次数、使用时长、输入/输出 Token**（解析 llama-server 日志 `prompt eval time` / `eval time`）
 - 时间明细支持 **小时 / 日 / 月** 粒度，范围可选 全部/今天/最近一周/本月（自然月），可导出 CSV
 
@@ -76,7 +82,8 @@
 - **导出/导入配置**：`.aic` 文件（内容即 JSON），完整备份/还原设置
 - **导出一键启动**：把当前模型与参数导出成双击即启动 `llama-server` 的 `.bat`，并自动在桌面创建带软件图标的快捷方式
 - **模型联网评估**：用模型名查 HuggingFace，显示简介/下载量/点赞（缓存 7 天，离线自动退回本地信息）
-- **托盘最小化**：关闭窗口缩到托盘，托盘菜单可显示/启动/停止/退出
+- **托盘最小化**：关闭窗口缩到托盘，托盘菜单可打开悬浮窗/启动/停止/退出
+- **底部标签可拖动排序**：拖动调整顺序，保存到 `config.json`，下次启动恢复
 - **日志落盘**：`logs/运行日志-YYYYMMDD.log` 按天分文件
 - **六套主题配色**（深色 / 浅色 / 橙色 / 绿色 / 灰色 / 棕色）：状态栏右下角「🎨 主题」菜单选择，切换不改变布局尺寸
 - **可自定义图标 / 广告位**：放入 `assets/icon.ico` 换图标；`assets/ad.png` 显示在底部 430×40 广告位
@@ -99,7 +106,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-依赖（`requirements.txt`）：`PyQt6`、`requests`、`psutil`
+依赖（`requirements.txt`）：`PyQt6`、`requests`、`psutil`、`cryptography`
 
 ### 方式 B：直接运行打包好的 exe（无需安装 Python）
 
@@ -107,8 +114,8 @@ python main.py
 
 | 文件 | 说明 |
 |------|------|
-| `LLama-Launcher-v0.3.85-win-x64.exe` | **单文件版**（约 43 MB），双击即运行。首次启动较慢（需解压到临时目录，约几秒）；个别杀毒软件可能误报，加入白名单即可。 |
-| `LLama-Launcher-v0.3.85-win-x64-portable.zip` | **便携版**，解压后运行 `LLama启动器-win-x64-portable.exe`，启动更快、无需自解压。 |
+| `LLama-Launcher-v0.5.01-win-x64.exe` | **单文件版**（约 43 MB），双击即运行。首次启动较慢（需解压到临时目录，约几秒）；个别杀毒软件可能误报，加入白名单即可。 |
+| `LLama-Launcher-v0.5.01-win-x64-portable.zip` | **便携版**，解压后运行 `LLama启动器-win-x64-portable.exe`，启动更快、无需自解压。 |
 
 将 `llama-server.exe` 及配套 DLL 放到同一目录（或在界面中指定启动器路径）。
 
@@ -129,7 +136,7 @@ python main.py
 | 菜单 | 项目 |
 |------|------|
 | 开始 | 启动服务 / 停止服务 / 退出 |
-| 工具 | 刷新模型 / 打开模型目录 ｜ 打开管理页面 / 查看 API 模型列表 ｜ 打开 Agent 工具 ｜ 导出配置(.aic) / 导入配置(.aic) / 导出一键启动(.bat)（并在桌面创建带软件图标的快捷方式）/ **导出命令预览(.bat)…（自选存储路径）** / **模型统计…（独立窗口）** ｜ 清空日志 / 打开日志目录 |
+| 工具 | 刷新模型 / 打开模型目录 ｜ 打开管理页面 / 查看 API 模型列表 ｜ 打开 Agent 工具 ｜ 导出配置(.aic) / 导入配置(.aic) / 导出一键启动(.bat)（并在桌面创建带软件图标的快捷方式）/ **导出命令预览(.bat)…（自选存储路径）** / **数据统计…（独立窗口）** ｜ 清空日志 / 打开日志目录 |
 | 关于 | 参数说明 / 开发者信息 |
 
 ---
@@ -225,6 +232,7 @@ LLama启动器/
 ├── docs/
 │   ├── cover.png          # 发布封面图（v0.3.85）
 │   └── screenshots/       # README / Release 引用的界面截图
+├── certs/                 # 自签名 HTTPS 证书/私钥（自动生成，请勿上传）
 ├── dist/                  # 打包好的可执行文件（pyinstaller 生成，不入库）
 └── src/
     ├── main_window.py       # 主窗口 + 菜单 + 托盘 + 状态栏
@@ -232,10 +240,12 @@ LLama启动器/
     ├── themes.py            # 六套配色（深/浅/橙/绿/灰/棕）
     ├── model_scanner.py     # 模型扫描 / 排序 / mmproj 配对
     ├── gguf_reader.py       # GGUF 头解析 + MTP 张量检测
-    ├── cmd_builder.py       # 命令行生成（KV K/V、多显卡、MTP）
+    ├── cmd_builder.py       # 命令行生成（KV K/V、多显卡、MTP、HTTPS）
     ├── server.py            # 子进程 / 健康检查 / 停止 / 作业对象
     ├── jobobject.py         # Windows 作业对象（崩溃自动清理）
-    ├── system_monitor.py    # CPU/内存/显存/模型/API 监控
+    ├── system_monitor.py    # CPU/内存/显存/GPU/API/速度监控
+    ├── net_utils.py         # 本机 IP 探测 + 自签名证书生成
+    ├── pill.py              # 托盘悬浮小窗（胶囊 + 展开数据卡片）
     ├── hf_info.py           # HuggingFace 模型评估
     ├── hf_browse.py         # HF 仓库检索 / 文件列表（下载页后端）
     ├── hf_download_tab.py   # 模型下载 UI（双列、三栏检索、逐文件续传）
@@ -243,7 +253,7 @@ LLama启动器/
     ├── llama_updater.py     # llama.cpp Release/分支获取 + 安全安装
     ├── updater_tab.py       # 更新 llama.cpp UI（版本 / 分支源码）
     ├── usage_stats.py       # 使用统计存储（打开次数/时长/token，时日月分桶）
-    ├── stats_dialog.py      # 独立模型统计窗口
+    ├── stats_dialog.py      # 独立数据统计窗口
     ├── bat_validator.py     # .bat/.cmd/.ps1 启动脚本静态校验
     ├── presets.py           # 上下文预设 / 采样预设
     ├── tools.py             # Agent 工具注册与检测
@@ -255,6 +265,8 @@ LLama启动器/
 
 | | |
 |---|---|
+| ![托盘悬浮小窗](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/pill.png) | |
+| 托盘悬浮小窗（收起 + 悬停展开） | |
 | ![主界面](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/main.png) | ![高级参数](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/advanced.png) |
 | 主界面 | 高级参数 + 多显卡 |
 | ![模型下载](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/download.png) | ![llama.cpp 更新器](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/updater.png) |

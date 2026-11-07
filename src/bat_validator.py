@@ -52,6 +52,8 @@ _PARAM_FLAGS = {
     "-rea": "reasoning_format", "--reasoning-format": "reasoning_format",
     "--chat-template-kwargs": "chat_template_kwargs",
     "--reasoning-budget": "reasoning_budget",
+    "--ssl-key-file": "ssl_key_file",
+    "--ssl-cert-file": "ssl_cert_file",
 }
 
 # 布尔开关（不带值）：识别后不吞掉下一个 token。
@@ -62,6 +64,7 @@ _FLAG_FLAGS = {
     "--mlock": "mlock",
     "--no-mmap": "no_mmap",
     "--jinja": "jinja",
+    "--metrics": "metrics",
 }
 
 _PARAM_LABELS = {
@@ -76,10 +79,13 @@ _PARAM_LABELS = {
     "reasoning_format": "推理格式",
     "chat_template_kwargs": "模板参数(--chat-template-kwargs)",
     "reasoning_budget": "推理预算(--reasoning-budget)",
+    "ssl_key_file": "SSL私钥(--ssl-key-file)",
+    "ssl_cert_file": "SSL证书(--ssl-cert-file)",
     "cont_batching": "连续批处理", "cmoe": "MoE加速(-cmoe)",
     "context_shift": "上下文移位", "mlock": "锁定内存(--mlock)",
     "no_mmap": "禁用mmap(--no-mmap)",
     "jinja": "Jinja模板(--jinja)",
+    "metrics": "指标统计(--metrics)",
 }
 
 _EXE_RE = re.compile(r"llama-(server|cli)\.exe$", re.IGNORECASE)

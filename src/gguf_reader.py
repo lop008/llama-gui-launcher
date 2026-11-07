@@ -17,18 +17,77 @@ FILE_TYPE_NAMES = {
     32: "Q4_0_8_8", 33: "TQ1_0", 34: "TQ2_0",
 }
 
-INTERESTING_KEYS = {
-    "general.architecture",
-    "general.name",
-    "general.file_type",
-    "tokenizer.ggml.model",
+# 量化标识：覆盖 llama.cpp 标准名、Unsloth 动态量化（UD-*，常带 _XL/_XXL）等。
+# 注意：通用 K 量化用 `Q\d+_K(?:_[A-Z0-9]+)*` 以便匹配 Q4_K_XL/Q5_K_XXL 这类后缀。
+QUANT_RE = re.compile(
+    r"(?i)(?<![A-Za-z0-9])"
+    r"(MXFP4"
+    r"|IQ\d+(?:_[A-Z0-9]+)+"
+    r"|Q\d+_K(?:_[A-Z0-9]+)*"
+    r"|Q\d+_\d+(?:_\d+)*"
+    r"|TQ\d+_\d+"
+    r"|BF16|F16|F32)"
+)
+
+# 超大数组键：解析信息时直接跳过（不读入几十万条词表/合并表，明显加快速度）
+_SKIP_ARRAY_KEYS = {
+    "tokenizer.ggml.tokens",
+    "tokenizer.ggml.token_type",
+    "tokenizer.ggml.merges",
+    "tokenizer.ggml.scores",
 }
 
-QUANT_RE = re.compile(
-    r"(?i)(F32|F16|BF16|Q2_K|Q3_K_S|Q3_K_M|Q3_K_L|Q4_K_S|Q4_K_M|Q5_K_S|Q5_K_M"
-    r"|Q6_K|Q8_K|Q8_0|Q4_0|Q4_1|Q5_0|Q5_1|IQ2_XXS|IQ2_XS|IQ3_XXS|IQ1_S|IQ4_NL"
-    r"|IQ3_S|IQ3_M|IQ2_S|IQ2_M|IQ4_XS|IQ1_M|TQ1_0|TQ2_0|Q4_0_4_4|Q4_0_4_8|Q4_0_8_8)"
+_ARRAY_ELEM_SIZE = {
+    UINT8: 1, INT8: 1, UINT16: 2, INT16: 2, UINT32: 4, INT32: 4,
+    FLOAT32: 4, BOOL: 1, UINT64: 8, INT64: 8, FLOAT64: 8,
+}
+
+# 固定键 → info 短名
+_SIMPLE_KEYS = {
+    "general.architecture": "general.architecture",
+    "general.name": "general.name",
+    "general.file_type": "general.file_type",
+    "general.description": "general.description",
+    "general.license": "general.license",
+    "general.quantized_by": "general.quantized_by",
+    "general.size_label": "general.size_label",
+    "general.repo_url": "general.repo_url",
+    "general.base_model.0.name": "base_model_name",
+    "general.base_model.0.organization": "base_model_org",
+    "general.base_model.0.repo_url": "base_model_url",
+    "tokenizer.ggml.model": "tokenizer.ggml.model",
+}
+
+# 架构前缀键（如 qwen35.xxx / llama.xxx）按后缀匹配 → info 短名
+_SUFFIX_MAP = (
+    ("attention.head_count_kv", "head_count_kv"),
+    ("attention.head_count", "head_count"),
+    ("attention.key_length", "key_length"),
+    ("attention.value_length", "value_length"),
+    ("context_length", "context_length"),
+    ("embedding_length", "embedding_length"),
+    ("feed_forward_length", "feed_forward_length"),
+    ("block_count", "block_count"),
+    ("rope.freq_base", "rope_freq_base"),
+    ("rope.dimension_count", "rope_dim"),
+    ("nextn_predict_layers", "nextn_layers"),
+    ("ssm.state_size", "ssm_state"),
+    ("parameter_count", "parameter_count"),
+    ("projection_dim", "projection_dim"),
 )
+
+
+def _capture(info, key, value):
+    """把解析到的 KV 归入 info 的短名键（只取首个匹配，架构前缀不敏感）。"""
+    if key in _SIMPLE_KEYS:
+        info[_SIMPLE_KEYS[key]] = value
+        return
+    lk = key.lower()
+    for suffix, name in _SUFFIX_MAP:
+        if lk.endswith(suffix) and name not in info:
+            info[name] = value
+            return
+
 
 
 def _u32(f):
@@ -84,6 +143,22 @@ def _read_value(f, vtype):
     return _read_scalar(f, vtype)
 
 
+def _skip_array(f):
+    """跳过数组值并返回元素个数（字符串数组逐条跳过长度，不读入内容）。"""
+    elem_type = _u32(f)
+    count = _u64(f)
+    if elem_type == STRING:
+        for _ in range(count):
+            (length,) = struct.unpack("<Q", f.read(8))
+            f.seek(length, os.SEEK_CUR)
+    else:
+        size = _ARRAY_ELEM_SIZE.get(elem_type)
+        if size is None:
+            raise ValueError("unknown array element type")
+        f.seek(size * count, os.SEEK_CUR)
+    return count
+
+
 def read_gguf_info(path):
     info = None
     try:
@@ -98,17 +173,13 @@ def read_gguf_info(path):
             for _ in range(kv_count):
                 key = _read_string(f)
                 vtype = _u32(f)
+                if vtype == ARRAY and key in _SKIP_ARRAY_KEYS:
+                    count = _skip_array(f)
+                    if key == "tokenizer.ggml.tokens":
+                        info["vocab_size"] = count
+                    continue
                 value = _read_value(f, vtype)
-                if key in INTERESTING_KEYS:
-                    info[key] = value
-                elif "context_length" in key and "context_length" not in info:
-                    info["context_length"] = value
-                elif "parameter_count" in key and "parameter_count" not in info:
-                    info["parameter_count"] = value
-                elif "embedding_length" in key and "embedding_length" not in info:
-                    info["embedding_length"] = value
-                elif "projection_dim" in key and "projection_dim" not in info:
-                    info["projection_dim"] = value
+                _capture(info, key, value)
     except Exception:
         return None
     return info
@@ -269,6 +340,20 @@ def detect_chat_features(path):
     return True, has_reasoning
 
 
+def _quant_label(name, info):
+    """量化格式：优先文件名，其次元数据 general.file_type。
+
+    Unsloth UD 动态量化的 general.file_type 常写成统一的名义值（如把 Q4_K_XL
+    标成 Q5_K_S），因此文件名更可靠。返回 (标签, 是否来自文件名)。"""
+    m = QUANT_RE.search(name or "")
+    if m:
+        return m.group(1).upper(), True
+    ft = info.get("general.file_type")
+    if ft is not None:
+        return FILE_TYPE_NAMES.get(ft, "未知"), False
+    return None, False
+
+
 def format_gguf_info(path):
     info = read_gguf_info(path)
     size = os.path.getsize(path) if os.path.exists(path) else 0
@@ -277,27 +362,90 @@ def format_gguf_info(path):
     if info is None:
         return (f"文件路径: {abs_path}\n模型文件: {name}\n"
                 f"无法解析 GGUF 头部（可能不是有效的 GGUF 文件）。\n文件大小: {human_size(size)}")
-    lines = [f"文件路径: {abs_path}", f"模型文件: {name}"]
-    lines.append(f"文件大小: {human_size(size)}")
+
+    lines = [f"文件路径: {abs_path}", f"模型文件: {name}",
+             f"文件大小: {human_size(size)}"]
+
     arch = info.get("general.architecture")
     if arch:
         lines.append(f"架构: {arch}")
     gname = info.get("general.name")
     if gname:
         lines.append(f"模型名称: {gname}")
+
+    qname, from_name = _quant_label(name, info)
+    qt = f"量化格式: {qname or '未知'}"
+    if from_name:
+        qt += "（取自文件名）"
+    elif info.get("general.file_type") is not None:
+        qt += "（取自元数据，动态量化可能不准）"
+    lines.append(qt)
+
+    if info.get("general.quantized_by"):
+        lines.append(f"量化者: {info['general.quantized_by']}")
+
+    if info.get("parameter_count"):
+        lines.append(f"参数量: {human_params(info['parameter_count'])}")
+    elif info.get("general.size_label"):
+        lines.append(f"参数量: {info['general.size_label']}")
+
+    if info.get("general.license"):
+        lines.append(f"许可证: {info['general.license']}")
+
+    bm = " / ".join(x for x in (info.get("base_model_org"), info.get("base_model_name")) if x)
+    if bm:
+        lines.append(f"基础模型: {bm}")
+
     ctx = info.get("context_length")
     if ctx is not None:
         lines.append(f"模型训练上下文(token): {ctx}")
         lines.append("（即模型本身原生支持的最大上下文长度，供参考）")
-    ft = info.get("general.file_type")
-    qname = FILE_TYPE_NAMES.get(ft) if ft is not None else None
-    m = QUANT_RE.search(name)
-    if m:
-        qname = m.group(1).upper()
-    lines.append(f"量化格式: {qname or '未知'}")
-    pc = info.get("parameter_count")
-    if pc:
-        lines.append(f"参数量: {human_params(pc)}")
+
+    if info.get("block_count") is not None:
+        lines.append(f"层数(block): {info['block_count']}")
+    if info.get("embedding_length") is not None:
+        lines.append(f"嵌入维度: {info['embedding_length']}")
+    if info.get("feed_forward_length") is not None:
+        lines.append(f"前馈维度: {info['feed_forward_length']}")
+
+    def _first_int(v):
+        if isinstance(v, (list, tuple)):
+            v = v[0] if v else None
+        return v if isinstance(v, int) else None
+
+    hc, hkv = _first_int(info.get("head_count")), _first_int(info.get("head_count_kv"))
+    if hc is not None:
+        extra = ""
+        if hkv and hkv != hc:
+            gqa = (hc // hkv) if hkv else 0
+            extra = f"（KV {hkv}，GQA {gqa}x）"
+        lines.append(f"注意力头: {hc}{extra}")
+    if info.get("key_length") is not None and info.get("value_length") is not None:
+        lines.append(f"头维度: K {info['key_length']} / V {info['value_length']}")
+    if info.get("rope_freq_base") is not None:
+        try:
+            lines.append(f"RoPE 频率基数: {int(info['rope_freq_base'])}")
+        except (TypeError, ValueError):
+            pass
+
+    if info.get("nextn_layers"):
+        lines.append(f"MTP/NextN 预测层: {info['nextn_layers']}")
+    if info.get("ssm_state") is not None:
+        lines.append(f"状态空间(SSM) state: {info['ssm_state']}")
+    if info.get("vocab_size"):
+        lines.append(f"词表大小: {info['vocab_size']}")
+    if info.get("tensor_count"):
+        lines.append(f"张量数量: {info['tensor_count']}")
+    if info.get("version") is not None:
+        lines.append(f"GGUF 版本: {info['version']}")
+
+    if info.get("general.description"):
+        lines.append(f"模型简介: {info['general.description']}")
+
+    repo = info.get("base_model_url") or info.get("general.repo_url")
+    if repo:
+        lines.append(f"模型主页: {repo}")
+
     return "\n".join(lines)
 
 

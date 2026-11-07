@@ -2,6 +2,26 @@
 
 All notable changes to LLama 启动器 / LLama Launcher.
 
+## [0.5.01] - 2026-11-07
+
+### New Features
+
+- **Tray hover pill** — after minimizing to the tray, a 30 px always-on-top capsule stays above the taskbar showing the app icon, **LLama.cpp**, live output speed in tok/s and a status dot. Hover or click to expand a data card (speed, CPU %, memory, GPU load %, VRAM, API busy slots, model name); system stats (CPU / memory / VRAM / GPU) are shown even while the server is idle. Drag to move (position remembered), double-click to restore the main window, right-click for a menu (open / start / stop / hide / quit, start·stop auto-disabled by service state). Theme-aware and can be turned off from Advanced parameters.
+- **Live output speed** — new tok/s readout derived by diffing the llama-server `/metrics` generated/predicted counters, with an automatic fallback that parses the latest `eval time` log line when `/metrics` is unavailable (returns to 0 about 8 s after generation ends). Also adds GPU core utilization and API busy-slot count.
+- **HTTPS + LAN sharing** — an "Enable HTTPS" toggle generates a self-signed key/cert into `certs/` (via `cryptography`, lazy-loaded) and wires `--ssl-key-file` / `--ssl-cert-file` through the command builder, health checks, browser URLs and opencode config. A "LAN sharing" toggle sets the host to `0.0.0.0` and shows the reachable `http(s)://<local-ip>:<port>` address. Self-signed requests skip verification locally.
+- **Richer GGUF info** — supports Unsloth dynamic quantization (`UD-*`, `Q4_K_XL`, …) and skips the huge vocab/merge arrays for much faster parsing (recording the vocab size instead). Displays parameter count, license, quantizer, base model, block count, embedding / feed-forward size, attention heads + GQA, head dims, RoPE base, MTP/NextN layers, SSM state, tensor count, GGUF version, description and model URL.
+- **Reorderable bottom tabs** — drag tabs to reorder; the order is persisted to `config.json` (`tab_order`) and restored next launch.
+- **Online model query toggle** — the model-info pane gains a "query online" checkbox that auto-fetches HuggingFace details when a model is selected.
+- **Updater target directory** — the llama.cpp updater honors a custom `updater_target` directory when set and valid.
+- **More robust one-click launch** — `一键启动.bat` now locates the standalone exe via wildcards, falls back to `.venv` / portable / PATH Python, and self-heals missing PyQt6 dependencies.
+
+### Improvements
+
+- Launch-file validator recognizes `--ssl-key-file` and `--ssl-cert-file`; opencode config and Web UI/API links switch to `https` when HTTPS is enabled.
+- Main-page 9th button now opens the Data Statistics window; "Model Stats" was renamed to "Data Statistics".
+- Added `src/net_utils.py` (local IP discovery + self-signed certificate generation) and `src/pill.py` (tray hover pill).
+- New dependency: `cryptography>=41` (also added to PyInstaller `hiddenimports`).
+
 ## [0.4.25] - 2026-09-20
 
 ### New Features

@@ -6,8 +6,8 @@ import time
 from . import tools
 
 
-def build_config(host, port, alias, ctx, n_predict, api_key=""):
-    base = f"http://{host}:{port}/v1"
+def build_config(host, port, alias, ctx, n_predict, api_key="", scheme="http"):
+    base = f"{scheme}://{host}:{port}/v1"
     model_cfg = {"name": alias}
     limit = {}
     if ctx and int(ctx) > 0:

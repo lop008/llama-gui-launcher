@@ -1,4 +1,4 @@
-"""模型统计独立界面（功能 9）。
+"""数据统计独立界面（功能 9）。
 
 打开次数 / 使用时长 / 输入输出 token，支持 时/日/月 粒度与时间范围筛选。
 """
@@ -15,7 +15,7 @@ class StatsDialog(QDialog):
     def __init__(self, store: StatsStore, parent=None):
         super().__init__(parent)
         self.store = store
-        self.setWindowTitle("模型统计")
+        self.setWindowTitle("数据统计")
         self.resize(860, 560)
 
         root = QVBoxLayout(self)
@@ -39,7 +39,7 @@ class StatsDialog(QDialog):
 
         bar.addStretch(1)
         btn_export = QPushButton("导出 CSV")
-        btn_export.setToolTip("把当前「模型统计」表导出为 CSV 文件（可用 Excel 打开）")
+        btn_export.setToolTip("把当前「数据统计」表导出为 CSV 文件（可用 Excel 打开）")
         btn_export.clicked.connect(self.export_csv)
         bar.addWidget(btn_export)
         btn_refresh = QPushButton("刷新")
@@ -48,7 +48,7 @@ class StatsDialog(QDialog):
         root.addLayout(bar)
 
         # ---- 表 1：按模型汇总 ----
-        root.addWidget(QLabel("<b>模型统计</b>（打开次数 / 使用时长 / 输入·输出 token）"))
+        root.addWidget(QLabel("<b>数据统计</b>（打开次数 / 使用时长 / 输入·输出 token）"))
         self.table_model = QTableWidget(0, 5)
         self.table_model.setHorizontalHeaderLabels(
             ["模型", "打开次数", "使用时长", "输入 Token", "输出 Token"])
@@ -117,7 +117,7 @@ class StatsDialog(QDialog):
     def export_csv(self):
         from PyQt6.QtWidgets import QFileDialog
         path, _ = QFileDialog.getSaveFileName(
-            self, "导出统计 CSV", "模型统计.csv", "CSV 文件 (*.csv);;所有文件 (*.*)")
+            self, "导出统计 CSV", "数据统计.csv", "CSV 文件 (*.csv);;所有文件 (*.*)")
         if not path:
             return
         try:

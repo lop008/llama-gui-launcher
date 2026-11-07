@@ -1,6 +1,68 @@
 # LLama 启动器 发布说明 / Release Notes
 
-> 最新版本 / Latest release: **v0.4.25** · 发布日期 / Released: 2026-09-20
+> 最新版本 / Latest release: **v0.5.01** · 发布日期 / Released: 2026-11-07
+
+---
+
+# LLama 启动器 v0.5.01 发布说明 / Release Notes
+
+## English
+
+### New Features
+
+- **Tray hover pill** — after minimizing to the tray, a 30 px always-on-top capsule stays above the taskbar showing the app icon, **LLama.cpp**, live output speed in tok/s and a status dot. Hover or click to expand a data card (speed, CPU %, memory, GPU load %, VRAM, API busy slots, model name); system stats (CPU / memory / VRAM / GPU) are shown even while the server is idle. Drag to move (position remembered), double-click to restore the main window, right-click for a menu (open / start / stop / hide / quit, start·stop auto-disabled by service state). Theme-aware and can be turned off from Advanced parameters.
+- **Live output speed** — a real-time tok/s readout derived by diffing the llama-server `/metrics` generated/predicted counters, with an automatic fallback that parses the latest `eval time` log line when `/metrics` is unavailable (drops to 0 about 8 s after generation ends). Adds GPU core utilization and API busy-slot count.
+- **HTTPS + LAN sharing** — an "Enable HTTPS" toggle generates a self-signed key/cert into `certs/` (via `cryptography`, lazy-loaded) and wires `--ssl-key-file` / `--ssl-cert-file` through the command builder, health checks, browser URLs and opencode config. A "LAN sharing" toggle sets the host to `0.0.0.0` and shows the reachable `http(s)://<local-ip>:<port>` address.
+- **Richer GGUF info** — supports Unsloth dynamic quantization (`UD-*`, `Q4_K_XL`, …) and skips the huge vocab/merge arrays for much faster parsing (recording the vocab size instead). Displays parameter count, license, quantizer, base model, block count, embedding / feed-forward size, attention heads + GQA, head dims, RoPE base, MTP/NextN layers, SSM state, tensor count, GGUF version, description and model URL.
+- **Reorderable bottom tabs** — drag tabs to reorder; the order is persisted to `config.json` (`tab_order`) and restored next launch.
+- **Online model query toggle** — the model-info pane gains a "query online" checkbox that auto-fetches HuggingFace details when a model is selected.
+- **Updater target directory** — the llama.cpp updater honors a custom `updater_target` directory when set and valid.
+- **More robust one-click launch** — `一键启动.bat` now locates the standalone exe via wildcards, falls back to `.venv` / portable / PATH Python, and self-heals missing PyQt6 dependencies.
+
+### Improvements
+
+- Launch-file validator recognizes `--ssl-key-file` and `--ssl-cert-file`; opencode config and Web UI/API links switch to `https` when HTTPS is enabled.
+- Main-page 9th button now opens the Data Statistics window; "Model Stats" was renamed to "Data Statistics".
+- Added `src/net_utils.py` (local IP discovery + self-signed certificate generation) and `src/pill.py` (tray hover pill).
+- New dependency: `cryptography>=41` (also added to PyInstaller `hiddenimports`).
+
+### Downloads
+
+| File | Description |
+|------|-------------|
+| `LLama-Launcher-v0.5.01-win-x64.exe` | Single-file build — no Python required |
+| `LLama-Launcher-v0.5.01-win-x64-portable.zip` | Portable build — extract and run |
+| Source code (zip / tar.gz) | Full source |
+
+---
+
+## 中文
+
+### 🆕 新增功能
+
+- **托盘悬浮小窗**：点「×」收进托盘后，屏幕右下角常驻一个 30 像素高的置顶胶囊，最左为程序图标、随后显示「LLama.cpp」与实时输出速度 tok/s，并有状态圆点。鼠标悬停或单击展开数据卡片（速度、CPU%、内存、GPU 负载%、显存、API 接入数、模型名）；CPU / 内存 / 显存 / GPU 为实时系统数据，服务未运行时也照常显示。可拖动记忆位置、双击返回主界面、右键菜单（打开/启动/停止/隐藏/退出，启动·停止按服务状态自动置灰）。配色跟随主题，可在高级参数中关闭或重新开启。
+- **实时输出速度**：对 llama-server 的 `/metrics` 生成计数器做差分得到 tok/s；旧版无 `/metrics` 时自动回退解析最新 `eval time` 日志行（生成结束约 8 秒后归零）。同时新增 GPU 核心利用率与 API 并发占用数。
+- **HTTPS + 局域网共享**：勾选「启用 HTTPS」时用 `cryptography`（惰性加载）在 `certs/` 生成自签名证书，并把 `--ssl-key-file` / `--ssl-cert-file` 贯通到命令生成、健康检查、浏览器地址与 opencode 配置；勾选「局域网共享」时 host 自动切为 `0.0.0.0`，并显示可访问的 `http(s)://<本机IP>:<端口>` 地址。
+- **更完整的 GGUF 信息**：支持 Unsloth 动态量化（`UD-*`、`Q4_K_XL` 等），跳过超大词表/merges 数组以显著提速（同时记录词表大小）。展示参数量、许可证、量化者、基础模型、层数、嵌入/前馈维度、注意力头与 GQA、头维度、RoPE 基数、MTP/NextN 层、SSM state、张量数、GGUF 版本、简介与模型主页。
+- **底部标签可拖动排序**：拖动调整标签顺序，持久化到 `config.json` 的 `tab_order`，下次启动自动恢复。
+- **联网查询开关**：模型信息区新增「联网查询」勾选框，选择模型后自动向 HuggingFace 拉取补充信息。
+- **更新器自定义目标目录**：llama.cpp 更新器在配置 `updater_target` 非空且有效时优先安装到该目录。
+- **一键启动更健壮**：`一键启动.bat` 用通配符定位单文件 exe，依次回退 `.venv` / 便携 / PATH 中的 Python，并在缺少 PyQt6 时自动补装依赖。
+
+### 🔧 改进
+
+- 启动文件校验器识别 `--ssl-key-file`、`--ssl-cert-file`；启用 HTTPS 时 opencode 配置与 Web/API 链接同步改用 `https`。
+- 首页第 9 个按钮改为打开「数据统计」窗口；原「模型统计」统一更名为「数据统计」。
+- 新增 `src/net_utils.py`（本机 IP 探测 + 自签名证书生成）与 `src/pill.py`（托盘悬浮小窗）。
+- 新增依赖 `cryptography>=41`（同时加入 PyInstaller `hiddenimports`）。
+
+### 下载
+
+| 文件 | 说明 |
+|------|------|
+| `LLama-Launcher-v0.5.01-win-x64.exe` | 单文件版，无需安装 Python，双击即用 |
+| `LLama-Launcher-v0.5.01-win-x64-portable.zip` | 便携版，解压即用 |
+| Source code (zip / tar.gz) | 源码 |
 
 ---
 

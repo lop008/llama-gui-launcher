@@ -406,6 +406,12 @@ class UpdaterTab(QWidget):
 
     # ------------------------------------------------------------- 安装
     def _target_dir(self):
+        # 优先使用配置里的「更新目标目录」(updater_target)，非空且有效时生效；
+        # 否则回退到当前 llama-server.exe 所在目录，再回退程序目录。
+        if self.mw:
+            t = str(self.mw.cfg.data.get("updater_target") or "").strip()
+            if t and os.path.isdir(t):
+                return t
         exe = self.mw._launcher_exe() if self.mw else ""
         d = os.path.dirname(exe) if exe else ""
         return d or (self.mw.base_dir if self.mw else "")

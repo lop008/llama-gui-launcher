@@ -6,6 +6,9 @@ hf_model_cache.json
 # 日志
 logs/
 
+# 自签名 HTTPS 证书（运行时生成，含私钥，切勿上传）
+certs/
+
 # Python
 __pycache__/
 *.pyc
@@ -63,3 +66,7 @@ LLama*-win-x64-portable.zip
 # 本地笔记 / 开发计划（含敏感凭据，切勿上传）
 后续版本功能开发.txt
 新建 文本文档.txt
+
+# 本地视频素材与渲染中间产物（体积大，切勿上传）
+media/
+视频脚本/

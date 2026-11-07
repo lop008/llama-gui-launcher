@@ -19,6 +19,7 @@ class ServerManager(QObject):
         super().__init__()
         self.proc = None
         self.url = ""
+        self.verify = True
         self._manual_stop = False
         self._job = None
         self._job_ok = False
@@ -36,9 +37,17 @@ class ServerManager(QObject):
         """服务是否处于 Job Object 保护下（启动器崩溃时会被系统自动清理）。"""
         return self._job_ok
 
-    def start(self, args, workdir, host, port, health_timeout=180):
+    def start(self, args, workdir, host, port, scheme="http", verify=True,
+              health_timeout=180):
         self.stop()
-        self.url = f"http://{host}:{port}"
+        self.url = f"{scheme}://{host}:{port}"
+        self.verify = bool(verify)
+        if not self.verify:
+            try:
+                import urllib3
+                urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            except Exception:
+                pass
         self._manual_stop = False
         try:
             self.proc = subprocess.Popen(
@@ -102,7 +111,7 @@ class ServerManager(QObject):
         start = time.time()
         while time.time() - start < timeout and self.running:
             try:
-                r = requests.get(url, timeout=2)
+                r = requests.get(url, timeout=2, verify=self.verify)
                 if r.ok:
                     self.state.emit(f"服务已就绪: {self.url}")
                     self.healthy.emit(self.url)

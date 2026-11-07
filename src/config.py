@@ -49,6 +49,10 @@ DEFAULTS = {
         "no_mmap": False,
         "timeout": 3600,
         "auto_open_browser": True,
+        # 局域网共享开关（勾选时 host 用 0.0.0.0，供界面回显）
+        "lan_share": False,
+        # HTTPS（自签名证书）：开启后拼入 --ssl-key-file/--ssl-cert-file
+        "ssl_enabled": False,
     },
     "tools": {},
     "last_agent_tool": "",
@@ -59,6 +63,14 @@ DEFAULTS = {
     "port_hint": True,
     "theme": "dark",
     "window_geometry": None,
+    # 底部标签顺序（拖动后保存，为空 = 默认顺序）
+    "tab_order": [],
+    # 选择模型时自动联网查询 HuggingFace 补充信息
+    "hf_query_enabled": False,
+    # 缩到托盘后显示悬浮小窗（胶囊 + 悬停展开数据卡片）
+    "hover_pill": True,
+    # 悬浮小窗位置 [x, y]（null = 自动贴屏幕右下角）
+    "hover_pill_pos": None,
     # 以下为历史版本出现过、或供扩展使用的键，统一补齐避免 JSON 缺项
     "custom_tools": [],
     "opencode_workdir": "",

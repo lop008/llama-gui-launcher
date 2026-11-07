@@ -135,6 +135,12 @@ def build_args(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
     if api_key:
         args += ["--api-key", api_key]
 
+    # ---- HTTPS（自签名证书）：私钥与证书成对存在时才启用 ----
+    ssl_key = str(s.get("ssl_key_file", "") or "").strip()
+    ssl_cert = str(s.get("ssl_cert_file", "") or "").strip()
+    if ssl_key and ssl_cert:
+        args += ["--ssl-key-file", ssl_key, "--ssl-cert-file", ssl_cert]
+
     if s.get("mlock"):
         args += ["--mlock"]
     if s.get("no_mmap"):
@@ -142,6 +148,8 @@ def build_args(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
 
     args += ["--timeout", str(int(s.get("timeout", 3600) or 3600))]
     args += ["-a", model_alias(model_path)]
+    # Prometheus 指标（/metrics）：悬浮窗实时 tok/s 依赖 tokens_predicted_total 计数器差分
+    args += ["--metrics"]
 
     # ---- 对话模板（功能 8）：Jinja 模板 / 思考强度 / 推理预算 ----
     if s.get("jinja"):
@@ -189,6 +197,7 @@ def build_bat_content(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
     alias = model_alias(model_path)
     host = str(s.get("host", "127.0.0.1"))
     port = str(int(s.get("port", 8080) or 8080))
+    scheme = "https" if (s.get("ssl_key_file") and s.get("ssl_cert_file")) else "http"
 
     L = ["@echo off", "chcp 65001 >nul", f"title LLama Server - {alias}", "echo."]
     L.append("echo ============================================================")
@@ -196,13 +205,13 @@ def build_bat_content(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
     L.append("echo   模型 : " + model_alias(model_path) + ".gguf")
     if mmproj_path:
         L.append("echo   视觉 : " + model_alias(mmproj_path))
-    L.append(f"echo   API  : http://{host}:{port}/v1")
+    L.append(f"echo   API  : {scheme}://{host}:{port}/v1")
     L.append("echo   Ctrl+C 可停止服务")
     L.append("echo ============================================================")
     L.append("echo.")
 
     if s.get("auto_open_browser", True):
-        L.append(f'start "" "http://{host}:{port}/"')
+        L.append(f'start "" "{scheme}://{host}:{port}/"')
 
     L.append(" ".join(quote_bat(a) for a in args))
     L.append("echo.")

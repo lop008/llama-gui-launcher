@@ -10,16 +10,16 @@ A GUI launcher for llama.cpp local large language models. It turns the whole wor
 
 **[中文文档 / Chinese](README.zh-CN.md)**
 
-> **Latest release: v0.4.25** — chat-template support (Jinja / thinking effort / reasoning budget), import launch files, a friendlier residual-process prompt with port-in-use suggestions, and an aspect-ratio-preserving ad image. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
+> **Latest release: v0.5.01** — a tray hover pill with live stats, real-time output speed (tok/s), HTTPS with self-signed certificates + LAN sharing, richer GGUF metadata, reorderable tabs and more. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
 
-## What's New in v0.4.25
+## What's New in v0.5.01
 
-- **Chat-template support** — a new advanced row for `--jinja`, thinking effort (`--chat-template-kwargs {"reasoning_effort":"low|medium|high"}`) and `--reasoning-budget`. The model's `tokenizer.chat_template` is auto-detected from the GGUF: no template → the Jinja checkbox is disabled; no `reasoning_effort`/`enable_thinking` → the effort and budget controls are disabled. Thinking effort is hard-bound to Jinja.
-- **Import launch file** — button at position 7 (and `Tools → Import launch file (.bat)…`): parse an existing `.bat/.cmd/.ps1/.sh/text` file and apply its parameters (model, mmproj, context, sampling, KV cache, chat template, …) back into the UI. UTF-8/GBK aware.
-- **Friendlier residual-process prompt** — the dialog now offers "don't ask again" (persisted to `config.json`), and Advanced parameters has a toggle to re-enable the check.
-- **Port-in-use suggestion** — when the port is occupied, suggest a free port and update the main-window port after confirmation.
-- **Aspect-ratio ad image** — the right-side image now stretches horizontally only and keeps its proportions.
-- **Launch-file validator** recognizes `--jinja`, `--chat-template-kwargs` and `--reasoning-budget`.
+1. **Tray hover pill** — after minimizing to the tray, a small capsule stays above the taskbar (status dot + live tok/s + API dot). Hover/click expands a data card (speed, CPU, memory, GPU load, VRAM, API busy, model); drag to move, double-click to restore, right-click for a menu.
+2. **Live output speed** — real-time tok/s from `/metrics` counter diffing, with a log `eval time` fallback; adds GPU core utilization and API busy-slot count.
+3. **HTTPS + LAN sharing** — one-click self-signed certificate (via `cryptography`), `--ssl-key-file` / `--ssl-cert-file` wired end-to-end; LAN toggle sets host `0.0.0.0` and shows the reachable `http(s)://<local-ip>:<port>` address.
+4. **Richer GGUF info** — Unsloth dynamic quantization (`UD-*`), faster parsing by skipping giant arrays, plus params / license / base model / heads+GQA / RoPE / MTP / SSM / vocab / tensor count / GGUF version and more.
+5. **Reorderable tabs** — drag bottom tabs to reorder; the order is remembered.
+6. **Online model query toggle**, **custom updater target directory**, and a more robust **one-click launch** script.
 
 ## What Problem Does It Solve?
 
@@ -41,7 +41,7 @@ This launcher automates and visualizes all of the above: **auto model scanning, 
 - **Auto scan**: recursively scans all `.gguf` files under the llama directory, skipping incomplete downloads (e.g. `.xltd`)
 - **Model list sorting**: by directory + filename ascending (natural sort, default), size descending, or name only
 - **Vision model pairing by directory**: after picking a main model, **only mmproj files in the same folder** are listed; auto-selects the matching one with **embedding-dimension consistency checks** — red warning + pre-start interception on mismatch
-- **Model info**: reads the GGUF header offline (architecture / context length / quantization / parameter count)
+- **Model info**: reads the GGUF header offline (architecture / context length / quantization / parameter count) and now shows license, quantizer, base model, block count, embedding / feed-forward size, attention heads + GQA, head dims, RoPE base, MTP/NextN layers, SSM state, vocab size, tensor count, GGUF version, description and model URL — supports Unsloth dynamic quantization (`UD-*`, `Q4_K_XL`, …) and skips giant arrays for fast parsing
 
 ### Parameter Configuration
 - **Basic**: listen address, port, context presets (one-click VRAM-based recommendation from 16K to 512K), GPU layers, context length, max prediction tokens
@@ -55,7 +55,13 @@ This launcher automates and visualizes all of the above: **auto model scanning, 
 - **Hidden-window background startup**: opens the browser Web UI automatically once `/health` is ready
 - **One-click stop**: `taskkill /T` kills the whole process tree (a lifesaver when the model runs away / loops)
 - **Crash-proof, VRAM auto-release**: the server process runs inside a Windows Job Object (`KILL_ON_JOB_CLOSE`) — if this app crashes or is force-killed, the system cleans up the llama-server process tree and frees VRAM immediately
-- **Real-time status bar**: CPU, memory, VRAM (nvidia-smi), running model, API activity
+- **Real-time status bar**: CPU, memory, VRAM (nvidia-smi), **GPU core utilization**, running model, API activity and **live output speed (tok/s)**
+- **Tray hover pill**: when minimized to the tray, a small always-on-top capsule shows a status dot + live tok/s + API dot; hover/click expands a card with speed, CPU, memory, GPU load, VRAM, API busy slots and model name. Drag to move (position remembered), double-click to restore, right-click menu to open/start/stop/hide/quit
+
+### Network & Security
+- **HTTPS**: one-click self-signed certificate generated into `certs/` (via `cryptography`, lazy-loaded); `--ssl-key-file` / `--ssl-cert-file` are applied to the server, health checks, browser URLs and opencode config (`https` scheme, local verification skipped for the self-signed cert)
+- **LAN sharing**: one toggle sets host `0.0.0.0` and displays the reachable `http(s)://<local-ip>:<port>` address for other devices on the network
+- **Online model query toggle**: auto-fetch HuggingFace details when a model is selected (can be disabled to stay offline)
 
 ### Agent Tools
 - 4 built-in tools: **opencode** (auto-generates `opencode.json` pointing at the service), **OpenCode desktop** (copies connection info to clipboard), **Claude Code** (launch only, not auto-connected), **llama-server**
@@ -67,7 +73,7 @@ This launcher automates and visualizes all of the above: **auto model scanning, 
 - **Update llama.cpp tab**: pick any GitHub **Release version** (or type a tag) → download the Windows x64 prebuilt zip → **safe install** that only overwrites same-named files in the target dir with automatic `.bak` backups — models, configs and everything else are never touched. Or switch to **branch source mode**: pick any branch (e.g. `main`) and its source zip is downloaded (resumable) into a dedicated `llama.cpp-<branch>` subdirectory of your chosen folder
 - **Export command preview as .bat** (Tools menu): save the exact "Command Preview" line to a `.bat` file at any path you choose; also "Export one-click launch (.bat)" with a desktop shortcut
 
-### Usage Statistics (independent window, Tools → Model Stats)
+### Usage Statistics (independent window, Tools → Data Statistics, or the 9th main-page button)
 - Per model: open count, usage time, input / output tokens (parsed from llama-server log lines `prompt eval time` / `eval time`)
 - Time breakdown by **hour / day / month**, scope filter all / today / last week / this calendar month; CSV export
 
@@ -75,7 +81,8 @@ This launcher automates and visualizes all of the above: **auto model scanning, 
 - **Remembers last-used parameters** in `config.json`
 - **Export / Import config**: `.aic` files (JSON content) for full backup/restore
 - **Online model lookup**: queries HuggingFace for the model's intro / downloads / likes (7-day cache, falls back to local info offline)
-- **Tray minimize**: closing the window minimizes to the system tray; tray menu shows / starts / stops / quits
+- **Tray minimize**: closing the window minimizes to the system tray; tray menu shows / opens the hover pill / starts / stops / quits
+- **Reorderable tabs**: drag the bottom tabs to reorder; the order is saved to `config.json` and restored next launch
 - **Log files**: `logs/运行日志-YYYYMMDD.log`, one file per day
 - **Six color themes** (Dark / Light / Orange / Green / Gray / Brown): pick from the "🎨 Theme" menu at the bottom-right of the status bar; switching never changes the layout size
 - **Customizable icon / ad slot**: put `assets/icon.ico` to change the app icon; `assets/ad.png` fills the 430×40 ad slot at the bottom
@@ -98,7 +105,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-Dependencies (`requirements.txt`): `PyQt6`, `requests`, `psutil`
+Dependencies (`requirements.txt`): `PyQt6`, `requests`, `psutil`, `cryptography`
 
 ### Option B: Run the packaged exe (no Python required)
 
@@ -106,8 +113,8 @@ Download from the [Releases](https://github.com/lop008/llama-gui-launcher/releas
 
 | File | Description |
 |------|-------------|
-| `LLama-Launcher-v0.3.85-win-x64.exe` | **Single-file** build (~43 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
-| `LLama-Launcher-v0.3.85-win-x64-portable.zip` | **Portable** build — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
+| `LLama-Launcher-v0.5.01-win-x64.exe` | **Single-file** build (~43 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
+| `LLama-Launcher-v0.5.01-win-x64-portable.zip` | **Portable** build — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
 
 Put `llama-server.exe` and its DLLs in the same directory (or set the launcher path in the UI).
 
@@ -128,7 +135,7 @@ Put `llama-server.exe` and its DLLs in the same directory (or set the launcher p
 | Menu | Items |
 |------|-------|
 | Start | Start Server / Stop Server / Exit |
-| Tools | Refresh Models / Open Model Directory ｜ Open Web UI / View API Model List ｜ Open Agent Tool ｜ Export Config (.aic) / Import Config (.aic) / Export One-Click Launch (.bat) / **Export Command Preview (.bat)… (choose save path)** / **Model Stats… (independent window)** ｜ Clear Log / Open Log Directory |
+| Tools | Refresh Models / Open Model Directory ｜ Open Web UI / View API Model List ｜ Open Agent Tool ｜ Export Config (.aic) / Import Config (.aic) / Export One-Click Launch (.bat) / **Export Command Preview (.bat)… (choose save path)** / **Data Statistics… (independent window)** ｜ Clear Log / Open Log Directory |
 | About | Parameter Guide / Developer Info |
 
 ---
@@ -224,6 +231,7 @@ LLama启动器/
 ├── docs/
 │   ├── cover.png          # Release cover image (v0.3.85)
 │   └── screenshots/       # UI screenshots used by the README / Release
+├── certs/                 # Self-signed HTTPS key/cert (auto-generated, DO NOT upload)
 ├── dist/                  # Packaged executables (pyinstaller, not in repo)
 └── src/
     ├── main_window.py       # Main window + menu + tray + status bar
@@ -231,10 +239,12 @@ LLama启动器/
     ├── themes.py            # Six color palettes (Dark/Light/Orange/Green/Gray/Brown)
     ├── model_scanner.py     # Model scanning / sorting / mmproj pairing
     ├── gguf_reader.py       # GGUF header parsing + MTP tensor detection
-    ├── cmd_builder.py       # Command-line generation (KV K/V, multi-GPU, MTP)
+    ├── cmd_builder.py       # Command-line generation (KV K/V, multi-GPU, MTP, HTTPS)
     ├── server.py            # Subprocess / health check / stop / job object
     ├── jobobject.py         # Windows Job Object (auto-cleanup on crash)
-    ├── system_monitor.py    # CPU/memory/VRAM/model/API monitoring
+    ├── system_monitor.py    # CPU/memory/VRAM/GPU/API/speed monitoring
+    ├── net_utils.py         # Local-IP discovery + self-signed certificate generation
+    ├── pill.py              # Tray hover pill (capsule + expandable stats card)
     ├── hf_info.py           # HuggingFace model lookup
     ├── hf_browse.py         # HF repo search / file listing (download tab backend)
     ├── hf_download_tab.py   # Model download UI (two-column, three-field search, per-row resume)
@@ -254,6 +264,8 @@ LLama启动器/
 
 | | |
 |---|---|
+| ![Tray hover pill](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/pill.png) | |
+| Tray hover pill (collapsed + expanded) | |
 | ![Main window](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/main.png) | ![Advanced parameters](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/advanced.png) |
 | Main window | Advanced parameters + Multi-GPU |
 | ![Model download](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/download.png) | ![llama.cpp updater](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/updater.png) |
