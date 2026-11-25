@@ -41,6 +41,18 @@ def _now_ts():
     return time.time()
 
 
+def _num(v, default=0.0):
+    """把可能损坏的统计值转成数字：stats.json 被手改坏或半截写入时一律当 0，
+    绝不让统计界面/计时器因为一条坏数据抛异常。"""
+    if v is None or isinstance(v, bool):
+        return default
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return default
+    return f if f == f else default      # 过滤 NaN
+
+
 class StatsStore:
     def __init__(self, data_dir):
         self._path = os.path.join(data_dir or ".", STATS_FILE)
@@ -71,10 +83,16 @@ class StatsStore:
 
     def _model_entry(self, name):
         m = self._data["models"].get(name)
-        if m is None:
-            m = {"opens": 0, "seconds": 0.0, "in_tokens": 0, "out_tokens": 0,
-                 "hour": {}, "day": {}, "month": {}}
+        if not isinstance(m, dict):
+            # 坏数据（非对象条目）一律重建，否则下面累加时会抛 TypeError
+            m = {}
             self._data["models"][name] = m
+        for key in ("opens", "in_tokens", "out_tokens"):
+            m[key] = int(_num(m.get(key)))
+        m["seconds"] = _num(m.get("seconds"))
+        for key in ("hour", "day", "month"):
+            if not isinstance(m.get(key), dict):
+                m[key] = {}
         return m
 
     @staticmethod
@@ -149,20 +167,28 @@ class StatsStore:
         return key + "-01"           # month: "YYYY-MM" -> 月初（仅用于月份比较）
 
     def summary(self, scope="all"):
-        """按模型汇总（受时间范围过滤）。"""
+        """按模型汇总（受时间范围过滤）。结构损坏的条目跳过，不影响其余统计。"""
         allowed = self._allowed_days(scope)
         rows = []
         with self._lock:
             for name, m in sorted(self._data["models"].items()):
+                if not isinstance(m, dict):
+                    continue
                 if allowed is None:
-                    opens, seconds = m["opens"], m["seconds"]
-                    itok, otok = m["in_tokens"], m["out_tokens"]
+                    opens = int(_num(m.get("opens")))
+                    seconds = _num(m.get("seconds"))
+                    itok = int(_num(m.get("in_tokens")))
+                    otok = int(_num(m.get("out_tokens")))
                 else:
                     opens = seconds = itok = otok = 0
-                    for key, b in m.get("day", {}).items():
-                        if key in allowed:
-                            opens += b["opens"]; seconds += b["seconds"]
-                            itok += b["in_tokens"]; otok += b["out_tokens"]
+                    day = m.get("day")
+                    if isinstance(day, dict):
+                        for key, b in day.items():
+                            if key in allowed and isinstance(b, dict):
+                                opens += int(_num(b.get("opens")))
+                                seconds += _num(b.get("seconds"))
+                                itok += int(_num(b.get("in_tokens")))
+                                otok += int(_num(b.get("out_tokens")))
                 rows.append({"model": name, "opens": opens, "seconds": float(seconds),
                              "in_tokens": int(itok), "out_tokens": int(otok)})
         rows.sort(key=lambda r: (-(r["in_tokens"] + r["out_tokens"]), r["model"]))
@@ -174,8 +200,14 @@ class StatsStore:
         agg = {}
         with self._lock:
             for name, m in self._data["models"].items():
-                store = m.get(granularity if granularity in ("hour", "day", "month") else "day", {})
+                if not isinstance(m, dict):
+                    continue
+                store = m.get(granularity if granularity in ("hour", "day", "month") else "day")
+                if not isinstance(store, dict):
+                    continue
                 for key, b in store.items():
+                    if not isinstance(b, dict):
+                        continue
                     if allowed is not None:
                         day_part = self._bucket_day(key, granularity)
                         if granularity == "month":
@@ -185,10 +217,10 @@ class StatsStore:
                         elif day_part not in allowed:
                             continue
                     a = agg.setdefault(key, {"opens": 0, "seconds": 0.0, "in_tokens": 0, "out_tokens": 0})
-                    a["opens"] += b.get("opens", 0)
-                    a["seconds"] += float(b.get("seconds", 0))
-                    a["in_tokens"] += int(b.get("in_tokens", 0))
-                    a["out_tokens"] += int(b.get("out_tokens", 0))
+                    a["opens"] += int(_num(b.get("opens")))
+                    a["seconds"] += _num(b.get("seconds"))
+                    a["in_tokens"] += int(_num(b.get("in_tokens")))
+                    a["out_tokens"] += int(_num(b.get("out_tokens")))
         rows = [{"key": k, **v} for k, v in agg.items()]
         rows.sort(key=lambda r: r["key"])
         # 时间范围「全部」时，小时粒度只保留最近 96 个桶，避免过长

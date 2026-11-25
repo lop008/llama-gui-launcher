@@ -1,6 +1,66 @@
 # LLama 启动器 发布说明 / Release Notes
 
-> 最新版本 / Latest release: **v0.5.13** · 发布日期 / Released: 2026-11-08
+> 最新版本 / Latest release: **v0.5.14** · 发布日期 / Released: 2026-11-26
+
+---
+
+# LLama 启动器 v0.5.14 发布说明 / Release Notes
+
+## English
+
+A stability release: two crash bugs found by a new end-to-end test suite are fixed, and silent failures now leave a trace.
+
+### Fixes
+
+- **"Validate launch file" no longer dies on an illegal port** — a `.bat` / `.sh` containing `--port 99999` or `--port 0` reached a raw `socket.bind()`, which raises `OverflowError` rather than `OSError`, so the whole check aborted with an unhandled exception instead of telling you what was wrong. The port is now range-checked first and reported as `✘ --port out of the valid range (1-65535)`. The message was translated into all 8 languages.
+- **Data Statistics no longer breaks on a damaged `stats.json`** — a single malformed record (a model entry that is not an object, or string / `null` / `NaN` numbers) made the Data Statistics window raise an exception on open, and the 5-second usage timer raise again while a server was running. Bad records are now skipped when reading so everything else still shows up, and they are repaired automatically on the next write.
+
+### Improvements
+
+- **Silent translation failures are now visible** — when a language table failed to load in a packaged build (missing file, syntax error, empty or non-dict table), the interface quietly fell back to Simplified Chinese with no clue anywhere. The reason is now written to stderr and can be queried programmatically via `i18n.failed_languages()`, which returns `{language-code: reason}`.
+
+### Testing
+
+- New end-to-end suites that **really start `llama-server`** and drive the launcher through the whole OpenAI surface (`/health`, `/props`, `/slots`, `/tokenize`, `/metrics`, `/v1/models`, non-streaming and streaming `/v1/chat/completions`, legacy `/completion`, 4xx on a malformed request body), API-key auth (401 without a token, 200 with), Job Object protection plus watchdog cleanup after an external kill, exported `.bat` files executed for real, HTTPS with a generated self-signed certificate, LAN sharing on `0.0.0.0`, pill tok/s / VRAM / busy-slot readings during live generation, and interface rebuild in all 8 languages.
+- Robustness coverage for broken config / model / statistics data, invalid arguments, port conflicts and residual `llama-server` processes.
+- Ten suites now run serially from one command and print a pass matrix; 3 stale test scripts that asserted hardcoded model paths and shard counts no longer report false failures.
+
+### Downloads
+
+| File | Description |
+|------|-------------|
+| `LLama-Launcher-v0.5.14-win-x64.exe` | Single-file build — no Python required |
+| `LLama-Launcher-v0.5.14-win-x64-portable.zip` | Portable build — extract and run |
+| Source code (zip / tar.gz) | Full source |
+
+---
+
+## 中文
+
+稳定性版本：新增的端到端测试套件找出并修复了两个闪退问题，静默失败现在也会留下线索。
+
+### 🐛 修复
+
+- **修复「校验启动文件」遇到非法端口直接闪退**：脚本里写 `--port 99999` 或 `--port 0` 时会走到裸的 `socket.bind()`，抛出的是 `OverflowError`（不是 `OSError`），整个校验流程被异常打断，你看到的是程序出错而不是问题提示。现在先做 1–65535 范围校验并给出 `✘ --port 超出合法范围（1-65535）`，探测用 socket 也做了保护。新增文案已翻译进全部 8 种语言。
+- **修复 `stats.json` 损坏时「数据统计」打不开**：只要有一条记录结构异常（模型条目不是对象，或数值字段是字符串 / `null` / `NaN`），打开数据统计窗口就会抛异常，服务运行期间的 5 秒统计定时器同样会反复报错。现在读取时跳过损坏条目（其余统计照常显示），并在下次写入时自动修复成正常记录。
+
+### ⚡ 改进
+
+- **语言包加载失败不再是静默回退**：打包后的 exe 里某张语言表加载失败（文件缺失、语法错误、表为空或类型不对）时，界面以前只是悄悄回退简体中文，任何地方都查不到原因。现在失败原因会写入 stderr，并可由 `i18n.failed_languages()` 查询到 `{语言代码: 原因}`。
+
+### 🧪 测试
+
+- 新增**真实启动 llama-server** 的端到端套件，覆盖完整 OpenAI 接口（`/health`、`/props`、`/slots`、`/tokenize`、`/metrics`、`/v1/models`、流式与非流式 `/v1/chat/completions`、旧版 `/completion`、异常请求体返回 4xx）、API Key 鉴权（无 token 401、带 token 200）、Job Object 进程保护与外部强杀后的看门狗清理、导出的 `.bat` 真实执行、HTTPS 自签证书、局域网 `0.0.0.0` 共享、悬浮窗生成期间的 tok/s / 显存 / 繁忙槽位读数，以及 8 种语言下的界面重建。
+- 补齐坏配置 / 坏模型 / 坏统计数据、非法参数、端口冲突、残留 llama-server 进程等健壮性用例。
+- 10 个套件可用一条命令串行跑完并输出通过矩阵；3 个写死模型路径与分片数的过期脚本不再误报失败。
+
+### 下载
+
+| 文件 | 说明 |
+|------|------|
+| `LLama-Launcher-v0.5.14-win-x64.exe` | 单文件版，无需安装 Python，双击即用 |
+| `LLama-Launcher-v0.5.14-win-x64-portable.zip` | 便携版，解压即用 |
+| Source code (zip / tar.gz) | 源码 |
 
 ---
 

@@ -13,6 +13,7 @@ STRINGS = {
 "--mlock：把模型锁定在内存中，防止被系统换出到磁盘。\n占内存更多，但推理更稳定。": "--mlock: locks the model in memory so the system cannot swap it out to disk.\nUses more RAM but makes inference more stable.",
 "--no-mmap：关闭内存映射加载。\n加载更慢但内存占用更可控，个别磁盘/内存环境可改善稳定性。": "--no-mmap: disables memory-mapped loading.\nSlower to load but more predictable memory usage; can improve stability on certain disk/memory setups.",
 "--port 值不是合法数字：{0}": "--port value is not a valid number: {0}",
+"--port 超出合法范围（1-65535）：{0}": "--port out of the valid range (1-65535): {0}",
 "-1 = 不限制": "-1 = no limit",
 "-1 = 无限": "-1 = unlimited",
 "-1 = 自动": "-1 = auto",

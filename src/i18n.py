@@ -34,9 +34,28 @@ def _tables():
         try:
             from . import locales
             _state["tables"] = locales.TABLES
-        except Exception:
+        except Exception as e:
+            print("[i18n] 语言表包导入失败，界面回退简体中文：{0!r}".format(e), file=sys.stderr)
             _state["tables"] = {}
     return _state["tables"]
+
+
+def failed_languages():
+    """加载失败/缺失的语言表：{语言码: 原因}，空 dict 表示一切正常。
+
+    缺表时界面会静默回退简体中文，没有这个入口就完全看不出是打包漏了文件。
+    """
+    tables = _tables()
+    try:
+        from . import locales
+        reasons = dict(getattr(locales, "FAILED", None) or {})
+    except Exception:
+        reasons = {}
+    for code, _label in LANGUAGES:
+        if code == "zh-CN" or code in tables:
+            continue
+        reasons.setdefault(code, "语言表缺失")
+    return reasons
 
 
 def _map_system_code(name):
@@ -140,6 +159,9 @@ def set_language(code):
     code = code if code in _CODE_SET else "zh-CN"
     _state["lang"] = code
     _state["dict"] = dict(_tables().get(code) or {}) if code != "zh-CN" else {}
+    if code != "zh-CN" and not _state["dict"]:
+        print("[i18n] 已选择 {0}，但语言表不可用，界面回退简体中文"
+              "（原因：{1}）".format(code, failed_languages().get(code, "未知")), file=sys.stderr)
     return code
 
 

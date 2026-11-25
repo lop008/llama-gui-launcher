@@ -440,19 +440,26 @@ def validate_script(text, path=""):
         items.append((t('端口'), "fail", t('--port 值不是合法数字：{0}').format(port)))
     else:
         p = int(port)
-        free = True
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.bind(("127.0.0.1", p))
-        except OSError:
-            free = False
-        finally:
-            s.close()
-        if free:
-            items.append((t('端口'), "ok", t('端口 {0}（当前空闲）').format(p)))
+        # 端口必须落在 1-65535：越界值直接 bind() 会抛 OverflowError（不是 OSError），
+        # 会把整个校验流程带崩，所以先做范围判断。
+        if not 1 <= p <= 65535:
+            items.append((t('端口'), "fail", t('--port 超出合法范围（1-65535）：{0}').format(p)))
         else:
-            items.append((t('端口'), "warn",
-                          t('端口 {0} 当前被占用，启动时会失败（可先释放该端口或改用其他端口）').format(p)))
+            free = True
+            s = None
+            try:
+                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                s.bind(("127.0.0.1", p))
+            except OSError:
+                free = False
+            finally:
+                if s is not None:
+                    s.close()
+            if free:
+                items.append((t('端口'), "ok", t('端口 {0}（当前空闲）').format(p)))
+            else:
+                items.append((t('端口'), "warn",
+                              t('端口 {0} 当前被占用，启动时会失败（可先释放该端口或改用其他端口）').format(p)))
 
     # f. bat 基本语法检查（存在主命令行即可，不做强校验）
     if exe_line:

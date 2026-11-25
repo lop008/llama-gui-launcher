@@ -2,6 +2,23 @@
 
 All notable changes to LLama 启动器 / LLama Launcher.
 
+## [0.5.14] - 2026-11-26
+
+### Fixes
+
+- **Launch-file validator no longer dies on an illegal port** — a script containing `--port 99999` / `--port 0` reached a raw `socket.bind()`, which raises `OverflowError` (not an `OSError`), so "Validate launch file" aborted with an unhandled exception instead of reporting a problem. The port is now range-checked first and reported as `✘ --port out of the valid range (1-65535)`, and the probe socket is guarded so it can neither leak nor raise when it cannot be created. The new message was added to all 7 translation tables, keeping the 8 languages key-aligned (734 keys each).
+- **Data Statistics survives corrupt `stats.json`** — a single malformed entry (a model record that is not an object, or string / `null` / `NaN` field values) used to raise `TypeError` / `AttributeError` when opening the Data Statistics window, and again from the 5-second usage timer while a server was running. Malformed entries are now skipped when reading (the rest of the statistics still work) and are rebuilt into a valid record automatically on the next write; numeric fields are coerced defensively.
+
+### Improvements
+
+- **Silent i18n fallback is now observable** — if a language table fails to load in a packaged build (missing module, syntax error, empty or non-dict table), the UI used to fall back to Simplified Chinese with no trace anywhere. Each table is now loaded individually with the reason written to stderr, and the new `i18n.failed_languages()` returns `{language-code: reason}` for diagnostics or a UI notice.
+
+### Testing
+
+- Added end-to-end suites that really start `llama-server` (with `Qwen3-0.6B-Q8_0`, 0.65 GB) and drive the launcher through: window assembly, model scan, GGUF info, MTP and chat-template detection, 6 themes, tab reordering, port-occupied → port suggestion, config export/import, interface rebuild in all 8 languages; the full OpenAI surface (`/health`, `/props`, `/slots`, `/tokenize`, `/metrics`, `/v1/models`, non-streaming and streaming `/v1/chat/completions`, legacy `/completion`, 4xx on a broken request body); API-key auth (401 without a bearer token, 200 with); Job Object protection plus watchdog cleanup after an external process kill; exported `.bat` files executed for real; HTTPS with a generated self-signed certificate (verified client accepts, strict client rejects) and LAN sharing on `0.0.0.0`; pill tok/s, VRAM and busy-slot readings during live generation; and robustness against broken config / model / stats data and residual processes.
+- The suites run serially from a single development entry point and print a pass matrix, so a full regression is one command.
+- Fixed three stale local test scripts that asserted hardcoded model paths and shard counts (they reported false failures after models were re-downloaded with a different number of shards); shard count is now derived from the filename and fixtures are created in a temp directory.
+
 ## [0.5.13] - 2026-11-08
 
 ### New Features

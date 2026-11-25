@@ -10,16 +10,14 @@ A GUI launcher for llama.cpp local large language models. It turns the whole wor
 
 **[中文文档 / Chinese](README.zh-CN.md)**
 
-> **Latest release: v0.5.13** — a full multilingual interface (8 UI languages + follow-system), plus the v0.5.01 tray hover pill, live tok/s, HTTPS + LAN sharing, richer GGUF metadata and more. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
+> **Latest release: v0.5.14** — a stability release: two crash bugs fixed and a new end-to-end test suite that really starts `llama-server`. Previous highlight: the full multilingual interface (8 UI languages + follow-system) in v0.5.13, plus the tray hover pill, live tok/s, HTTPS + LAN sharing and richer GGUF metadata. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
 
-## What's New in v0.5.13
+## What's New in v0.5.14
 
-1. **Multilingual interface** — new "Language" menu with 8 UI languages: 简体中文 / 繁體中文 / English / 日本語 / 한국어 / Русский / Español / Français.
-2. **Follow system language** — first launch auto-matches your OS language; your manual choice is remembered (`config.json` → `language`).
-3. **Instant switch** — picking a language prompts a restart and the whole UI (menus, buttons, dialogs, tray, validation messages) follows.
-4. **~730 translated strings per language** via a tiny built-in engine (`src/i18n.py` + `src/locales/`); missing entries fall back to Chinese, and all languages ship inside the exe.
-5. **No clipped labels** — buttons use minimum widths so long Russian / French texts display fully.
-6. **Single source of truth for the version** — `__version__` in `src/__init__.py`; the Windows version resource is now generated automatically at build time.
+1. **"Validate launch file" no longer dies on an illegal port** — `--port 99999` / `--port 0` used to abort the check with an unhandled `OverflowError`; you now get a clear `✘ --port out of the valid range (1-65535)`.
+2. **Data Statistics survives a damaged `stats.json`** — one malformed record used to throw when opening the window and again from the 5-second usage timer; bad records are skipped and repaired automatically.
+3. **Silent language-table failures now report why** — a language that fails to load in the packaged exe used to fall back to Chinese with no trace; the reason goes to stderr and is queryable via `i18n.failed_languages()`.
+4. **Full end-to-end coverage** — suites that start a real server and exercise the whole OpenAI surface, API-key auth, watchdog cleanup, exported `.bat` files, HTTPS, LAN sharing and the pill's live tok/s / VRAM readings; ten suites run serially from one command and print a pass matrix.
 
 ## What Problem Does It Solve?
 
@@ -113,8 +111,8 @@ Download from the [Releases](https://github.com/lop008/llama-gui-launcher/releas
 
 | File | Description |
 |------|-------------|
-| `LLama-Launcher-v0.5.13-win-x64.exe` | **Single-file** build (~47 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
-| `LLama-Launcher-v0.5.13-win-x64-portable.zip` | **Portable** build — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
+| `LLama-Launcher-v0.5.14-win-x64.exe` | **Single-file** build (~47 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
+| `LLama-Launcher-v0.5.14-win-x64-portable.zip` | **Portable** build — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
 
 Put `llama-server.exe` and its DLLs in the same directory (or set the launcher path in the UI).
 

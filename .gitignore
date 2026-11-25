@@ -44,14 +44,8 @@ build/
 # 本地统计（含使用记录）
 stats.json
 
-# 本地临时脚本与截图
-_test_*.py
-_layout_screenshot.png
-_probe.tar
-_probe_remote.tar.gz
-_push_probe.py
-_push_commit.py
-_publish_release.ps1
+# 本地临时脚本 / 探针 / 截图 / 发布脚本（根目录下 _ 开头者一律不入库）
+/_*
 
 # 本地模型（体积巨大，切勿上传）
 *.gguf
@@ -66,6 +60,9 @@ LLama*-win-x64-portable.zip
 # 本地笔记 / 开发计划（含敏感凭据，切勿上传）
 后续版本功能开发.txt
 新建 文本文档.txt
+
+# 本地排期表（内部待办，不对外）
+*.xlsx
 
 # 本地视频素材与渲染中间产物（体积大，切勿上传）
 media/

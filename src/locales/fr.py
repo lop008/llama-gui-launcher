@@ -13,6 +13,7 @@ STRINGS = {
 "--mlock：把模型锁定在内存中，防止被系统换出到磁盘。\n占内存更多，但推理更稳定。": "--mlock : verrouille le modèle en mémoire pour empêcher son échange sur disque par le système.\nOccupe plus de mémoire, mais l'inférence est plus stable.",
 "--no-mmap：关闭内存映射加载。\n加载更慢但内存占用更可控，个别磁盘/内存环境可改善稳定性。": "--no-mmap : désactive le chargement par mémoire mappée.\nChargement plus lent mais empreinte mémoire mieux maîtrisée ; peut améliorer la stabilité dans certains environnements disque/mémoire.",
 "--port 值不是合法数字：{0}": "Valeur de --port non numérique : {0}",
+"--port 超出合法范围（1-65535）：{0}": "--port hors de la plage valide (1-65535) : {0}",
 "-1 = 不限制": "-1 = sans limite",
 "-1 = 无限": "-1 = illimité",
 "-1 = 自动": "-1 = automatique",
