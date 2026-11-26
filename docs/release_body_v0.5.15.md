@@ -73,6 +73,7 @@ A GUI launcher for llama.cpp local LLMs. Auto-scan models, visual parameter tuni
 | `LLama-Launcher-v0.5.15-win-x64-portable.zip` | 便携版（x64），解压即用 |
 | `LLama-Launcher-v0.5.15-win-arm64.exe` | 单文件版（ARM64，骁龙笔记本 / Windows on ARM） |
 | `LLama-Launcher-v0.5.15-win-arm64-portable.zip` | 便携版（ARM64），解压即用 |
+| `Arm64.bat` | ARM64 一键启动脚本：与 exe 同目录双击即可，永远优先挑 arm64 包（`一键启动.bat` 优先 x64） |
 | Source code (zip / tar.gz) | 源码 |
 
 > ARM64 用户仍需自行安装 arm64 版 llama.cpp（官方每个版本都发 `-bin-win-cpu-arm64` / `-vulkan-arm64` / `-opencl-adreno-arm64` / `cuda-*-arm64`），更新器现在能直接看到并下载它们。

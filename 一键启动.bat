@@ -6,11 +6,15 @@ rem ==========================================================
 rem 1) Standalone build: run the exe sitting next to this file.
 rem    Wildcard patterns use ASCII, so Chinese build names such
 rem    as LLama(name)-win-x64.exe still match on a cp936 console.
+rem    x64 is tried first on purpose: v0.5.15 ships an arm64 build
+rem    too, and if both sit in one folder an x64 machine must not
+rem    pick the arm64 exe (alphabetically arm64 would come first).
+rem    Arm64.bat is the counterpart that prefers arm64.
 rem ==========================================================
 setlocal enabledelayedexpansion
 set "APP_EXE="
-for %%F in ("%~dp0LLama*Launcher*.exe") do if not defined APP_EXE set "APP_EXE=%%~fF"
-if not defined APP_EXE for %%F in ("%~dp0LLama*win-x64*.exe") do if not defined APP_EXE set "APP_EXE=%%~fF"
+for %%F in ("%~dp0LLama*win-x64*.exe") do if not defined APP_EXE set "APP_EXE=%%~fF"
+if not defined APP_EXE for %%F in ("%~dp0LLama*Launcher*.exe") do if not defined APP_EXE set "APP_EXE=%%~fF"
 if not defined APP_EXE for %%F in ("%~dp0LLama*.exe") do (
     set "N=%%~nxF"
     if /i not "!N:~0,6!"=="llama-" if not defined APP_EXE set "APP_EXE=%%~fF"

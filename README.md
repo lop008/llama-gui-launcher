@@ -117,6 +117,7 @@ Download from the [Releases](https://github.com/lop008/llama-gui-launcher/releas
 | `LLama-Launcher-v0.5.15-win-x64-portable.zip` | **Portable** build (x64) — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
 | `LLama-Launcher-v0.5.15-win-arm64.exe` | **Single-file** build (ARM64) — for Snapdragon laptops / Windows on ARM. |
 | `LLama-Launcher-v0.5.15-win-arm64-portable.zip` | **Portable** build (ARM64) — extract and run. |
+| `Arm64.bat` | **One-click launcher for ARM64** — put it next to the exe and double-click; it always picks the arm64 build even if an x64 exe sits in the same folder (`一键启动.bat` is the x64 counterpart and prefers x64). |
 
 Put `llama-server.exe` and its DLLs in the same directory (or set the launcher path in the UI).
 

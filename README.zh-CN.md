@@ -118,6 +118,7 @@ python main.py
 | `LLama-Launcher-v0.5.15-win-x64-portable.zip` | **便携版**（x64），解压后运行 `LLama启动器-win-x64-portable.exe`，启动更快、无需自解压。 |
 | `LLama-Launcher-v0.5.15-win-arm64.exe` | **单文件版**（ARM64），适用于骁龙笔记本 / Windows on ARM 设备。 |
 | `LLama-Launcher-v0.5.15-win-arm64-portable.zip` | **便携版**（ARM64），解压即用。 |
+| `Arm64.bat` | **ARM64 一键启动脚本**：与 exe 放同一目录后双击，永远优先挑 arm64 包（同目录混放了 x64 也不会拿错；仓库自带的 `一键启动.bat` 对应 x64，优先 x64）。 |
 
 将 `llama-server.exe` 及配套 DLL 放到同一目录（或在界面中指定启动器路径）。
 

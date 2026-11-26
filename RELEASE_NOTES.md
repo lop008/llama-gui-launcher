@@ -39,6 +39,7 @@ A feature release: speculative decoding becomes a first-class part of the interf
 | `LLama-Launcher-v0.5.15-win-x64-portable.zip` | Portable build (x64) — extract and run |
 | `LLama-Launcher-v0.5.15-win-arm64.exe` | Single-file build (ARM64, Snapdragon / Windows on ARM) |
 | `LLama-Launcher-v0.5.15-win-arm64-portable.zip` | Portable build (ARM64) — extract and run |
+| `Arm64.bat` | One-click launcher for ARM64 — put it next to the exe, it always starts the arm64 build |
 
 ## 中文
 
@@ -73,6 +74,7 @@ A feature release: speculative decoding becomes a first-class part of the interf
 | `LLama-Launcher-v0.5.15-win-x64-portable.zip` | 便携版（x64），解压即用 |
 | `LLama-Launcher-v0.5.15-win-arm64.exe` | 单文件版（ARM64，骁龙本 / Windows on ARM） |
 | `LLama-Launcher-v0.5.15-win-arm64-portable.zip` | 便携版（ARM64），解压即用 |
+| `Arm64.bat` | ARM64 一键启动脚本，与 exe 同目录双击即可（永远优先挑 arm64 包） |
 
 ---
 
