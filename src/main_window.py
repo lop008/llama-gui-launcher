@@ -6,14 +6,13 @@ import time
 import webbrowser
 from collections import Counter
 
-from PyQt6.QtCore import QEvent, QPoint, QThread, Qt, QTimer, pyqtSignal
+from PyQt6.QtCore import QEvent, QPoint, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import QAction, QActionGroup, QCloseEvent, QColor, QFont, QIcon, QPainter, QPixmap
 from PyQt6.QtWidgets import (
-    QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog,
-    QGroupBox, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
-    QMessageBox, QPlainTextEdit, QPushButton, QSizePolicy, QSpinBox,
-    QSystemTrayIcon, QTabWidget, QTableWidget, QTableWidgetItem,
-    QTextEdit, QToolButton, QVBoxLayout, QWidget, QMenu,
+    QAbstractSpinBox, QApplication, QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QGridLayout,
+    QGroupBox, QHBoxLayout, QLabel, QLineEdit, QMainWindow, QMenu, QMessageBox, QPlainTextEdit,
+    QPushButton, QSpinBox, QSystemTrayIcon, QTabWidget, QTableWidget, QTableWidgetItem, QTextEdit,
+    QVBoxLayout, QWidget,
 )
 
 from . import __version__
@@ -28,7 +27,6 @@ from .gguf_reader import (classify_gguf, detect_chat_features, detect_mtp,
                           format_gguf_info, read_gguf_info)
 from . import hf_info
 from .hf_download_tab import HFDownloadTab
-from .llama_updater import get_local_version
 from .model_scanner import (ROLE_DRAFT, ROLE_IMATRIX, ROLE_MMPROJ, ROLE_MODEL,
                             find_mmproj_for, human_size, role_label, scan_models,
                             sort_models)
@@ -45,6 +43,8 @@ from .updater_tab import UpdaterTab
 from .usage_stats import StatsStore, parse_log_line
 from .i18n import LANGUAGES, t
 from . import i18n
+from .ui.widgets import CollapsibleBox, _AspectImageLabel
+from .ui.workers import _LlamaVersionWorker
 
 try:
     from . import tools as tools_mod
@@ -55,105 +55,14 @@ except Exception:
 
 
 # 主题/配色方案已抽离到 src/themes.py，切换主题不改变布局尺寸。
-class CollapsibleBox(QWidget):
-    toggled = pyqtSignal(bool)
-
-    def __init__(self, title="", parent=None):
-        super().__init__(parent)
-        self._toggle = QToolButton(text=title, checkable=True, checked=True)
-        self._toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self._toggle.setArrowType(Qt.ArrowType.DownArrow)
-        self._toggle.setStyleSheet("QToolButton { border: none; }")
-        _f = self._toggle.font()
-        _f.setPointSize(_f.pointSize() + 3)   # 分组标题加粗加大（基本参数/多显卡/高级参数）
-        _f.setBold(True)
-        self._toggle.setFont(_f)
-        self._toggle.clicked.connect(self._on_toggle)
-        self._content = QWidget()
-        self._content_layout = QVBoxLayout(self._content)
-        self._content_layout.setContentsMargins(4, 4, 4, 4)
-        outer = QVBoxLayout(self)
-        outer.setContentsMargins(0, 0, 0, 0)
-        outer.setSpacing(0)
-        outer.addWidget(self._toggle)
-        outer.addWidget(self._content)
-
-    def _on_toggle(self, checked):
-        self._content.setVisible(checked)
-        self._toggle.setArrowType(Qt.ArrowType.DownArrow if checked else Qt.ArrowType.RightArrow)
-        self.toggled.emit(checked)
-
-    def layout(self):
-        return self._content_layout
-
-    def set_collapsed(self, collapsed):
-        self._toggle.setChecked(not collapsed)
-        self._content.setVisible(not collapsed)
-        self._toggle.setArrowType(Qt.ArrowType.RightArrow if collapsed else Qt.ArrowType.DownArrow)
 
 
 CREATE_NO_WINDOW = 0x08000000
 
 
-class _AspectImageLabel(QLabel):
-    """按宽度等比缩放图片的标签：横向铺满可用宽度，纵向保持原始宽高比（不拉伸变形）。"""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self._src = None
-        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sp = self.sizePolicy()
-        sp.setHorizontalPolicy(QSizePolicy.Policy.Expanding)
-        sp.setVerticalPolicy(QSizePolicy.Policy.Fixed)
-        sp.setHeightForWidth(True)
-        self.setSizePolicy(sp)
-
-    def hasHeightForWidth(self):
-        return True
-
-    def heightForWidth(self, w):
-        if self._src is not None and not self._src.isNull() and self._src.width() > 0:
-            return max(1, int(round(w * self._src.height() / self._src.width())))
-        return super().heightForWidth(w)
-
-    def set_source_pixmap(self, pm):
-        self._src = pm
-        self._rescale()
-
-    def resizeEvent(self, ev):
-        super().resizeEvent(ev)
-        self._rescale()
-
-    def _rescale(self):
-        if self._src is None or self._src.isNull():
-            return
-        w = self.width()
-        if w <= 0:
-            return
-        scaled = self._src.scaledToWidth(w, Qt.TransformationMode.SmoothTransformation)
-        super().setPixmap(scaled)
 
 
 
-class _LlamaVersionWorker(QThread):
-    """后台运行 llama-server --version，避免阻塞 UI。"""
-    done = pyqtSignal(str)
-
-    def __init__(self, exe_path, parent=None):
-        super().__init__(parent)
-        self._exe = exe_path
-        self.probe_pid = None   # 正在运行的 --version 探测进程 PID（残留检测需排除）
-
-    def run(self):
-        def _record(pid):
-            self.probe_pid = pid
-        try:
-            ver = get_local_version(self._exe, pid_cb=_record)
-        except Exception:
-            ver = ""
-        finally:
-            self.probe_pid = None
-        self.done.emit(ver)
 
 
 class MainWindow(QMainWindow):
