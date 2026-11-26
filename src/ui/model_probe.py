@@ -1,19 +1,28 @@
 # -*- coding: utf-8 -*-
-"""模型目录列表与能力检测：MTP / 对话模板 / 视觉投影配对 / 模型信息与 HF 查询。"""
+"""模型目录列表与能力检测：投机解码（MTP/DFlash/n-gram）/ 对话模板 / 视觉投影配对 / 模型信息 / HF 查询。"""
 
 import os
+import re
 import threading
 
 from collections import Counter
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QMessageBox
+from PyQt6.QtWidgets import (
+    QAbstractItemView, QDialog, QHBoxLayout, QHeaderView, QLabel, QMessageBox, QPushButton,
+    QTableWidget, QTableWidgetItem, QVBoxLayout,
+)
 from .. import hf_info
-from ..gguf_reader import classify_gguf, detect_chat_features, detect_mtp, format_gguf_info, read_gguf_info
+from ..gguf_reader import classify_gguf, detect_chat_features, format_gguf_info, read_gguf_info
 from ..i18n import t
 from ..model_scanner import (
-    ROLE_DRAFT, ROLE_IMATRIX, ROLE_MMPROJ, ROLE_MODEL, find_mmproj_for, human_size, role_label,
-    scan_models, sort_models,
+    ROLE_DRAFT, ROLE_IMATRIX, ROLE_MMPROJ, ROLE_MODEL, drafts_for, find_mmproj_for, human_size,
+    role_label, scan_models, sort_models,
 )
+from ..spec_decode import (
+    SPEC_CLI, SPEC_IDS, ST_NEED_DRAFT, ST_NO, ST_NO_ENGINE, ST_OK, draft_matches_model,
+    engine_spec_types, model_spec_support, pick_auto, spec_label,
+)
+from .widgets import SpecOrderDialog
 
 
 CREATE_NO_WINDOW = 0x08000000
@@ -209,64 +218,265 @@ class ModelProbeMixin:
         self._detect_mtp_async(path)
         # 功能 8：后台检测该模型的对话模板能力（Jinja / 思考强度）
         self._detect_chat_async(path)
-    # ---------------------------------------------------------- MTP（功能 4）
+    # ---------------------------------------------------------- 投机解码（v0.5.15）
 
-    def _mtp_status_label(self, text, color="#8fd0ff"):
-        """MTP 状态提示：颜色标识 + 下划线（富文本），绿=可启用，橙=不支持/无法检测。"""
-        if hasattr(self, "label_mtp_status"):
-            self.label_mtp_status.setText(
+    def _spec_status(self, text, color="#8fd0ff"):
+        """投机解码状态提示：颜色 + 下划线（富文本），与对话模板那行同一套视觉。"""
+        if hasattr(self, "label_spec_status"):
+            self.label_spec_status.setText(
                 f'<span style="color:{color};"><u>{text}</u></span>')
 
-    def _detect_mtp_async(self, path):
-        """后台扫描 GGUF 张量名，检测 MTP 支持并更新开关状态。"""
-        if not path or not hasattr(self, "check_mtp"):
+    def _spec_cache_map(self):
+        if getattr(self, "_spec_cache", None) is None:
+            self._spec_cache = {}
+        return self._spec_cache
+
+    def _spec_order(self):
+        """「自动」的优先级顺序 = 用户在下拉里拖出来的顺序；没列出的补在后面。"""
+        out = []
+        for sid in (self.cfg.data.get("spec_order") or []):
+            sid = str(sid)
+            if sid in SPEC_CLI and sid not in out:
+                out.append(sid)
+        return out + [s for s in SPEC_IDS if s not in out]
+
+    def _drafts_for_path(self, path):
+        """同目录、与该主模型命名配套的草稿头（按配套度+类型优先级排好序）。"""
+        if not path:
+            return []
+        info = next((m for m in (getattr(self, "_models", []) or [])
+                     if getattr(m, "path", None) == path), None)
+        return drafts_for(info, getattr(self, "_aux", []) or []) if info else []
+
+    def _rebuild_spec_combo(self):
+        """填「投机解码」下拉：不启用 / 自动 + 各方式（顺序 = 自动优先级）。"""
+        if not hasattr(self, "combo_spec"):
             return
-        if self._mtp_cache.get(path) is None:
-            self._mtp_status_label(t('MTP 检测中…'))
+        want = self.combo_spec.currentData() or self._spec_mode()
+        self.combo_spec.blockSignals(True)
+        self.combo_spec.clear()
+        self.combo_spec.addItem(t('不启用'), "off")
+        self.combo_spec.addItem(t('自动（推荐）'), "auto")
+        for sid in self._spec_order():
+            self.combo_spec.addItem(spec_label(sid) or sid, sid)
+        idx = self.combo_spec.findData(want)
+        self.combo_spec.setCurrentIndex(idx if idx >= 0 else 1)
+        self.combo_spec.blockSignals(False)
 
-            def work():
-                try:
-                    ok, hits = detect_mtp(path)
-                except Exception:
-                    ok, hits = None, []
-                self._mtp_cache[path] = (ok, hits)
-                try:
-                    self.mtp_detected.emit()
-                except RuntimeError:
-                    pass
+    def _spec_mode(self):
+        """配置里的模式；老配置已由 config._migrate 把 mtp 勾选迁成 spec_mode。"""
+        mode = str(self.cfg.data.get("server", {}).get("spec_mode") or "off")
+        return mode if mode in ("off", "auto") or mode in SPEC_CLI else "off"
 
-            threading.Thread(target=work, daemon=True).start()
+    def _save_spec_order(self, ids):
+        """保存「自动」的优先级顺序并让界面同步。"""
+        self.cfg.data["spec_order"] = list(ids)
+        self.cfg.save()
+        self._rebuild_spec_combo()
+        self._update_spec_ui()
+        self._status_tip(t('「自动」的优先级已保存'), 4000)
+
+    def _edit_spec_order(self):
+        """「排序」按钮：在弹窗里拖动或用 ▲▼ 调整「自动」的优先级。"""
+        order = self._spec_order()
+        rows = [(spec_label(sid) or sid, sid) for sid in order]
+        dlg = SpecOrderDialog(self, rows, current_order=order, default_order=list(SPEC_IDS))
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        new = dlg.ordered_values()
+        if new and new != order:
+            self._save_spec_order(new)
+
+    def _spec_item_tip(self, sid, r):
+        """下拉里每一项的悬停说明（含可用状态与原因）。"""
+        if sid == "off":
+            return t('不下发 --spec-type，纯自回归生成。')
+        if sid == "auto":
+            return t('按你在本下拉里的顺序（按住条目上下拖动即可改），挑第一个当前可用的方式。')
+        if r is None:
+            return ""
+        mark = {ST_OK: '✔', ST_NEED_DRAFT: '⚠', ST_NO_ENGINE: '✖', ST_NO: '—'}.get(r["state"], "")
+        line = " ".join(x for x in (mark, r["label"], r["reason"]) if x)
+        if r.get("draft"):
+            line += "\n" + t('草稿文件: {0}').format(r["draft"])
+        return line
+
+    def _spec_status_text(self, mode, by_id):
+        """状态标签文案与颜色：绿=可用，橙=缺草稿/没检测到，红=本机不支持。"""
+        if mode in (None, "off"):
+            return t('未启用（选「自动」通常能白捡一段加速）'), "#8a8a8a"
+        if mode == "auto":
+            sid, _cli, _draft = pick_auto(self._spec_rows(), self._spec_order())
+            if not sid:
+                return t('当前模型没有可用的投机方式（可下载草稿，或改用 n-gram）'), "#ff9f6a"
+            row = {r["id"]: r for r in self._spec_rows()}.get(sid) or {}
+            return t('自动 → {0}：{1}').format(spec_label(sid) or sid,
+                                               row.get("reason", "")), "#7dffa8"
+        r = by_id.get(mode)
+        if r is None:
+            return t('检测中…'), "#8fd0ff"
+        label = r["label"] or spec_label(mode)
+        color = {ST_OK: "#7dffa8", ST_NEED_DRAFT: "#ff9f6a",
+                 ST_NO_ENGINE: "#ff6a6a", ST_NO: "#ff9f6a"}.get(r["state"], "#8fd0ff")
+        mark = {ST_OK: '✔', ST_NEED_DRAFT: '⚠', ST_NO_ENGINE: '✖', ST_NO: '—'}.get(r["state"], "")
+        return t('{0} {1}：{2}').format(mark, label, r["reason"]), color
+
+    def _rebuild_draft_combo(self, mode):
+        """草稿下拉：只列与该方式对应、且与主模型同目录的草稿文件。"""
+        if not hasattr(self, "combo_draft"):
+            return
+        sid = mode if mode in SPEC_CLI else None
+        needs = bool(sid) and SPEC_CLI[sid][1]
+        model_path = self.combo_model.currentData() if hasattr(self, "combo_model") else None
+        cur = self.combo_draft.currentData()
+        self.combo_draft.blockSignals(True)
+        self.combo_draft.clear()
+        if mode in (None, "off", "auto"):
+            self.combo_draft.addItem(t('（由所选方式决定）'), None)
+        elif not needs:
+            self.combo_draft.addItem(t('（无需草稿文件）'), None)
         else:
-            self._apply_mtp_result(path)
+            items = []
+            for d in self._drafts_for_path(model_path):
+                if (d.kind or "") not in (sid, ""):
+                    continue
+                warn = ""
+                try:
+                    ok_match, why = draft_matches_model(d.path, model_path)
+                    if not ok_match:
+                        warn = " " + t('（{0}）').format(why)
+                except Exception:
+                    pass
+                items.append((f"{d.name}  ({human_size(d.size)}){warn}", d.path))
+            if sid == "simple":
+                # 「小模型草稿」是拿一个正常的小模型当草稿（例如给 27B 配 0.6B），
+                # 这种文件本身是真模型、不会被归类成草稿头，所以把更小的模型也列出来。
+                main_size = next((m.size for m in (getattr(self, "_models", []) or [])
+                                  if getattr(m, "path", None) == model_path), 0)
+                small = sorted((m for m in (getattr(self, "_models", []) or [])
+                                if getattr(m, "path", None) != model_path
+                                and main_size and m.size and m.size < main_size / 4),
+                               key=lambda m: m.size)
+                for m in small[:12]:
+                    items.append((f"{m.name}  ({human_size(m.size)})", m.path))
+            for label, path in items:
+                self.combo_draft.addItem(label, path)
+                self.combo_draft.setItemData(self.combo_draft.count() - 1, path,
+                                             Qt.ItemDataRole.ToolTipRole)
+            if items:
+                self.combo_draft.insertItem(0, t('（自动配对）'), None)
+            else:
+                self.combo_draft.addItem(t('（未找到配套草稿，可点「下载草稿」）'), None)
+        idx = self.combo_draft.findData(cur)
+        self.combo_draft.setCurrentIndex(idx if idx >= 0 else 0)
+        self.combo_draft.blockSignals(False)
+
+    def _update_spec_ui(self):
+        """按「下拉选择 + 检测结果」刷新：每项置灰与说明、状态标签、草稿下拉、长度框。"""
+        if not hasattr(self, "combo_spec"):
+            return
+        rows = self._spec_rows()
+        by_id = {r["id"]: r for r in rows}
+        self.combo_spec.blockSignals(True)
+        for i in range(self.combo_spec.count()):
+            sid = self.combo_spec.itemData(i)
+            r = by_id.get(sid)
+            self.combo_spec.setItemData(i, self._spec_item_tip(sid, r), Qt.ItemDataRole.ToolTipRole)
+            it = self.combo_spec.model().item(i)
+            if it is None:
+                continue
+            flags = it.flags()
+            # 本机 llama-server 不认这种方式 → 置灰（更新 llama.cpp 后即可用）
+            it.setFlags(flags & ~Qt.ItemFlag.ItemIsEnabled if r is not None
+                        and r["state"] == ST_NO_ENGINE else flags | Qt.ItemFlag.ItemIsEnabled)
+        self.combo_spec.blockSignals(False)
+
+        mode = self.combo_spec.currentData() or "off"
+        self._rebuild_draft_combo(mode)
+        self._spec_status(*self._spec_status_text(mode, by_id))
+        sid = mode if mode in SPEC_CLI else None
+        needs = bool(sid) and SPEC_CLI[sid][1]
+        self.combo_draft.setEnabled(bool(needs))
+        self.btn_spec_download.setEnabled(bool(needs))
+        # --spec-draft-n-max 只对「有草稿」的方式有意义，n-gram 用不上
+        self.spin_spec_n.setEnabled(bool(sid) and not str(sid).startswith("ngram"))
+
+    def _spec_rows(self):
+        """当前模型的各方式支持表（检测结果缓存；没检测完返回空表）。"""
+        path = self.combo_model.currentData() if hasattr(self, "combo_model") else None
+        return self._spec_cache_map().get(path) or [] if path else []
+
+    def _detect_mtp_async(self, path):
+        """后台一次算完三件事：本机认哪些 --spec-type、这模型能用哪几种、草稿配没配。
+
+        要读 GGUF 文件头并跑一次 llama-server --help，放线程里做；完成后经
+        mtp_detected 信号回主线程刷新（信号名沿用 MTP 时期，现代表「投机解码检测完成」）。
+        """
+        if not path or not hasattr(self, "combo_spec"):
+            return
+        cache = self._spec_cache_map()
+        if cache.get(path) is not None:
+            self._update_spec_ui()
+            return
+        self._spec_status(t('投机解码检测中…'), "#8fd0ff")
+        drafts = self._drafts_for_path(path)        # 主线程取好，避免后台读列表竞态
+        exe = self._launcher_exe()
+
+        def work():
+            try:
+                rows = model_spec_support(path, drafts, engine_spec_types(exe))
+            except Exception:
+                rows = []
+            cache[path] = rows
+            try:
+                self.mtp_detected.emit()
+            except RuntimeError:
+                pass
+
+        threading.Thread(target=work, daemon=True).start()
 
     def _on_mtp_detected(self):
         try:
-            path = self.combo_model.currentData()
-            if path and path in self._mtp_cache:
-                self._apply_mtp_result(path)
+            if self.combo_model.currentData() in self._spec_cache_map():
+                self._update_spec_ui()
         except Exception:
             pass  # 槽函数内异常不外抛
 
-    def _apply_mtp_result(self, path):
-        ok, hits = self._mtp_cache.get(path, (None, []))
-        if not hasattr(self, "check_mtp"):
+    def _on_spec_changed(self):
+        if getattr(self, "_loading", False):
             return
-        if ok is None:
-            # 无法检测：保持可用，允许用户手动决定
-            self._mtp_status_label(t('MTP 无法检测（文件不可读），可手动勾选'), "#ff9f6a")
-            self.check_mtp.setEnabled(True)
+        self._update_spec_ui()
+
+    def _on_draft_changed(self):
+        if getattr(self, "_loading", False):
             return
-        if ok:
-            # 支持 MTP：开放点选
-            self._mtp_status_label(t('✔ 检测到 MTP（{0} 个特征），可启用').format(len(hits)), "#7dffa8")
-            self.check_mtp.setEnabled(True)
+        self.update_preview()
+
+    def _spec_resolve(self):
+        """把界面选择解析成命令行参数：(spec_mode, spec_cli, spec_draft, spec_draft_n)。
+
+        spec_cli 为空 = 不下发 --spec-type：包括「不启用」，以及「自动」但当前模型
+        一种可用方式都没有的情况（此时照常启动，只在状态栏提示，不弹窗拦人）。
+        """
+        mode = (self.combo_spec.currentData() or "off") if hasattr(self, "combo_spec") else "off"
+        n = self.spin_spec_n.value() if hasattr(self, "spin_spec_n") else 0
+        if mode in (None, "off"):
+            return "off", "", "", 0
+        by_id = {r["id"]: r for r in self._spec_rows()}
+        if mode == "auto":
+            sid, cli, draft = pick_auto(self._spec_rows(), self._spec_order())
+            if not sid:
+                return "auto", "", "", 0
         else:
-            # 未检测到 MTP：给出提示但不强制禁用，避免误判导致支持 MTP 的模型无法启用
-            self._mtp_status_label(t('未检测到 MTP 张量，如确认支持可手动勾选'), "#ff9f6a")
-            self._loading = True
-            self.check_mtp.setChecked(False)
-            self.check_mtp.setEnabled(True)
-            self._loading = False
+            r = by_id.get(mode)
+            sid, cli, draft = mode, (r["cli"] if r else ""), (r.get("draft") if r else None)
+        if sid not in SPEC_CLI:
+            return mode, "", "", 0
+        manual = self.combo_draft.currentData() if hasattr(self, "combo_draft") else None
+        draft = manual or draft or ""
+        if SPEC_CLI[sid][1] and not (draft and os.path.isfile(draft)):
+            return mode, "", "", 0        # 缺草稿：宁可不加速，也不让服务起不来
+        return mode, cli, draft, int(n or 0)
     # ---------------------------------------------------------- 对话模板（功能 8）
 
     def _chat_status_label(self, text, color="#8fd0ff"):
@@ -398,6 +608,114 @@ class ModelProbeMixin:
         else:
             self.label_mmproj_warn.setText("")
             self.label_mmproj_warn.setToolTip("")
+
+    # ---------------------------------------------------------- 辅助文件清单
+    def _update_aux_summary(self):
+        """模型区下方那行「辅助文件: …（查看）」的文案。"""
+        if not hasattr(self, "btn_aux"):
+            return
+        mm, dr, im = self._aux_summary()
+        parts = []
+        if mm:
+            parts.append(f"{role_label(ROLE_MMPROJ)} {mm}")
+        if dr:
+            parts.append(f"{role_label(ROLE_DRAFT)} {dr}")
+        if im:
+            parts.append(f"{role_label(ROLE_IMATRIX)} {im}")
+        self.btn_aux.setText(t('辅助文件: 无') if not parts
+                             else t('辅助文件: {0}（查看）').format(" · ".join(parts)))
+
+    def _show_aux_files(self):
+        """辅助文件清单：类型 / 文件名 / 大小 / 所在目录（给哪个主模型用）。"""
+        aux = sorted(getattr(self, "_aux", []) or [], key=lambda a: (a.role, a.dir, a.name))
+        if not aux:
+            QMessageBox.information(self, t('辅助文件'), t('当前模型目录下没有辅助文件。'))
+            return
+        by_dir = {}
+        for m in getattr(self, "_models", []) or []:
+            by_dir.setdefault(m.dir, []).append(m.name)
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle(t('辅助文件（{0} 个）').format(len(aux)))
+        dlg.resize(1000, 520)
+        lay = QVBoxLayout(dlg)
+        tip = QLabel(t('这些文件不是独立模型，所以不出现在主模型列表里：'
+                       '视觉投影负责看图，投机草稿头用于加速，量化标定文件只在制作量化模型时用。'))
+        tip.setWordWrap(True)
+        lay.addWidget(tip)
+
+        table = QTableWidget(len(aux), 4)
+        table.setHorizontalHeaderLabels(
+            [t('类型'), t('文件名'), t('大小'), t('所在目录（对应主模型）')])
+        table.verticalHeader().setVisible(False)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        head = table.horizontalHeader()
+        head.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        head.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        table.setColumnWidth(0, 160)
+        table.setColumnWidth(2, 90)
+        for row, a in enumerate(aux):
+            names = by_dir.get(a.dir) or []
+            who = "、".join(names[:2]) + ("…" if len(names) > 2 else "") or t('（同目录没有主模型）')
+            cells = (role_label(a.role, a.kind), a.name, human_size(a.size),
+                     f"{a.dir}  [{who}]" if names else a.dir)
+            for col, text in enumerate(cells):
+                it = QTableWidgetItem(text)
+                it.setData(Qt.ItemDataRole.UserRole, a.path)
+                it.setToolTip(a.path)
+                table.setItem(row, col, it)
+        table.setCurrentCell(0, 0)
+
+        btns = QHBoxLayout()
+        btns.addStretch(1)
+        open_btn = QPushButton(t('打开所在目录'))
+
+        def open_dir():
+            it = table.currentItem()
+            path = it.data(Qt.ItemDataRole.UserRole) if it is not None else ""
+            d = os.path.dirname(str(path or ""))
+            if d and os.path.isdir(d):
+                os.startfile(d)  # noqa: S606
+            else:
+                QMessageBox.information(self, t('提示'), t('目录无效'))
+
+        open_btn.clicked.connect(open_dir)
+        close_btn = QPushButton(t('关闭'))
+        close_btn.clicked.connect(dlg.accept)
+        btns.addWidget(open_btn)
+        btns.addWidget(close_btn)
+        lay.addLayout(btns)
+        dlg.exec()
+
+    def _download_spec_draft(self):
+        """「下载草稿」：切到「模型下载」页，按当前模型预填检索条件。
+
+        草稿头基本与主模型同名（官方 GGUF 仓库里的 MTP/、DFLASH/ 目录，或独立的
+        草稿仓库），所以用 GGUF 元数据里的基础模型名去搜最准；下载页自己按下载量排序，
+        官方仓库会排在前面。
+        """
+        model = self.combo_model.currentData() if hasattr(self, "combo_model") else None
+        if not model:
+            QMessageBox.information(self, t('提示'), t('请先选择模型'))
+            return
+        query = ""
+        try:
+            info = read_gguf_info(model) or {}
+            query = info.get("base_model_name") or info.get("general.name") or ""
+        except Exception:
+            query = ""
+        if not query:
+            query = re.sub(r"\.gguf$", "", os.path.basename(model), flags=re.IGNORECASE)
+        tab = getattr(self, "download_tab", None)
+        if tab is None:
+            return
+        tab.edit_name.setText(query)
+        tab.edit_kw.setText("GGUF")
+        self.tabs.setCurrentWidget(tab)
+        self._status_tip(t('已在「模型下载」页按 {0} 预填检索，选带 MTP/DFlash 等目录的仓库').format(query),
+                         6000)
 
     def _load_model_info(self, path):
         def work():

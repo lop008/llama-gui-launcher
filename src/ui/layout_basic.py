@@ -4,7 +4,7 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import (
     QCheckBox, QComboBox, QDoubleSpinBox, QGridLayout, QGroupBox, QHBoxLayout, QLabel, QLineEdit,
-    QPushButton, QSpinBox, QWidget,
+    QPushButton, QSpinBox, QVBoxLayout, QWidget,
 )
 from ..cmd_builder import KV_CACHE_TYPES, SPLIT_MODES
 from ..i18n import t
@@ -122,7 +122,90 @@ class LayoutBasicMixin:
         mrow.addWidget(QLabel(t('排序:')))
         mrow.addWidget(self.combo_sort, 1)
         mrow.addWidget(self.label_mmproj_warn, 2)
-        grid.addWidget(model_row, 1, 0, 1, 9)
+
+        # ---- v0.5.15：投机解码（方式 + 「自动」优先级 + 草稿 + 长度）+ 辅助文件摘要 ----
+        self.combo_spec = QComboBox()
+        self.combo_spec.setMinimumWidth(150)
+        self.combo_spec.setToolTip(
+            t('投机解码：先由草稿「猜」出若干 token，再交给主模型一次性验证，猜中即加速，输出结果不变。\n'
+              '· 自动 = 按「排序」里设定的顺序，挑第一个当前可用的方式；\n'
+              '· 不启用 = 不下发 --spec-type；\n'
+              '· MTP = 用模型自带的 MTP 头，不需要额外文件；\n'
+              '· DFlash / DSpark / LiliCorr / EAGLE-3 / 小模型草稿 = 需要下载对应的草稿模型；\n'
+              '· n-gram 系列 = 不需要任何草稿文件，遇到重复片段时加速，几乎所有模型都能用。\n'
+              '灰色条目 = 本机 llama-server 不认这种方式，更新 llama.cpp 后可用。'))
+        self.label_spec_status = QLabel("")
+        self.label_spec_status.setStyleSheet("color: #8fd0ff;")
+        self.label_spec_status.setToolTip(
+            t('当前投机方式的状态：绿色=可用，橙色=缺草稿文件或没检测到，红色=本机 llama.cpp 不支持。悬停看具体原因。'))
+        self.combo_draft = QComboBox()
+        self.combo_draft.setMinimumWidth(200)
+        self.combo_draft.setToolTip(
+            t('草稿模型文件。默认「（自动配对）」= 使用与主模型同一目录、命名配套的草稿头；\n'
+              '需要草稿的方式找不到配套文件时会提示下载。悬停可查看完整路径。'))
+        self.btn_spec_download = QPushButton(t('下载草稿'))
+        self.btn_spec_download.setToolTip(
+            t('在 HuggingFace 上找与当前模型配套的草稿模型：官方 GGUF 仓库优先（可直接下载）；\n'
+              '第三方仓库需要自己转换格式，列表里会标注说明。'))
+        self.spin_spec_n = QSpinBox()
+        self.spin_spec_n.setRange(0, 32)
+        self.spin_spec_n.setValue(0)
+        self.spin_spec_n.setSpecialValueText(t('引擎默认(3)'))
+        self.spin_spec_n.setToolTip(
+            t('--spec-draft-n-max：一次让草稿猜多少个 token 再交给主模型验证（引擎默认 3）。\n'
+              '不是越大越快：猜错的部分要回退重算，显存也会多占一些。0 = 不传该参数，用引擎默认。'))
+
+        self.btn_spec_order = QPushButton(t('排序'))
+        self.btn_spec_order.setToolTip(
+            t('调整「自动」的优先级：排在上面的方式先尝试。\n'
+              '也可以直接在这个下拉里按住条目上下拖动，两种改法效果一样。'))
+
+        spec_row = QWidget()
+        sp_row = QHBoxLayout(spec_row)
+        sp_row.setContentsMargins(0, 0, 0, 0)
+        sp_row.setSpacing(6)
+        sp_row.addWidget(QLabel(t('投机解码:')))
+        sp_row.addWidget(self.combo_spec, 3)
+        sp_row.addWidget(self.btn_spec_order)
+        sp_row.addWidget(self.label_spec_status, 5)
+        sp_row.addWidget(QLabel(t('草稿模型:')))
+        sp_row.addWidget(self.combo_draft, 4)
+        sp_row.addWidget(self.btn_spec_download)
+        sp_row.addWidget(QLabel(t('草稿长度:')))
+        sp_row.addWidget(self.spin_spec_n)
+
+        self.btn_aux = QPushButton("")
+        self.btn_aux.setFlat(True)
+        self.btn_aux.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_aux.setStyleSheet("border: none; text-align: left; color: #8a8a8a;")
+        self.btn_aux.setToolTip(
+            t('这些文件不是独立模型，所以不出现在主模型列表里：\n'
+              '· 视觉投影（mmproj）= 负责把图片编码成模型能读懂的向量；\n'
+              '· 投机草稿头 = MTP / DFlash / DSpark 等加速用的小文件；\n'
+              '· 量化标定文件（imatrix）= 制作量化模型时用，运行不需要。\n'
+              '点击查看清单、所在目录与它对应的主模型。'))
+        self.label_spec_hint = QLabel(t('（点「排序」或在下拉里上下拖动条目 = 调整「自动」的优先级）'))
+        self.label_spec_hint.setStyleSheet("color: #8a8a8a;")
+
+        aux_row = QWidget()
+        ax_row = QHBoxLayout(aux_row)
+        ax_row.setContentsMargins(0, 0, 0, 0)
+        ax_row.setSpacing(6)
+        ax_row.addWidget(self.btn_aux)
+        ax_row.addWidget(self.label_spec_hint)
+        ax_row.addStretch(1)
+
+        # 三行合成一块，仍然占网格第 1 行：下面的监听地址/端口等行号全部不用动
+        model_block = QWidget()
+        mb_lay = QVBoxLayout(model_block)
+        mb_lay.setContentsMargins(0, 0, 0, 0)
+        mb_lay.setSpacing(4)
+        mb_lay.addWidget(model_row)
+        mb_lay.addWidget(spec_row)
+        mb_lay.addWidget(aux_row)
+        grid.addWidget(model_block, 1, 0, 1, 9)
+        self._rebuild_spec_combo()
+        self._update_aux_summary()
 
         grid.addWidget(QLabel(t('监听地址:')), 2, 0)
         self.edit_host = QLineEdit()
@@ -228,7 +311,7 @@ class LayoutBasicMixin:
         self.check_browser.setToolTip(t('服务就绪后自动用默认浏览器打开 Web 界面。'))
         grid.addWidget(self.check_browser, 0, 6, 1, 2)
 
-        # ---- 功能 6/7：连续批处理 / mlock / mmap / MTP + MTP 说明压缩到同一行 ----
+        # ---- 功能 6/7：连续批处理 / mlock / mmap（MTP 已升级为「投机解码」，见基础页模型区）----
         self.check_cont = QCheckBox(t('连续批处理'))
         self.check_cont.setChecked(True)
         self.check_cont.setToolTip(
@@ -237,17 +320,9 @@ class LayoutBasicMixin:
         self.check_mlock.setToolTip(t('--mlock：把模型锁定在内存中，防止被系统换出到磁盘。\n占内存更多，但推理更稳定。'))
         self.check_mmap = QCheckBox(t('禁用 mmap'))
         self.check_mmap.setToolTip(t('--no-mmap：关闭内存映射加载。\n加载更慢但内存占用更可控，个别磁盘/内存环境可改善稳定性。'))
-        self.check_mtp = QCheckBox(t('启用 MTP'))
-        self.check_mtp.setToolTip(
-            t('MTP（Multi-Token Prediction）：让模型自带的 MTP 头参与投机解码，可显著提升生成速度（对应 --spec-type draft-mtp）。\n仅当所选模型的 GGUF 内含 MTP 张量时可用；选择模型后会自动检测，\n不支持的模型该选项会被自动禁用。'))
-        self.label_mtp_status = QLabel("")
-        self.label_mtp_status.setStyleSheet("color: #8fd0ff;")
-        self.label_mtp_status.setToolTip(t('MTP 检测结果（扫描模型 GGUF 张量名）：绿色=可启用，橙色=不支持/无法检测'))
         grid.addWidget(self.check_cont, 1, 0, 1, 2)
         grid.addWidget(self.check_mlock, 1, 2)
         grid.addWidget(self.check_mmap, 1, 3)
-        grid.addWidget(self.check_mtp, 1, 4)
-        grid.addWidget(self.label_mtp_status, 1, 5, 1, 3)
 
         # ---- 第 2 行：对话模板（Jinja 模板 / 思考强度 / 推理预算）----
         self.check_jinja = QCheckBox(t('启用 Jinja 模板'))

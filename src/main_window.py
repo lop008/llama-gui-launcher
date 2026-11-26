@@ -443,6 +443,13 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
 
         self.combo_model.currentIndexChanged.connect(self._on_model_changed)
         self.combo_mmproj.currentIndexChanged.connect(self._on_mmproj_changed)
+        # 投机解码：方式下拉、草稿选择、优先级排序、下载入口、辅助文件清单
+        self.combo_spec.currentIndexChanged.connect(self._on_spec_changed)
+        self.combo_draft.currentIndexChanged.connect(self._on_draft_changed)
+        self.spin_spec_n.valueChanged.connect(self.update_preview)
+        self.btn_spec_order.clicked.connect(self._edit_spec_order)
+        self.btn_spec_download.clicked.connect(self._download_spec_draft)
+        self.btn_aux.clicked.connect(self._show_aux_files)
         self.combo_preset.currentIndexChanged.connect(self._on_preset_changed)
         self.spin_ctx.valueChanged.connect(self._on_ctx_manual)
         self.combo_sampling.currentIndexChanged.connect(self._on_sampling_preset)

@@ -24,13 +24,14 @@ class ConfigIOMixin:
             self.check_browser, self.spin_timeout, self.edit_host, self.spin_port,
             self.check_lan, self.check_ssl,
             self.combo_split_mode, self.edit_tensor_split, self.spin_main_gpu,
-            self.check_mtp,
+            self.combo_spec, self.combo_draft, self.spin_spec_n,
             self.check_jinja, self.combo_reasoning, self.spin_reasoning_budget,
         ]
 
     def _gather_server_cfg(self):
         ssl_on = self.check_ssl.isChecked()
         ssl_key, ssl_cert = self._ssl_paths() if ssl_on else ("", "")
+        spec_mode, spec_cli, spec_draft, spec_draft_n = self._spec_resolve()
         return {
             "host": self.edit_host.text().strip() or "127.0.0.1",
             "port": self.spin_port.value(),
@@ -54,8 +55,12 @@ class ConfigIOMixin:
             "split_mode": self.combo_split_mode.currentText(),
             "tensor_split": self.edit_tensor_split.text().strip(),
             "main_gpu": self.spin_main_gpu.value(),
-            # MTP（功能 4）
-            "mtp": self.check_mtp.isChecked(),
+            # 投机解码（v0.5.15）：spec_mode 是用户选的方式（off/auto/具体方式），
+            # spec_cli 是解析后真正下发给 --spec-type 的值，空 = 不下发
+            "spec_mode": spec_mode,
+            "spec_cli": spec_cli,
+            "spec_draft": spec_draft,
+            "spec_draft_n": spec_draft_n,
             # 对话模板（功能 8）
             "jinja": self.check_jinja.isChecked(),
             "reasoning_effort": self.combo_reasoning.currentData() or "",
@@ -122,7 +127,20 @@ class ConfigIOMixin:
             self.spin_main_gpu.setValue(int(s.get("main_gpu", 0)))
         except (TypeError, ValueError):
             pass
-        self.check_mtp.setChecked(bool(s.get("mtp", False)))
+        # 投机解码：老配置的「启用 MTP」已由 config._migrate 迁成 spec_mode，
+        # 这里只负责把下拉/数字框回显成配置里的样子
+        mode = self._spec_mode()
+        idx = self.combo_spec.findData(mode)
+        self.combo_spec.setCurrentIndex(idx if idx >= 0 else 1)
+        try:
+            self.spin_spec_n.setValue(int(s.get("spec_draft_n", 0) or 0))
+        except (TypeError, ValueError):
+            self.spin_spec_n.setValue(0)
+        self._update_spec_ui()
+        want_draft = str(s.get("spec_draft") or "")
+        if want_draft:
+            di = self.combo_draft.findData(want_draft)
+            self.combo_draft.setCurrentIndex(di if di >= 0 else 0)
 
         # 对话模板（功能 8）
         self.check_jinja.setChecked(bool(s.get("jinja", False)))

@@ -9,6 +9,7 @@ from PyQt6.QtWidgets import QFileDialog, QMessageBox
 from ..bat_validator import parse_script
 from ..cmd_builder import KV_CACHE_TYPES, SPLIT_MODES, build_bat_content, build_preview_bat, model_alias
 from ..i18n import t
+from ..spec_decode import SPEC_CLI
 
 
 CREATE_NO_WINDOW = 0x08000000
@@ -210,9 +211,16 @@ class BatIOMixin:
             if "no_mmap" in kv:
                 self.check_mmap.setChecked(True)
                 applied += 1
-            if "spec_type" in kv and "mtp" in str(kv["spec_type"]).lower():
-                self.check_mtp.setChecked(True)
-                applied += 1
+            if "spec_type" in kv:
+                # 导入的 .bat 写了 --spec-type：按取值反选「投机方式」下拉。
+                # 认不出（none / 本机没有的方式）就不动，避免把用户的配置改坏。
+                want = str(kv["spec_type"]).strip().lower().split(",")[0]
+                hit = next((sid for sid, (cli, _need) in SPEC_CLI.items() if cli == want), None)
+                idx = self.combo_spec.findData(hit) if hit else -1
+                if idx >= 0:
+                    self.combo_spec.setCurrentIndex(idx)
+                    self._update_spec_ui()
+                    applied += 1
             if "jinja" in kv:
                 self.check_jinja.setChecked(True)
                 applied += 1
