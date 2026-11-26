@@ -268,6 +268,201 @@ def _scan_mtp_meta(path):
     return False
 
 
+# ---------------------------------------------------------------- 文件角色判定
+# 模型目录里除了「真模型」还常混着三类 GGUF：视觉投影（mmproj）、投机解码的草稿头
+# （MTP / DFlash / DSpark / EAGLE 等）、量化标定文件（imatrix）。它们都不能当 -m 用，
+# 混进主模型列表只会让人点错，所以扫描时要按内容分流。
+#
+# 判定优先级：**文件内容 > 文件名**；两者都判不出时按「主模型」处理（宁可多显示，不误杀）。
+# 实测依据（unsloth / ggml-org 的 Qwen3.8-27B 一包四件）：
+#   真模型        general.type=model，blk.0..63 齐全 + 词表；内嵌 MTP 时再多一个 blk.64.nextn.*
+#   视觉投影      general.type=mmproj，general.architecture=clip，张量前缀全是 v./mm.
+#   MTP 外挂头    general.type 也是 model（不可信），但**没有 blk.0**，只有 blk.64.* 十几条
+#   imatrix       general.type=imatrix，只有 4 条 KV、没有任何 blk.0 之外的模型结构
+ROLE_MODEL, ROLE_MMPROJ, ROLE_DRAFT, ROLE_IMATRIX = "model", "mmproj", "draft", "imatrix"
+
+# 视觉投影的张量名前缀（clip/mmproj 转换产物固定这几种）
+_VISION_TENSOR_PREFIXES = ("v.", "mm.", "mmpc.", "vpm.")
+
+# 只可能是「投机草稿头」的架构名：llama.cpp 的 convert_hf_to_gguf 给 DFlash/DSpark/EAGLE
+# 草稿打的 general.architecture 就是这些。实测 DSpark 草稿同时带完整词表、blk.0..2 齐全，
+# 所以「没有 blk.0」只能识破 MTP 外挂头，识破这类草稿必须靠架构名。
+_DRAFT_ARCHES = ("dflash", "dflash2", "dspark", "lilicorr", "eagle", "eagle3")
+
+# 草稿头专属张量（架构名缺失时的兜底特征）。注意**不能**放 nextn./eh_proj/shared_head：
+# 这些张量在「内嵌 MTP 的真模型」里也有，误用会把 16GB 的主模型判成草稿。
+_DRAFT_TENSOR_MARKS = ("joint_proj", "markov_", "dspark_", "eagle_", "lilicorr")
+
+# 文件名兜底判据：读不到 GGUF 头时用（顺序敏感，draft 放最后避免吃掉 mtp- 之外的名字）
+_NAME_ROLES = (
+    (re.compile(r"(?i)imatrix"), ROLE_IMATRIX, ""),
+    (re.compile(r"(?i)(^|[-_.])(mmproj|mmpc)([-_.]|$)"), ROLE_MMPROJ, ""),
+    (re.compile(r"(?i)(?:^|[-_.])(?P<kind>mtp|dflash2|dflash|dspark|lilicorr|eagle3|eagle|draft)"
+                r"(?:[-_.]|$)"), ROLE_DRAFT, "kind"),
+)
+
+
+def _name_role(path):
+    """仅凭文件名猜角色，返回 (role, kind)；猜不出返回 (ROLE_MODEL, "")。"""
+    base = os.path.basename(str(path))
+    for rx, role, mode in _NAME_ROLES:
+        m = rx.search(base)
+        if m:
+            kind = (m.group("kind") or "").lower() if mode == "kind" else ""
+            return role, kind
+    return ROLE_MODEL, ""
+
+
+def probe_gguf(path):
+    """一次读完整 GGUF 头部（KV + 张量名表），返回角色判定所需事实；文件无效返回 None。
+
+    只读头部、不碰权重数据，几十毫秒内返回；词表等超大数组直接跳过。
+    """
+    facts = {"version": 0, "tensor_count": 0, "type": "", "arch": "", "block_count": 0,
+             "nextn_layers": 0, "has_tokenizer": False, "has_clip": False,
+             "base": "", "base_model": "", "names": []}
+    try:
+        with open(path, "rb") as f:
+            if f.read(4) != GGUF_MAGIC:
+                return None
+            facts["version"] = _u32(f)
+            facts["tensor_count"] = _u64(f)
+            kv_count = _u64(f)
+            for _ in range(kv_count):
+                key = _read_string(f)
+                vtype = _u32(f)
+                if vtype == ARRAY and key in _SKIP_ARRAY_KEYS:
+                    _skip_array(f)
+                    facts["has_tokenizer"] = True     # 有词表 => 一定是能对话的模型本体
+                    continue
+                value = _read_value(f, vtype)
+                lk = key.lower()
+                if lk.startswith("tokenizer."):
+                    facts["has_tokenizer"] = True
+                elif lk == "general.type":
+                    facts["type"] = str(value).strip().lower()
+                elif lk == "general.architecture":
+                    facts["arch"] = str(value).strip().lower()
+                elif lk == "general.basename":
+                    facts["base"] = str(value)
+                elif lk == "general.base_model.0.name":
+                    facts["base_model"] = str(value)
+                elif lk.endswith(".block_count"):
+                    try:
+                        facts["block_count"] = int(value)
+                    except (TypeError, ValueError):
+                        pass
+                elif "nextn" in lk or "mtp" in lk:
+                    try:
+                        facts["nextn_layers"] = max(facts["nextn_layers"], int(value or 0))
+                    except (TypeError, ValueError):
+                        pass
+                elif lk.startswith("clip."):
+                    facts["has_clip"] = True
+            names = []
+            for _ in range(facts["tensor_count"]):
+                name = _read_string(f)
+                n_dims = _u32(f)
+                f.seek(n_dims * 8, os.SEEK_CUR)      # dims
+                f.read(4)                            # ggml type
+                f.read(8)                            # offset
+                names.append(name)
+            facts["names"] = names
+    except Exception:
+        return None
+    return facts
+
+
+def _blk_indexes(names):
+    """张量名里的 blk 层号集合（判定「是不是从第 0 层开始」用）。"""
+    out = set()
+    for n in names:
+        if not n.startswith("blk."):
+            continue
+        tail = n[4:].split(".", 1)
+        if tail and tail[0].isdigit():
+            out.add(int(tail[0]))
+    return out
+
+
+def _draft_kind(names, name_kind, nextn_layers, arch=""):
+    """草稿头是哪种：架构名 > 专属张量 > 文件名 > nextn 特征。"""
+    al = (arch or "").lower()
+    if any(n.startswith("markov_") or n.startswith("dspark_") for n in names):
+        return "dspark"          # dflash 架构 + Markov 头 = DSpark（实测 ggml-org 草稿就这样）
+    for a in ("dflash2", "dflash", "dspark", "lilicorr"):
+        if al.startswith(a):
+            return a
+    if al.startswith("eagle"):
+        return "eagle3"
+    kind = (name_kind or "").lower()
+    if kind == "eagle":
+        kind = "eagle3"
+    if kind:
+        return kind
+    low = [n.lower() for n in names]
+    if any("nextn" in n or "eh_proj" in n or "shared_head" in n for n in low):
+        return "mtp"
+    if nextn_layers:
+        return "mtp"
+    return "simple"
+
+
+def classify_gguf(path, use_cache=True):
+    """判定一个 .gguf 的角色，返回 (role, kind, reason)。
+
+    role: model / mmproj / draft / imatrix；kind 仅对 draft 有意义
+    （mtp / dflash / dflash2 / dspark / lilicorr / eagle3 / simple）。
+    """
+    key = os.path.abspath(str(path))
+    cache = globals().setdefault("_CLASSIFY_CACHE", {})
+    try:
+        st = os.stat(key)
+        stamp = (int(st.st_mtime), st.st_size)
+    except OSError:
+        return _name_role(key) + ("文件不存在",)
+    hit = cache.get(key)
+    if use_cache and hit and hit[0] == stamp:
+        return hit[1]
+
+    nrole, nkind = _name_role(key)
+    facts = probe_gguf(key)
+    if facts is None:
+        result = (nrole, nkind, "无法读取头部，按文件名判定")
+    else:
+        names = facts["names"]
+        blocks = _blk_indexes(names)
+        if facts["type"] == "imatrix":
+            res = (ROLE_IMATRIX, "", "general.type=imatrix（量化标定文件）")
+        elif facts["type"] == "mmproj" or facts["has_clip"]:
+            res = (ROLE_MMPROJ, "", "视觉投影（general.type=mmproj / clip）")
+        elif names and not blocks and all(
+                n.startswith(_VISION_TENSOR_PREFIXES) for n in names):
+            res = (ROLE_MMPROJ, "", "视觉投影（张量全为 v./mm. 编码器）")
+        elif (facts["arch"] in _DRAFT_ARCHES
+              or any(any(m in n.lower() for m in _DRAFT_TENSOR_MARKS) for n in names)):
+            # DFlash/DSpark/EAGLE 草稿：层号从 0 开始、词表也齐全，只有架构名/专属张量能识破
+            res = (ROLE_DRAFT, _draft_kind(names, nkind, facts["nextn_layers"], facts["arch"]),
+                   "架构 %s 为投机草稿头" % (facts["arch"] or "draft"))
+        elif blocks and 0 not in blocks:
+            # 没有第 0 层：只可能是外挂的草稿头 / 残片，绝不当主模型
+            res = (ROLE_DRAFT, _draft_kind(names, nkind, facts["nextn_layers"], facts["arch"]),
+                   "缺少 blk.0 层，只是草稿头/碎片")
+        elif nrole == ROLE_DRAFT and not blocks:
+            res = (ROLE_DRAFT, _draft_kind(names, nkind, facts["nextn_layers"], facts["arch"]),
+                   "文件名标记为投机草稿头")
+        elif facts["nextn_layers"] and not names:
+            res = (ROLE_MODEL, "", "元数据声明 MTP")
+        else:
+            res = (ROLE_MODEL, "", "")
+        result = res
+    if len(cache) > 4096:
+        cache.clear()
+    if use_cache:
+        cache[key] = (stamp, result)
+    return result
+
+
 def detect_mtp(path):
     """检测模型是否包含 MTP（多 token 预测）能力。
 
@@ -275,17 +470,20 @@ def detect_mtp(path):
     返回 (支持与否, 匹配到的张量名列表)。全部无法解析时返回 (None, [])。
     """
     files = _shard_group_files(path)
-    hits, any_ok = [], False
+    hits, any_ok, meta = [], False, False
     for f in files:
-        names = scan_tensor_names(f)
-        if names is None:
+        facts = probe_gguf(f)
+        if facts is None:
             continue
         any_ok = True
-        for n in names:
+        for n in facts["names"]:
             ln = n.lower()
             if any(p in ln for p in MTP_TENSOR_PATTERNS) and n not in hits:
                 hits.append(n)
-    meta = any(_scan_mtp_meta(f) for f in files)
+        if facts["nextn_layers"] > 0:
+            meta = True
+    if not meta:      # 解析不了张量表的老文件，退回纯元数据扫描
+        meta = any(_scan_mtp_meta(f) for f in files)
     if meta and "metadata:nextn_predict_layers" not in hits:
         hits.append("metadata:nextn_predict_layers")
     if not any_ok:

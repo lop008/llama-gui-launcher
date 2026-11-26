@@ -24,11 +24,14 @@ from .cmd_builder import (
     build_preview_bat, model_alias,
 )
 from .config import Config
-from .gguf_reader import detect_chat_features, detect_mtp, format_gguf_info, read_gguf_info
+from .gguf_reader import (classify_gguf, detect_chat_features, detect_mtp,
+                          format_gguf_info, read_gguf_info)
 from . import hf_info
 from .hf_download_tab import HFDownloadTab
 from .llama_updater import get_local_version
-from .model_scanner import find_mmproj_for, human_size, scan_models, sort_models
+from .model_scanner import (ROLE_DRAFT, ROLE_IMATRIX, ROLE_MMPROJ, ROLE_MODEL,
+                            find_mmproj_for, human_size, role_label, scan_models,
+                            sort_models)
 from .net_utils import default_cert_paths, ensure_self_signed_cert, local_ipv4
 from .presets import PRESETS, SAMPLING_PRESETS
 from .pill import HoverPill
@@ -179,7 +182,8 @@ class MainWindow(QMainWindow):
         self._loading = False
         self._quitting = False
         self._models = []
-        self._mmprojs = []
+        self._aux = []          # 视觉投影 / 投机草稿头 / 标定文件（不进主模型下拉框）
+        self._scan_hint = ""    # 扫描后要提示的用户问题，优先于计数文案显示
         self._tools_found = {}
         self._tool_rows = []
         self._last_selected_tool = None
@@ -1942,7 +1946,7 @@ class MainWindow(QMainWindow):
     def refresh_models(self, keep_selection=False):
         llama_dir = self.edit_dir.text().strip()
         if not llama_dir or not os.path.isdir(llama_dir):
-            self._models, self._mmprojs = [], []
+            self._models, self._aux = [], []
             self._scan_error = t('模型目录无效')
             self._rebuild_model_combos(None)
             return
@@ -1953,10 +1957,10 @@ class MainWindow(QMainWindow):
         self._scan_error = None
 
         def work():
-            ms, mps = [], []
+            ms, aux = [], []
             err = None
             try:
-                ms, mps = scan_models(llama_dir)
+                ms, aux = scan_models(llama_dir)
             except Exception as e:
                 err = str(e)
             if gen != getattr(self, "_scan_gen", 0):
@@ -1964,11 +1968,18 @@ class MainWindow(QMainWindow):
             if err is not None:
                 self._scan_error = err
             else:
-                self._models, self._mmprojs = ms, mps
+                self._models, self._aux = ms, aux
             self.model_scan_done.emit()
 
         threading.Thread(target=work, daemon=True).start()
         self.statusBar().showMessage(t('正在扫描模型目录…'), 2000)
+
+    def _aux_summary(self):
+        """辅助文件计数摘要（视觉投影 / 投机草稿头 / 标定文件），用于状态栏与按钮提示。"""
+        mm = sum(1 for a in self._aux if a.role == ROLE_MMPROJ)
+        dr = sum(1 for a in self._aux if a.role == ROLE_DRAFT)
+        im = sum(1 for a in self._aux if a.role == ROLE_IMATRIX)
+        return mm, dr, im
 
     def _on_model_scan_done(self):
         keep_path = self.cfg.data.get("model", "") if self._pending_keep else None
@@ -1980,7 +1991,19 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(t('扫描出错: {0}').format(err), 5000)
             self._log_file(t('[扫描] 出错: {0}').format(err))
         else:
-            self.statusBar().showMessage(t('发现 {0} 个模型, {1} 个视觉模型').format(len(self._models), len(self._mmprojs)), 4000)
+            hint = getattr(self, "_scan_hint", "")
+            self._scan_hint = ""
+            if hint:      # 主模型指向辅助文件之类的提醒优先显示，不被计数文案盖掉
+                self._status_tip(hint, 10000, hold=True)
+            else:
+                mm, dr, im = self._aux_summary()
+                if dr or im:
+                    self._status_tip(
+                        t('发现 {0} 个模型, {1} 个视觉模型, {2} 个草稿头, {3} 个标定文件').format(
+                            len(self._models), mm, dr, im), 4000)
+                else:
+                    self._status_tip(
+                        t('发现 {0} 个模型, {1} 个视觉模型').format(len(self._models), mm), 4000)
         self.update_preview()
 
     def _rebuild_model_combos(self, keep_path):
@@ -2003,6 +2026,17 @@ class MainWindow(QMainWindow):
         target = None
         if keep_path:
             target = norm.get(os.path.normcase(os.path.abspath(keep_path)))
+        if target is None and keep_path and os.path.isfile(keep_path):
+            role, kind, _why = classify_gguf(keep_path)
+            if role != ROLE_MODEL:
+                # 老配置可能把视觉投影 / MTP 头存成了主模型：不再放回下拉框，提示重选。
+                # 提示先存着，由 _on_model_scan_done 决定何时显示（否则会被计数文案盖掉）
+                self._scan_hint = t('{0} 是{1}，已自动从主模型列表隐藏，请重新选择主模型').format(
+                    os.path.basename(keep_path), role_label(role, kind))
+                self._log_file(t('[扫描] 主模型指向辅助文件: {0}').format(keep_path))
+                self._loading = False
+                self._on_model_changed()
+                return
         if target is not None:
             self.combo_model.setCurrentIndex(target)
         elif keep_path and os.path.isfile(keep_path):
@@ -2057,7 +2091,9 @@ class MainWindow(QMainWindow):
             self.cfg.data["model"] = path
         model = next((m for m in self._models if m.path == path), None)
         # 功能 7：只显示与主模型同一目录下的视觉模型，保证配套一致
-        same_dir = [m for m in self._mmprojs if model is not None and m.dir == model.dir]
+        # （扫描已按 GGUF 内容分流，这里再按 role 兜一层，避免不叫 mmproj 的投影文件混入）
+        same_dir = [m for m in self._aux
+                    if model is not None and m.dir == model.dir and m.role == ROLE_MMPROJ]
         auto = find_mmproj_for(model, same_dir)
         dup = {n for n, c in Counter(m.name for m in same_dir).items() if c > 1}
         self._loading = True
@@ -2481,7 +2517,7 @@ class MainWindow(QMainWindow):
 
     def _on_tool_scan_done(self):
         self._fill_tool_table()
-        self.statusBar().showMessage(t('工具检测完成'), 3000)
+        self._status_tip(t('工具检测完成'), 3000)
 
     def _fill_tool_table(self):
         rows = []
@@ -2937,6 +2973,19 @@ class MainWindow(QMainWindow):
         self._tray_act_pill.setEnabled(not visible)
 
     # ---------------------------------------------------------- 日志落盘
+    def _status_tip(self, text, ms=4000, hold=False):
+        """状态栏提示。hold=True 的消息在 ms 内不被普通消息抢掉
+        （启动时多个后台检测并行完成，谁最后写谁说话，用户会看不到关键提醒）。"""
+        now = time.time()
+        if not hold and getattr(self, "_hint_until", 0.0) > now:
+            return
+        if hold:
+            self._hint_until = now + ms / 1000.0
+        try:
+            self.statusBar().showMessage(text, ms)
+        except Exception:
+            pass
+
     def _log_file(self, text):
         try:
             logdir = os.path.join(self._data_dir(), "logs")
