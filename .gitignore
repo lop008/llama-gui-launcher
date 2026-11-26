@@ -25,11 +25,10 @@ venv/
 # opencode 本地配置 / 技能（仅本地使用，不上传）
 .opencode/
 
-# 本地资源（可选占位/隐私图片）
-assets/icon.ico
-assets/donate_qr.png
+# 本地资源（原始设计稿等，不对外）
+# 注意：assets/icon.ico、assets/ad.png、assets/donate_qr.png 自 v0.5.15 起必须入库，
+# 否则 arm64 在 CI 上打包时读不到，会打出没有图标、广告位和打赏二维码的包。
 assets/donate_qr.jpg
-assets/ad.png
 assets/原始图标.png
 assets/原始图片.png
 

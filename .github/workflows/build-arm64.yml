@@ -31,12 +31,36 @@ jobs:
           python-version: '3.12'
 
       - name: Install dependencies
-        # cryptography has no win_arm64 wheel in the version requirements.txt allows,
-        # so pin the last one that ships one. It is imported lazily (HTTPS certs only).
+        shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          # Every pip call is exit-code checked on purpose: PowerShell does not stop on a
+          # native non-zero exit, so the first v0.5.15 run silently failed to install
+          # "cryptography>=41" (no win_arm64 wheel -> Rust source build), reported the step
+          # as successful, and only blew up two steps later.
           python -m pip install --upgrade pip
-          python -m pip install -r requirements.txt
-          python -m pip install "cryptography==46.0.3" "pyinstaller>=6.0"
+          if ($LASTEXITCODE) { throw 'pip upgrade failed' }
+          $reqs = Get-Content requirements.txt |
+                  Where-Object { $_ -and $_ -notmatch '^\s*#' -and $_ -notmatch '^cryptography' }
+          python -m pip install @($reqs)
+          if ($LASTEXITCODE) { throw 'installing requirements.txt failed' }
+          # cryptography ships win_arm64 wheels only from 46.0.x; --only-binary makes a
+          # missing wheel fail here instead of trying to compile from source.
+          python -m pip install --only-binary=:all: "cryptography==46.0.3"
+          if ($LASTEXITCODE) { throw 'no win_arm64 wheel for the pinned cryptography' }
+          python -m pip install "pyinstaller>=6.0"
+          if ($LASTEXITCODE) { throw 'pyinstaller install failed' }
+          python -c "import cryptography, psutil, PyQt6, PyInstaller; print('deps OK')"
+
+      - name: Check assets are in the repo
+        # The spec embeds assets/; a missing icon.ico fails the build with
+        # FileNotFoundError deep inside PyInstaller, so say it plainly up front.
+        shell: pwsh
+        run: |
+          foreach ($f in 'assets/icon.ico', 'assets/ad.png', 'assets/donate_qr.png') {
+            if (-not (Test-Path $f)) { throw "$f not in the repo - arm64 would ship without icon/QR" }
+          }
+          "assets present: icon.ico / ad.png / donate_qr.png"
 
       - name: Resolve version from src/__init__.py
         shell: pwsh
