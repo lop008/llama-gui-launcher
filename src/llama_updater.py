@@ -9,6 +9,7 @@
 仅依赖 requests / zipfile；阻塞式函数请在后台线程调用。
 """
 import os
+import platform
 import re
 import shutil
 import subprocess
@@ -200,15 +201,34 @@ def install_branch_source(zip_path, dest_dir):
         shutil.rmtree(tmpdir, ignore_errors=True)
 
 
-def win_assets(release):
-    """从 Release 中挑出 Windows x64 预编译 zip。"""
-    out = []
-    for a in release.get("assets", []):
-        n = a["name"]
-        if re.search(r'^llama-.*-bin-win-.*\.zip$', n, re.IGNORECASE) and "arm" not in n.lower():
-            out.append(a)
-    # avx2 通用包优先靠前
-    out.sort(key=lambda a: (0 if "avx2" in a["name"].lower() else 1, -a["size"]))
+def host_arch():
+    """本机架构（"arm64" / "x64"），只用来把匹配的包排前面；判不准也只是排序不同。"""
+    for probe in (platform.machine(), os.environ.get("PROCESSOR_ARCHITEW6432"),
+                  os.environ.get("PROCESSOR_ARCHITECTURE")):
+        if (probe or "").strip().lower() in ("arm64", "aarch64"):
+            return "arm64"
+    return "x64"
+
+
+def asset_arch(name):
+    """按官方包名判断目标架构："arm64" / "x64"（llama.cpp 的 win 包用 -arm64 后缀区分）。"""
+    return "arm64" if re.search(r"[-_]arm64\b", str(name).lower()) else "x64"
+
+
+def win_assets(release, arch=None):
+    """从 Release 中挑出 Windows 预编译 zip。
+
+    官方每个版本都同时发 x64 与 ARM64（cpu / vulkan / opencl-adreno / cuda），
+    所以两种都要列出——以前按 "arm" 关键字整类过滤掉，ARM64 机器在更新页里
+    一个包都看不到。arch=None 时按本机架构排序：匹配的排最前，其他架构仍在列表里，
+    避免架构判定不准时用户无路可走。
+    """
+    want = arch or host_arch()
+    out = [a for a in release.get("assets", [])
+           if re.search(r"^llama-.*-bin-win-.*\.zip$", a["name"], re.IGNORECASE)]
+    # 本机架构优先 → avx2 通用包靠前 → 大的靠前
+    out.sort(key=lambda a: (0 if asset_arch(a["name"]) == want else 1,
+                            0 if "avx2" in a["name"].lower() else 1, -a["size"]))
     return out
 
 
