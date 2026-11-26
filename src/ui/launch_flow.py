@@ -11,11 +11,13 @@ from ..i18n import t
 from ..net_utils import default_cert_paths, ensure_self_signed_cert, local_ipv4
 from ..server import find_llama_server_processes, kill_all_llama_server, port_in_use
 
+
 CREATE_NO_WINDOW = 0x08000000
 
 
 class LaunchFlowMixin:
     # ------------------------------------------------------------- 预览
+
     def update_preview(self):
         if self._loading:
             return
@@ -32,6 +34,7 @@ class LaunchFlowMixin:
         except Exception as e:
             self.preview_view.setPlainText(t('生成命令失败: {0}').format(e))
     # ------------------------------------------------------------- 服务
+
     def start_server(self):
         model = self.combo_model.currentData()
         if not model:
@@ -101,11 +104,13 @@ class LaunchFlowMixin:
             except Exception:
                 pass
             self.statusBar().showMessage(t('服务启动中…'), 0)
+
     def stop_server(self):
         self.server.stop()
         self.monitor.set_server(None)
         self._set_running_state(False)
         self._flush_usage()
+
     def _set_running_state(self, running):
         self.btn_start.setEnabled(not running)
         self.act_start.setEnabled(not running)
@@ -114,9 +119,11 @@ class LaunchFlowMixin:
         self.btn_web.setEnabled(running)
         self._set_tray_menu_state()
         self._sync_pill_running()
+
     def _on_server_state(self, msg):
         self.statusBar().showMessage(msg, 0)
         self._log_file(msg)
+
     def _on_healthy(self, url):
         self._set_running_state(True)
         self._log_file(t('服务已就绪: {0}').format(url))
@@ -124,26 +131,31 @@ class LaunchFlowMixin:
         if self.check_browser.isChecked():
             webbrowser.open(url)
         self.statusBar().showMessage(t('服务已就绪: {0}').format(url), 0)
+
     def _on_exited(self, code):
         self._set_running_state(False)
         self.monitor.set_server(None)
         self._flush_usage()
         if not self.server.manual_stop and code != 0:
             self.statusBar().showMessage(t('服务已退出（退出码 {0}）').format(code), 0)
+
     def open_web(self):
         scheme = "https" if self.check_ssl.isChecked() else "http"
         url = f"{scheme}://{self.edit_host.text().strip() or '127.0.0.1'}:{self.spin_port.value()}"
         webbrowser.open(url)
+
     def open_api(self):
         scheme = "https" if self.check_ssl.isChecked() else "http"
         url = f"{scheme}://{self.edit_host.text().strip() or '127.0.0.1'}:{self.spin_port.value()}/v1/models"
         webbrowser.open(url)
+
     def open_model_dir(self):
         d = self.edit_dir.text().strip()
         if os.path.isdir(d):
             os.startfile(d)  # noqa: S606
         else:
             QMessageBox.information(self, t('提示'), t('模型目录无效'))
+
     def open_bat_validator(self):
         """C3: 打开启动文件校验报告对话框（bat_validator.ValidateBatDialog）。"""
         try:
@@ -151,9 +163,11 @@ class LaunchFlowMixin:
         except Exception as e:
             QMessageBox.critical(self, t('错误'), t('打开校验器失败：{0}').format(e))
     # ------------------------------------------------- 局域网共享 / HTTPS
+
     def _ssl_paths(self):
         """返回自签名证书的 (私钥, 证书) 路径（数据目录 certs/，非英文路径自动回退）。"""
         return default_cert_paths(self.cfg.data_dir())
+
     def _on_lan_toggled(self, checked):
         """勾选「局域网共享」→ host 填 0.0.0.0；取消 → 回 127.0.0.1。"""
         if not self._loading:
@@ -163,8 +177,10 @@ class LaunchFlowMixin:
             elif not checked and host in ("0.0.0.0", "::"):
                 self.edit_host.setText("127.0.0.1")
         self._update_local_ip_label()
+
     def _on_ssl_toggled(self, _checked):
         self._update_local_ip_label()
+
     def _on_host_edited(self, _text):
         """手动改监听地址时反向同步「局域网共享」勾选状态。"""
         if not self._loading:
@@ -174,6 +190,7 @@ class LaunchFlowMixin:
                 self.check_lan.setChecked(is_lan)
                 self.check_lan.blockSignals(False)
         self._update_local_ip_label()
+
     def _update_local_ip_label(self):
         if not hasattr(self, "label_local_ip"):
             return
@@ -184,6 +201,7 @@ class LaunchFlowMixin:
             self.label_local_ip.setText(t('局域网访问：{0}://{1}:{2}').format(scheme, ip, port))
         else:
             self.label_local_ip.setText(t('本机 IP：{0}').format(ip))
+
     def _resolve_ssl(self, s):
         """按配置确保 HTTPS 证书存在并写回 ssl_key_file/ssl_cert_file。
 
@@ -199,6 +217,7 @@ class LaunchFlowMixin:
         s["ssl_cert_file"] = cert_path
         return True
     # ---------------------------------------------------------- 残留检测
+
     def _find_free_port(self, host, start, limit=50):
         """从 start+1 起找一个可用端口；找不到返回 None。"""
         for p in range(int(start) + 1, int(start) + 1 + int(limit)):
@@ -207,6 +226,7 @@ class LaunchFlowMixin:
             if not port_in_use(host, p):
                 return p
         return None
+
     def _suggest_free_port(self, host, port):
         """端口被占用时建议一个可用端口，确认后更新主界面端口号。"""
         free = self._find_free_port(host, port)
@@ -222,6 +242,7 @@ class LaunchFlowMixin:
             self.save_config()
             self._log_file(t('[端口] {0} 被占用，已改用 {1}').format(port, free))
             self.statusBar().showMessage(t('已改用端口 {0}').format(free), 5000)
+
     def _check_residual(self):
         if self.server.running:
             return

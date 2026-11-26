@@ -12,6 +12,7 @@ from ..presets import PRESETS, SAMPLING_PRESETS
 
 
 class LayoutBasicMixin:
+
     def _build_basic(self, lay):
         # ---- A4: 「生成参数」分组（先创建；控件由 basic/advanced 两处添加进来）----
         self.group_gen = QGroupBox(t('生成参数'))
@@ -187,6 +188,7 @@ class LayoutBasicMixin:
         self._gen_grid.addWidget(self.spin_np, 0, 5)
 
         lay.addWidget(self.group_gen)
+
     def _build_advanced(self, lay):
         grid = QGridLayout()
         grid.setContentsMargins(8, 2, 8, 6)
@@ -382,6 +384,7 @@ class LayoutBasicMixin:
         self._gen_grid.addWidget(kv_box, 2, 7)
 
         lay.addLayout(grid)
+
     def _build_gpu(self, lay):
         """多显卡设置面板（功能 3）。"""
         row0 = QHBoxLayout()

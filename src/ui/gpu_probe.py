@@ -7,10 +7,12 @@ import threading
 from PyQt6.QtWidgets import QCheckBox, QDoubleSpinBox, QLabel
 from ..i18n import t
 
+
 CREATE_NO_WINDOW = 0x08000000
 
 
 class GpuMixin:
+
     def _rebuild_gpu_checks(self, devices):
         """按检测到的设备列表重建复选框，并恢复已保存的勾选。"""
         saved = (self.cfg.data.get("server", {}) or {}).get("devices") or []
@@ -92,6 +94,7 @@ class GpuMixin:
                 tip = t('未找到 nvidia-smi，无法查询显存，请手动填写 tensor-split')
             self.btn_auto_split.setToolTip(tip)
         self.gpu_ratio_panel.setVisible(bool(devices))
+
     def detect_gpus(self):
         """调用 llama-server --list-devices 检测本机 GPU（后台线程）。"""
         import re as _re
@@ -134,6 +137,7 @@ class GpuMixin:
                 pass
 
         threading.Thread(target=work, daemon=True).start()
+
     def _on_gpus_detected(self):
         # 注意：Qt 槽函数内异常不得外抛（会导致未定义行为），必须捕获
         try:
@@ -154,6 +158,7 @@ class GpuMixin:
             except RuntimeError:
                 pass
     # ---------------------------------------------------------- A5: 多显卡权重分配
+
     def _on_gpu_ratio_changed(self):
         """任一权重 spinbox 变化 → 把 'w0,w1,...' 写回 tensor-split（手动覆盖仍可直接编辑该框）。"""
         if getattr(self, "_gpu_ratio_syncing", False):
@@ -166,6 +171,7 @@ class GpuMixin:
             v = float(sp.value())
             parts.append(str(int(round(v))) if abs(v - round(v)) < 1e-9 else f"{v:g}")
         self.edit_tensor_split.setText(",".join(parts))
+
     def _auto_split_by_vram(self):
         """用 nvidia-smi 查询每张卡总显存（后台线程），按比例换算成整数权重填入。"""
         import subprocess
@@ -192,6 +198,7 @@ class GpuMixin:
                 pass
 
         threading.Thread(target=work, daemon=True).start()
+
     @staticmethod
     def _vram_to_weights(totals):
         """显存(MiB)列表 → 整数权重比例（以最小卡为基准取整，如 24G+8G → [3, 1]）。"""
@@ -207,6 +214,7 @@ class GpuMixin:
         if wg > 1:
             weights = [w // wg for w in weights]
         return weights
+
     def _on_vram_weights(self, weights):
         """nvidia-smi 查询完成 → 把整数权重填入各 spinbox（自动同步到 tensor-split）。"""
         try:

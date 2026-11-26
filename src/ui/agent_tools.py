@@ -19,6 +19,7 @@ except Exception:
 
 class AgentToolsMixin:
     # ------------------------------------------------------ Agent 工具
+
     def scan_tools(self):
         overrides = self.cfg.data.get("tools", {})
         llama_dir = self.edit_dir.text().strip()
@@ -33,9 +34,11 @@ class AgentToolsMixin:
 
         threading.Thread(target=work, daemon=True).start()
         self.statusBar().showMessage(t('正在检测工具…'), 2000)
+
     def _on_tool_scan_done(self):
         self._fill_tool_table()
         self._status_tip(t('工具检测完成'), 3000)
+
     def _fill_tool_table(self):
         rows = []
         for tool_def in tools_mod.ALL:
@@ -57,6 +60,7 @@ class AgentToolsMixin:
             btn.clicked.connect(lambda _=False, tid=tool["id"]: self._tool_open(tid))
             self.tool_table.setCellWidget(r, 4, btn)
         self._preserve_tool_selection()
+
     def _preserve_tool_selection(self):
         """保持上次选中的工具高亮；没有则默认高亮第一行。"""
         if not self._tool_rows:
@@ -70,13 +74,16 @@ class AgentToolsMixin:
                     break
         self.tool_table.selectRow(row)
         self.tool_table.setCurrentCell(row, 0)
+
     def _on_tool_cell_changed(self, row, _col, _pr, _pc):
         if 0 <= row < len(self._tool_rows):
             self._last_selected_tool = self._tool_rows[row]["id"]
             self.cfg.data["last_agent_tool"] = self._tool_rows[row]["id"]
+
     def _tool_table_double(self, index):
         if index.row() < len(self._tool_rows):
             self._tool_open(self._tool_rows[index.row()]["id"])
+
     def _tool_open(self, tid):
         if tools_mod is None:
             return
@@ -106,6 +113,7 @@ class AgentToolsMixin:
             self._on_server_log(msg)
         else:
             QMessageBox.warning(self, t('提示'), t('启动失败，请检查路径'))
+
     def _agent_connect(self, tool, workdir=None):
         """打开 Agent 工具时自动配置其连接当前 llama 服务。
         返回 (env, 连接说明文本, 附加启动参数)；服务未运行返回 (None, '服务未运行，无法自动连接', '')。"""
@@ -148,6 +156,7 @@ class AgentToolsMixin:
             return None, t('已复制连接信息到剪贴板（{0}，模型 {1}）').format(base_v1, alias), ""
         except Exception:
             return None, t('服务地址 {0}（模型 {1}）').format(base_v1, alias), ""
+
     def open_selected_agent_tool(self):
         """打开 Agent 工具列表中当前高亮的工具（始终高亮选中行）。"""
         if not self._tool_rows:
@@ -157,6 +166,7 @@ class AgentToolsMixin:
         if row < 0 or row >= len(self._tool_rows):
             row = 0
         self._tool_open(self._tool_rows[row]["id"])
+
     def _prompt_add_path(self, tool):
         ret = QMessageBox.question(
             self, t('未找到'), t('未找到「{0}」，是否手动指定可执行文件路径？').format(tool.get('name', tool['id'])),

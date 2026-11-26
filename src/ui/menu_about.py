@@ -14,6 +14,7 @@ from ..ui.workers import _LlamaVersionWorker
 
 class MenuAboutMixin:
     # ------------------------------------------------------------------ UI
+
     def _build_menu(self):
         m = self.menuBar()
         menu_start = m.addMenu(t('开始(&S)'))
@@ -92,9 +93,11 @@ class MenuAboutMixin:
         menu_help.addAction(self.act_about)
         self.act_update_now = QAction(t('立即更新'), self)
         menu_help.addAction(self.act_update_now)
+
     def _on_llama_version(self, ver):
         base = t('LLama 启动器 v{0}').format(__version__)
         self.setWindowTitle(f"{base} · llama {ver}" if ver else base)
+
     def recheck_llama_version(self):
         """更新安装后重新检测本地 llama-server 版本，刷新标题栏。"""
         if getattr(self, "_llama_ver_worker", None) and self._llama_ver_worker.isRunning():
@@ -102,11 +105,14 @@ class MenuAboutMixin:
         self._llama_ver_worker = _LlamaVersionWorker(self._launcher_exe(), self)
         self._llama_ver_worker.done.connect(self._on_llama_version)
         self._llama_ver_worker.start()
+
     def _goto_updater(self):
         self.tabs.setCurrentIndex(5)
         self.updater_tab.refresh()
+
     def show_about(self):
         AboutDialog(self.resource_dir, self).exec()
+
     def open_docs(self):
         doc = os.path.join(self.resource_dir, t('参数说明.md'))
         if os.path.isfile(doc):

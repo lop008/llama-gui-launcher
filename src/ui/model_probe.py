@@ -15,11 +15,13 @@ from ..model_scanner import (
     scan_models, sort_models,
 )
 
+
 CREATE_NO_WINDOW = 0x08000000
 
 
 class ModelProbeMixin:
     # ---------------------------------------------------------- 模型相关
+
     def _on_sort_changed(self, _idx):
         """切换排序方式（功能 1）：保存设置并对当前列表重新排序。"""
         if self._loading or not hasattr(self, "combo_model"):
@@ -28,6 +30,7 @@ class ModelProbeMixin:
         self.cfg.data["model_sort"] = mode
         keep = self.combo_model.currentData()
         self._rebuild_model_combos(keep)
+
     def refresh_models(self, keep_selection=False):
         llama_dir = self.edit_dir.text().strip()
         if not llama_dir or not os.path.isdir(llama_dir):
@@ -58,12 +61,14 @@ class ModelProbeMixin:
 
         threading.Thread(target=work, daemon=True).start()
         self.statusBar().showMessage(t('正在扫描模型目录…'), 2000)
+
     def _aux_summary(self):
         """辅助文件计数摘要（视觉投影 / 投机草稿头 / 标定文件），用于状态栏与按钮提示。"""
         mm = sum(1 for a in self._aux if a.role == ROLE_MMPROJ)
         dr = sum(1 for a in self._aux if a.role == ROLE_DRAFT)
         im = sum(1 for a in self._aux if a.role == ROLE_IMATRIX)
         return mm, dr, im
+
     def _on_model_scan_done(self):
         keep_path = self.cfg.data.get("model", "") if self._pending_keep else None
         self._pending_keep = False
@@ -88,6 +93,7 @@ class ModelProbeMixin:
                     self._status_tip(
                         t('发现 {0} 个模型, {1} 个视觉模型').format(len(self._models), mm), 4000)
         self.update_preview()
+
     def _rebuild_model_combos(self, keep_path):
         self._loading = True
         # 排序（功能 1）：目录+文件名 / 大小降序 / 名称
@@ -134,6 +140,7 @@ class ModelProbeMixin:
             self.combo_model.setCurrentIndex(0)
         self._loading = False
         self._on_model_changed()
+
     def select_model_path(self, path):
         """供下载页调用：把已下载的模型设为主模型（不在扫描列表时临时加入下拉框）。"""
         if not path:
@@ -158,6 +165,7 @@ class ModelProbeMixin:
         self._loading = False
         self.combo_model.setCurrentIndex(self.combo_model.count() - 1)
         self.statusBar().showMessage(t('已切换主模型：{0}').format(os.path.basename(path)), 5000)
+
     def _on_model_changed(self):
         path = self.combo_model.currentData()
         # A6: 显示当前选中模型的完整绝对路径（未选时显示「未选择模型」）
@@ -202,11 +210,13 @@ class ModelProbeMixin:
         # 功能 8：后台检测该模型的对话模板能力（Jinja / 思考强度）
         self._detect_chat_async(path)
     # ---------------------------------------------------------- MTP（功能 4）
+
     def _mtp_status_label(self, text, color="#8fd0ff"):
         """MTP 状态提示：颜色标识 + 下划线（富文本），绿=可启用，橙=不支持/无法检测。"""
         if hasattr(self, "label_mtp_status"):
             self.label_mtp_status.setText(
                 f'<span style="color:{color};"><u>{text}</u></span>')
+
     def _detect_mtp_async(self, path):
         """后台扫描 GGUF 张量名，检测 MTP 支持并更新开关状态。"""
         if not path or not hasattr(self, "check_mtp"):
@@ -228,6 +238,7 @@ class ModelProbeMixin:
             threading.Thread(target=work, daemon=True).start()
         else:
             self._apply_mtp_result(path)
+
     def _on_mtp_detected(self):
         try:
             path = self.combo_model.currentData()
@@ -235,6 +246,7 @@ class ModelProbeMixin:
                 self._apply_mtp_result(path)
         except Exception:
             pass  # 槽函数内异常不外抛
+
     def _apply_mtp_result(self, path):
         ok, hits = self._mtp_cache.get(path, (None, []))
         if not hasattr(self, "check_mtp"):
@@ -256,10 +268,12 @@ class ModelProbeMixin:
             self.check_mtp.setEnabled(True)
             self._loading = False
     # ---------------------------------------------------------- 对话模板（功能 8）
+
     def _chat_status_label(self, text, color="#8fd0ff"):
         if hasattr(self, "label_chat_status"):
             self.label_chat_status.setText(
                 f'<span style="color:{color};"><u>{text}</u></span>')
+
     def _detect_chat_async(self, path):
         """后台读取 GGUF 的 tokenizer.chat_template，检测 Jinja / 思考强度支持。"""
         if not path or not hasattr(self, "check_jinja"):
@@ -281,6 +295,7 @@ class ModelProbeMixin:
             threading.Thread(target=work, daemon=True).start()
         else:
             self._apply_chat_result(path)
+
     def _on_chat_detected(self):
         try:
             path = self.combo_model.currentData()
@@ -288,6 +303,7 @@ class ModelProbeMixin:
                 self._apply_chat_result(path)
         except Exception:
             pass  # 槽函数内异常不外抛
+
     def _apply_chat_result(self, path):
         tpl, reason = self._chat_cache.get(path, (None, False))
         if not hasattr(self, "check_jinja"):
@@ -312,6 +328,7 @@ class ModelProbeMixin:
             self.check_jinja.setEnabled(True)
         self._loading = False
         self._update_chat_controls()
+
     def _update_chat_controls(self):
         """按「模型能力 + 是否启用 Jinja」联动思考强度/推理预算的可选状态。
 
@@ -337,10 +354,12 @@ class ModelProbeMixin:
         else:
             self.combo_reasoning.setToolTip(
                 t('传给对话模板的 reasoning_effort 变量（--chat-template-kwargs）。\nQwen3 等支持思考的模型用它控制「思考深度」：low/medium/high。\n「不设置」= 不传该参数（使用模板默认）。'))
+
     def _on_mmproj_changed(self):
         self.cfg.data["mmproj"] = self.combo_mmproj.currentData() or None
         self._update_mmproj_warn()
         self.update_preview()
+
     def _embedding_length(self, path):
         """读取模型的文本嵌入维度（mmproj 用 projection_dim，主模型用 embedding_length）。"""
         if not path:
@@ -354,6 +373,7 @@ class ModelProbeMixin:
             except Exception:
                 self._emb_cache[path] = None
         return self._emb_cache[path]
+
     def _mmproj_mismatch(self, model_path, mmproj_path):
         """返回 (模型维度, 视觉模型维度)；不匹配返回元组，匹配/未知返回 None。"""
         if not mmproj_path:
@@ -363,6 +383,7 @@ class ModelProbeMixin:
         if me is not None and pe is not None and me != pe:
             return (me, pe)
         return None
+
     def _update_mmproj_warn(self):
         if not hasattr(self, "label_mmproj_warn"):
             return
@@ -377,6 +398,7 @@ class ModelProbeMixin:
         else:
             self.label_mmproj_warn.setText("")
             self.label_mmproj_warn.setToolTip("")
+
     def _load_model_info(self, path):
         def work():
             text = format_gguf_info(path)
@@ -385,14 +407,17 @@ class ModelProbeMixin:
             except RuntimeError:
                 pass
         threading.Thread(target=work, daemon=True).start()
+
     def _clear_info(self):
         self.info_view.setPlainText(t('未选择模型'))
     # ---------------------------------------------------------- 联网查询
+
     def _on_model_info(self, text):
         """本地 GGUF 信息就绪：先显示，若勾选了「联网查询」再自动补充 HF 信息。"""
         self.info_view.setPlainText(text)
         if getattr(self, "check_hf_query", None) is not None and self.check_hf_query.isChecked():
             self._query_hf_info()
+
     def _on_hf_query_toggled(self, checked):
         if self._loading:
             return
@@ -400,6 +425,7 @@ class ModelProbeMixin:
         self.cfg.save()
         if checked and self.combo_model.currentData():
             self._query_hf_info()
+
     def _query_hf_info(self):
         model = self.combo_model.currentData()
         if not model:
@@ -426,5 +452,6 @@ class ModelProbeMixin:
                 pass
 
         threading.Thread(target=work, daemon=True).start()
+
     def _on_hf_info(self, text):
         self.info_view.append("\n\n" + text)

@@ -4,6 +4,7 @@
 from ..llama_updater import get_local_version
 from PyQt6.QtCore import QThread, pyqtSignal
 
+
 CREATE_NO_WINDOW = 0x08000000
 
 

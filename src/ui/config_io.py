@@ -8,10 +8,12 @@ from PyQt6.QtWidgets import QFileDialog, QMessageBox
 from ..cmd_builder import KV_CACHE_TYPES, SPLIT_MODES
 from ..i18n import t
 
+
 CREATE_NO_WINDOW = 0x08000000
 
 
 class ConfigIOMixin:
+
     def _param_widgets(self):
         return [
             self.combo_ngl, self.spin_ctx, self.spin_np, self.spin_threads,
@@ -25,6 +27,7 @@ class ConfigIOMixin:
             self.check_mtp,
             self.check_jinja, self.combo_reasoning, self.spin_reasoning_budget,
         ]
+
     def _gather_server_cfg(self):
         ssl_on = self.check_ssl.isChecked()
         ssl_key, ssl_cert = self._ssl_paths() if ssl_on else ("", "")
@@ -68,6 +71,7 @@ class ConfigIOMixin:
             "timeout": self.spin_timeout.value(),
             "auto_open_browser": self.check_browser.isChecked(),
         }
+
     def _apply_config(self):
         self._loading = True
         d = self.cfg.data
@@ -150,6 +154,7 @@ class ConfigIOMixin:
         self._loading = False
         self._sync_preset_combo()
         self._update_local_ip_label()
+
     def save_config(self):
         d = self.cfg.data
         d["llama_dir"] = self.edit_dir.text().strip()
@@ -169,6 +174,7 @@ class ConfigIOMixin:
         d["window_geometry"] = list(self.geometry().getRect())
         ok = self.cfg.save()
         self.statusBar().showMessage(t('配置已保存') if ok else t('配置保存失败'), 3000)
+
     def _save_startup_prefs(self, _checked=None):
         """残留检测 / 端口建议 两个开关立即落盘（无需点「保存配置」）。"""
         if self._loading:
@@ -176,6 +182,7 @@ class ConfigIOMixin:
         self.cfg.data["check_residual"] = self.check_residual.isChecked()
         self.cfg.data["port_hint"] = self.check_port_hint.isChecked()
         self.cfg.save()
+
     def export_config(self):
         """导出完整配置为 .aic 文件（内容即 JSON，仅扩展名不同）。"""
         default = os.path.join(self.base_dir, t('LLama启动器配置.aic'))
@@ -190,6 +197,7 @@ class ConfigIOMixin:
             self._on_server_log(t('[配置] 已导出到 {0}').format(path))
         except Exception as e:
             QMessageBox.critical(self, t('错误'), t('导出失败: {0}').format(e))
+
     def import_config(self):
         """从 .aic / .json 文件导入完整配置并应用到界面。"""
         path, _ = QFileDialog.getOpenFileName(self, t('导入配置'), self.base_dir,
@@ -211,6 +219,7 @@ class ConfigIOMixin:
         self.statusBar().showMessage(t('配置已导入: {0}').format(path), 5000)
         self._on_server_log(t('[配置] 已从 {0} 导入').format(path))
     # ---------------------------------------------------------- 其他
+
     def _browse_dir(self):
         d = QFileDialog.getExistingDirectory(self, t('选择模型扫描目录'), self.edit_dir.text() or os.path.expanduser("~"))
         if d:
@@ -218,12 +227,14 @@ class ConfigIOMixin:
             self.cfg.data["llama_dir"] = d
             self.cfg.save()
             self.refresh_models()
+
     def _launcher_exe(self):
         """返回启动服务用的可执行文件；自定义项无效/空时回退 模型目录\\llama-server.exe。"""
         exe = self.edit_launcher.text().strip()
         if exe and os.path.isfile(exe):
             return exe
         return os.path.join(self.edit_dir.text().strip() or self.base_dir, "llama-server.exe")
+
     def _browse_launcher(self):
         start = os.path.join(self.edit_dir.text().strip() or self.base_dir, "llama-server.exe")
         path, _ = QFileDialog.getOpenFileName(self, t('选择启动器可执行文件'), start,
@@ -235,6 +246,7 @@ class ConfigIOMixin:
             self.update_preview()
             self.scan_tools()
             self.statusBar().showMessage(t('启动器文件: {0}').format(path), 4000)
+
     def _clear_launcher(self):
         self.edit_launcher.setText("")
         self.cfg.data["launcher_exe"] = ""
@@ -242,9 +254,11 @@ class ConfigIOMixin:
         self.update_preview()
         self.scan_tools()
         self.statusBar().showMessage(t('已恢复自动查找 llama-server.exe'), 3000)
+
     def _data_dir(self):
         """返回数据存储目录（config.json/日志/缓存），空则程序目录。"""
         return self.cfg.ensure_data_dir()
+
     def _browse_data_dir(self):
         d = QFileDialog.getExistingDirectory(self, t('选择数据存储目录'), self._data_dir())
         if not d:
@@ -255,11 +269,13 @@ class ConfigIOMixin:
             self._log_file(t('[配置] 数据目录切换到 {0}').format(d))
         else:
             self.statusBar().showMessage(t('数据目录切换失败'), 4000)
+
     def _reset_data_dir(self):
         self.edit_data_dir.setText("")
         if self.cfg.redirect_data_dir(""):
             self.statusBar().showMessage(t('数据目录已恢复为程序所在目录'), 4000)
             self._log_file(t('[配置] 数据目录恢复为程序目录'))
+
     def _ensure_valid_llama_dir(self):
         """启动时校验模型目录；无效则弹窗让用户选择（浏览选择 / 使用默认上级目录）。"""
         llama_dir = self.edit_dir.text().strip()

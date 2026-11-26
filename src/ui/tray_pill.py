@@ -14,6 +14,7 @@ from ..pill import HoverPill
 
 class TrayPillMixin:
     # ---------------------------------------------------------- 悬浮小窗（托盘胶囊）
+
     def _pill_set(self, updater):
         """把监控数据转发到悬浮窗（未创建时忽略）。"""
         if self._pill is not None:
@@ -21,6 +22,7 @@ class TrayPillMixin:
                 updater(self._pill)
             except Exception:
                 pass
+
     def _update_pill(self, kind, *args):
         """缓存并转发悬浮窗数据（小窗未创建时先存起来，创建后回填）。"""
         self._pill_cache[kind] = args
@@ -29,6 +31,7 @@ class TrayPillMixin:
                 getattr(self._pill, "set_" + kind)(*args)
             except Exception:
                 pass
+
     def _seed_pill(self):
         """用缓存的最新数据初始化刚创建的悬浮窗（避免出现一片「—」）。"""
         if self._pill is None:
@@ -38,6 +41,7 @@ class TrayPillMixin:
                 getattr(self._pill, "set_" + kind)(*args)
             except Exception:
                 pass
+
     def _sync_pill_running(self):
         """悬浮窗运行状态 = 服务运行 且 主窗口不可见（可见时隐藏数据）。"""
         if self._pill is not None:
@@ -45,6 +49,7 @@ class TrayPillMixin:
             self._pill.set_running(running)
             if running and self._running_model_name:
                 self._pill.set_model(self._running_model_name)
+
     def _ensure_pill(self):
         """惰性创建悬浮窗并接好信号。"""
         if self._pill is None:
@@ -60,6 +65,7 @@ class TrayPillMixin:
             self._pill.hide_requested.connect(self._on_pill_session_hidden)
             self._seed_pill()
         return self._pill
+
     def _update_tray_hover(self):
         """按「配置开关 + 窗口是否隐藏」创建/显示/隐藏悬浮胶囊。"""
         if not self.cfg.data.get("hover_pill", True) or self._tray is None \
@@ -73,6 +79,7 @@ class TrayPillMixin:
         pill.apply_theme(self.cfg.data.get("theme", "dark"))
         pill.show_at_default()
         self._sync_pill_running()
+
     def _tray_show_pill(self):
         """托盘菜单「显示悬浮窗」：无视隐藏/停用状态，立即显示小窗。"""
         if not self.cfg.data.get("hover_pill", True):
@@ -86,18 +93,22 @@ class TrayPillMixin:
         pill.apply_theme(self.cfg.data.get("theme", "dark"))
         pill.show_at_default()
         self._sync_pill_running()
+
     def _on_pill_session_hidden(self):
         """右键菜单「隐藏图标」：本次最小化期间不再显示，恢复主界面后清除。"""
         self._pill_session_hidden = True
+
     def _on_pill_hidden(self):
         """胶囊上点 ✕ 后：同步取消「高级参数」里的勾选（配置已被胶囊写为 False）。"""
         if self.check_hover_pill.isChecked():
             self._loading = True
             self.check_hover_pill.setChecked(False)
             self._loading = False
+
     def _save_pill_pos(self, x, y):
         self.cfg.data["hover_pill_pos"] = [int(x), int(y)]
         self.cfg.save()
+
     def _on_pill_hover_toggled(self, _checked=None):
         if self._loading:
             return
@@ -106,6 +117,7 @@ class TrayPillMixin:
         if self.check_hover_pill.isChecked():
             self._pill_session_hidden = False   # 重新勾选后忽略「隐藏图标」的临时状态
         self._update_tray_hover()
+
     def _set_tray_menu_state(self):
         """托盘右键菜单状态：启动/停止按服务状态置灰；小窗已显示时「显示悬浮窗」置灰。"""
         if self._tray is None or self._tray_act_start is None:
@@ -116,6 +128,7 @@ class TrayPillMixin:
         visible = self._pill is not None and self._pill.isVisible()
         self._tray_act_pill.setEnabled(not visible)
     # ---------------------------------------------------------- 托盘
+
     def _load_icon(self):
         """窗口/托盘图标：优先使用 assets/icon.ico，否则用程序生成的图标。"""
         ico = os.path.join(self.resource_dir, "assets", "icon.ico")
@@ -124,6 +137,7 @@ class TrayPillMixin:
             if not ic.isNull():
                 return ic
         return self._make_icon()
+
     def _make_icon(self):
         pm = QPixmap(64, 64)
         pm.fill(Qt.GlobalColor.transparent)
@@ -140,6 +154,7 @@ class TrayPillMixin:
         p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, "L")
         p.end()
         return QIcon(pm)
+
     def _setup_tray(self):
         if not QSystemTrayIcon.isSystemTrayAvailable():
             self._tray = None
@@ -165,6 +180,7 @@ class TrayPillMixin:
         self._tray.activated.connect(self._on_tray_activated)
         self._tray.show()
         self._set_tray_menu_state()
+
     def _show_from_tray(self):
         if self._pill is not None:
             self._pill.hide()
@@ -173,9 +189,11 @@ class TrayPillMixin:
         self.raise_()
         self.activateWindow()
         self._sync_pill_running()
+
     def _on_tray_activated(self, reason):
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self._show_from_tray()
+
     def _switch_language(self, code):
         """切换界面语言：写入配置并提示重启生效。"""
         cur = self.cfg.data.get("language") or "auto"
@@ -192,6 +210,7 @@ class TrayPillMixin:
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
         if ret == QMessageBox.StandardButton.Yes:
             self._restart_app()
+
     def _restart_app(self):
         import subprocess
         if getattr(sys, "frozen", False):

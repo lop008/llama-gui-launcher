@@ -10,11 +10,13 @@ from ..bat_validator import parse_script
 from ..cmd_builder import KV_CACHE_TYPES, SPLIT_MODES, build_bat_content, build_preview_bat, model_alias
 from ..i18n import t
 
+
 CREATE_NO_WINDOW = 0x08000000
 
 
 class BatIOMixin:
     # ---------------------------------------------------------- 启动文件导入
+
     @staticmethod
     def _select_combo_by_path(combo, target):
         """按绝对路径或文件名在 combo 中选中匹配项；成功返回 True。"""
@@ -31,6 +33,7 @@ class BatIOMixin:
                 combo.setCurrentIndex(i)
                 return True
         return False
+
     def import_bat(self):
         """解析已有的启动文件（.bat/.cmd/.ps1/.sh/文本），把参数应用到当前界面。"""
         start_dir = self.edit_dir.text().strip() or self.base_dir
@@ -77,6 +80,7 @@ class BatIOMixin:
                                 msg + t('\n\n注意：\n') + "\n".join(warns))
         else:
             self.statusBar().showMessage(msg, 5000)
+
     def _apply_imported_params(self, params):
         """把 parse_script 的结果应用到界面控件。返回 (应用项数, 警告列表)。"""
         kv = {}
@@ -240,6 +244,7 @@ class BatIOMixin:
             self._loading = False
         return applied, warns
     # ---------------------------------------------------------- 一键启动导出
+
     def export_bat(self):
         """将当前配置导出为可双击启动的 .bat，并在桌面创建带软件图标的快捷方式。"""
         model = self.combo_model.currentData()
@@ -273,6 +278,7 @@ class BatIOMixin:
         self.statusBar().showMessage(t('已导出: {0}').format(path), 5000)
         self._on_server_log(t('[导出] 已生成一键启动脚本 {0}').format(path))
         self._create_desktop_shortcut(path)
+
     def export_preview_bat(self):
         """把「命令预览」页的完整命令行原样导出为 .bat，自选存储路径（功能 6）。"""
         preview = (self.preview_view.toPlainText() or "").strip()
@@ -295,6 +301,7 @@ class BatIOMixin:
             return
         self.statusBar().showMessage(t('命令预览已导出: {0}').format(path), 5000)
         self._on_server_log(t('[导出] 命令预览已保存为 {0}').format(path))
+
     def _create_desktop_shortcut(self, bat_path):
         """用 WScript.Shell 在桌面创建指向 bat 的快捷方式，图标取程序图标。"""
         desktop = self._desktop_dir()
@@ -334,6 +341,7 @@ class BatIOMixin:
             self, t('完成'),
             t('已导出：{0}\n\n已在桌面创建快捷方式：\n{1}').format(bat_path, lnk_path))
         self.statusBar().showMessage(t('桌面快捷方式已创建: {0}').format(lnk_path), 6000)
+
     def _shortcut_icon(self):
         """快捷方式图标路径：优先使用启动器 exe 内嵌图标（不产生额外文件，且长期有效）。
 
@@ -358,6 +366,7 @@ class BatIOMixin:
             return dst if os.path.isfile(dst) else ""
         except Exception:
             return ""
+
     def _desktop_dir(self):
         """返回真实桌面目录（兼容 OneDrive/系统盘），找不到返回 None。"""
         desktop = os.path.join(os.path.expanduser("~"), "Desktop")

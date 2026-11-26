@@ -41,6 +41,7 @@ class CollapsibleBox(QWidget):
         self._content.setVisible(not collapsed)
         self._toggle.setArrowType(Qt.ArrowType.RightArrow if collapsed else Qt.ArrowType.DownArrow)
 
+
 class _AspectImageLabel(QLabel):
     """按宽度等比缩放图片的标签：横向铺满可用宽度，纵向保持原始宽高比（不拉伸变形）。"""
 

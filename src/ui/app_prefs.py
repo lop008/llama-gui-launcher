@@ -12,11 +12,13 @@ from ..stats_dialog import StatsDialog
 from ..themes import THEMES, build_qss
 from ..usage_stats import StatsStore, parse_log_line
 
+
 CREATE_NO_WINDOW = 0x08000000
 
 
 class AppPrefsMixin:
     # ---------------------------------------------------------- 数据统计（功能 9）
+
     def _stats(self):
         """惰性创建 StatsStore；数据目录变化时自动重建。"""
         path = os.path.join(self._data_dir(), "stats.json")
@@ -24,12 +26,14 @@ class AppPrefsMixin:
             self._stats_path = path
             self._stats_store = StatsStore(os.path.dirname(path))
         return self._stats_store
+
     def _stats_model_name(self):
         """统计归属的模型名：优先当前选中模型，其次监控到的运行模型。"""
         p = self.combo_model.currentData() if hasattr(self, "combo_model") else None
         if p:
             return os.path.basename(p)
         return ""
+
     def _tick_usage(self):
         if not (hasattr(self, "server") and self.server.running):
             return
@@ -40,6 +44,7 @@ class AppPrefsMixin:
         # 切勿再次累加 pending，否则总时长会翻倍。
         self._usage_pending += 5.0
         self._stats().add_usage(name, seconds=5.0)
+
     def _flush_usage(self):
         """停止/退出：保存统计文件（时长已在运行期间逐笔累计，这里不再重复累加）。"""
         try:
@@ -47,6 +52,7 @@ class AppPrefsMixin:
             self._stats().save()
         except Exception:
             pass
+
     def show_stats(self):
         """打开独立的数据统计界面（功能 9）。"""
         if getattr(self, "_stats_dlg", None) is None:
@@ -57,6 +63,7 @@ class AppPrefsMixin:
         self._stats_dlg.raise_()
         self._stats_dlg.activateWindow()
     # ------------------------------------------------------------------ 事件过滤
+
     def eventFilter(self, obj, ev):
         """吞掉所有数字框（QSpinBox/QDoubleSpinBox）的滚轮事件。
 
@@ -65,6 +72,7 @@ class AppPrefsMixin:
         if ev.type() == QEvent.Type.Wheel and isinstance(obj, QAbstractSpinBox):
             return True
         return super().eventFilter(obj, ev)
+
     def _on_preset_changed(self):
         idx = self.combo_preset.currentIndex()
         if idx <= 0:
@@ -76,6 +84,7 @@ class AppPrefsMixin:
             self._loading = False
             self._sync_preset_combo()
         self.statusBar().showMessage(t('已应用上下文预设: {0}').format(PRESETS[idx][0]), 3000)
+
     def _sync_preset_combo(self):
         """上下文长度变化时，让「上下文预设」下拉自动回显对应档位；非预设值显示「自定义」。"""
         if self._loading or not hasattr(self, "combo_preset"):
@@ -90,9 +99,11 @@ class AppPrefsMixin:
             self.combo_preset.blockSignals(True)
             self.combo_preset.setCurrentIndex(target)
             self.combo_preset.blockSignals(False)
+
     def _on_ctx_manual(self, _v):
         self._sync_preset_combo()
     # ---------------------------------------------------------- 主题
+
     def set_theme(self, key):
         """切换配色方案（深色/浅色/橙色/绿色/灰色/棕色）。"""
         if key not in THEMES:
@@ -100,6 +111,7 @@ class AppPrefsMixin:
         self.cfg.data["theme"] = key
         self._apply_theme()
         self.cfg.save()
+
     def _apply_theme(self):
         key = self.cfg.data.get("theme", "dark")
         if key not in THEMES:
@@ -109,6 +121,7 @@ class AppPrefsMixin:
         self.btn_theme.setText(f"{THEMES[key]['icon']} {THEMES[key]['name']}")
         if self._pill is not None:
             self._pill.apply_theme(key)
+
     def _restore_geometry(self):
         """启动时恢复上次的窗口位置/大小（配置里存的是 [x, y, w, h]）。
 
@@ -126,6 +139,7 @@ class AppPrefsMixin:
         if QApplication.screenAt(QPoint(x + w // 2, y + h // 2)) is None:
             return
         self.setGeometry(x, y, w, h)
+
     def _current_tab_order(self):
         order = []
         for i in range(self.tabs.count()):
@@ -135,6 +149,7 @@ class AppPrefsMixin:
                     order.append(key)
                     break
         return order
+
     def _restore_tab_order(self):
         """按配置里的 tab_order 恢复底部标签顺序（缺项/新标签自动追加到末尾）。"""
         order = self.cfg.data.get("tab_order")
@@ -145,14 +160,17 @@ class AppPrefsMixin:
             cur = self.tabs.indexOf(self._tab_widgets[key])
             if cur >= 0 and cur != target:
                 self.tabs.tabBar().moveTab(cur, target)
+
     def _on_tab_moved(self, _from, _to):
         self.cfg.data["tab_order"] = self._current_tab_order()
         self.cfg.save()
+
     def _reflow_window(self, checked=None):
         """折叠/展开参数区后，让窗口高度随内容伸缩（双向自适应）。
         checked=True 展开（只长大）；checked=False 折叠（缩短）。
         延迟一小段事件循环，等布局稳定后再执行，避免陈旧的最小尺寸。"""
         QTimer.singleShot(30, lambda: self._apply_reflow(checked))
+
     def _apply_reflow(self, checked=None):
         if not hasattr(self, "params_panel"):
             return
@@ -174,6 +192,7 @@ class AppPrefsMixin:
         QApplication.processEvents()
         self.setMinimumSize(self.minimumSizeHint())  # 恢复为内容实际最小尺寸
     # ---------------------------------------------------------- 日志落盘
+
     def _status_tip(self, text, ms=4000, hold=False):
         """状态栏提示。hold=True 的消息在 ms 内不被普通消息抢掉
         （启动时多个后台检测并行完成，谁最后写谁说话，用户会看不到关键提醒）。"""
@@ -186,6 +205,7 @@ class AppPrefsMixin:
             self.statusBar().showMessage(text, ms)
         except Exception:
             pass
+
     def _log_file(self, text):
         try:
             logdir = os.path.join(self._data_dir(), "logs")
@@ -195,6 +215,7 @@ class AppPrefsMixin:
                 f.write(f"[{time.strftime('%Y-%m-%d %H:%M:%S')}] {text}\n")
         except Exception:
             pass
+
     def _on_server_log(self, text):
         self.log_view.appendPlainText(text)
         self._log_file(text)
@@ -211,6 +232,7 @@ class AppPrefsMixin:
                         out_tokens=n if kind == "gen" else 0)
                 except Exception:
                     pass
+
     def open_log_dir(self):
         logdir = os.path.join(self._data_dir(), "logs")
         try:
@@ -219,9 +241,11 @@ class AppPrefsMixin:
         except Exception as e:
             QMessageBox.information(self, t('提示'), t('无法打开日志目录: {0}').format(e))
     # ---------------------------------------------------------- 状态栏监控
+
     def _on_mem(self, percent, tip):
         self.label_mem.setText(t('内存 {0:.0f}%').format(percent))
         self.label_mem.setToolTip(tip)
+
     def _on_vram(self, text):
         if text:
             self.label_vram.setText(t('显存 {0}').format(text))
@@ -230,6 +254,7 @@ class AppPrefsMixin:
             self.label_vram.setText("")
             self.label_vram.setVisible(False)
     # ---------------------------------------------------------- 采样预设
+
     def _on_sampling_preset(self, idx):
         if self._loading or idx <= 0:
             return
@@ -242,6 +267,7 @@ class AppPrefsMixin:
         self._loading = False
         self.update_preview()
         self.statusBar().showMessage(t('已应用采样预设: {0}').format(SAMPLING_PRESETS[idx][0]), 3000)
+
     def _on_sampling_manual(self, _v):
         if self._loading:
             return
