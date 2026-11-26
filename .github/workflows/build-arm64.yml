@@ -1,0 +1,153 @@
+name: Build ARM64 packages
+
+# PyInstaller cannot cross-compile: arm64 builds must run on an arm64 Windows host.
+# This workflow builds the two arm64 artifacts on GitHub's windows-11-arm runner,
+# runs the three acceptance checks (PE machine / version resource / bundled language
+# tables) plus an offscreen smoke test, and uploads them as a workflow artifact.
+# Download the artifact, verify it again locally (PE machine 0xAA64), then attach it
+# to the GitHub Release together with the two x64 artifacts.
+#
+# Runs automatically on every v* tag; can also be started by hand (workflow_dispatch).
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Why a manual run (optional)'
+        required: false
+        type: string
+
+jobs:
+  arm64:
+    runs-on: windows-11-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        # cryptography has no win_arm64 wheel in the version requirements.txt allows,
+        # so pin the last one that ships one. It is imported lazily (HTTPS certs only).
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install "cryptography==46.0.3" "pyinstaller>=6.0"
+
+      - name: Resolve version from src/__init__.py
+        shell: pwsh
+        run: |
+          $src = Get-Content -Raw -LiteralPath 'src/__init__.py'
+          $v = [regex]::Match($src, '__version__\s*=\s*["'']([^"'']+)["'']').Groups[1].Value
+          if (-not $v) { throw 'cannot read __version__ from src/__init__.py' }
+          "VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding ascii
+          "Building v$v"
+
+      - name: Build single-file exe (arm64)
+        shell: pwsh
+        run: |
+          $spec = Get-ChildItem -Filter '*-win-arm64.spec' |
+                  Where-Object { $_.Name -notlike '*portable*' } | Select-Object -First 1
+          if (-not $spec) { throw 'arm64 single-file spec not found' }
+          python -m PyInstaller $spec.FullName --noconfirm --clean
+          if ($LASTEXITCODE) { throw 'single-file build failed' }
+
+      - name: Build portable build (arm64)
+        shell: pwsh
+        run: |
+          $spec = Get-ChildItem -Filter '*-win-arm64-portable.spec' | Select-Object -First 1
+          if (-not $spec) { throw 'arm64 portable spec not found' }
+          python -m PyInstaller $spec.FullName --noconfirm --clean
+          if ($LASTEXITCODE) { throw 'portable build failed' }
+
+      - name: Check artifacts (PE machine / version resource / language tables)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $one = Get-ChildItem -Path dist -Filter '*-win-arm64.exe' | Select-Object -First 1
+          $port = Get-ChildItem -Path dist -Recurse -Filter '*-win-arm64-portable.exe' |
+                  Select-Object -First 1
+          if (-not $one -or -not $port) { throw 'expected artifacts missing' }
+          foreach ($exe in @($one, $port)) {
+            $bytes = [System.IO.File]::ReadAllBytes($exe.FullName)[0..0x400]
+            $peOff = [BitConverter]::ToInt32($bytes, 0x3C)
+            $machine = [BitConverter]::ToUInt16($bytes, $peOff + 4)
+            "PE machine of $($exe.Name): 0x$($machine.ToString('X4'))"
+            if ($machine -ne 0xAA64) { throw "$($exe.Name) is not ARM64 (0x$($machine.ToString('X4')))" }
+            $fv = $exe.VersionInfo.FileVersion
+            "FileVersion of $($exe.Name): $fv"
+            if ($fv -notlike "$env:VERSION*") { throw "$($exe.Name) version resource is $fv, expected $env:VERSION" }
+          }
+          "OK: both artifacts are ARM64 and carry version $env:VERSION"
+
+      - name: Check bundled language tables (PYZ inside the exe)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import sys
+          import tempfile
+          from pathlib import Path
+
+          from PyInstaller.archive.readers import CArchiveReader, ZlibArchiveReader
+
+          exe = next(p for p in Path("dist").rglob("*-win-arm64.exe"))
+          arc = CArchiveReader(str(exe))
+          key = next(k for k in arc.toc if "PYZ" in k.upper())
+          tmp = os.path.join(tempfile.gettempdir(), "arm64_check.pyz")
+          with open(tmp, "wb") as fh:
+              fh.write(arc.extract(key))
+          mods = [n for n in ZlibArchiveReader(tmp).toc if n.startswith("src.")]
+          loc = sorted(n for n in mods if n.startswith("src.locales"))
+          need = {"src.locales"} | {"src.locales." + c
+                                    for c in ("en", "zh_tw", "ja", "ko", "ru", "es", "fr")}
+          missing = need - set(loc)
+          print("locales:", [n.split(".")[-1] for n in loc])
+          print("src.i18n:", "src.i18n" in mods)
+          if missing or "src.i18n" not in mods:
+              sys.exit("missing from bundle: %s" % (missing or "src.i18n"))
+          print("language tables OK")
+          PY
+
+      - name: Smoke test (offscreen, must stay alive 15s)
+        shell: pwsh
+        run: |
+          $dir = (Get-ChildItem -Path dist -Directory -Filter '*-win-arm64-portable' | Select-Object -First 1).FullName
+          $exe = (Get-ChildItem -Path $dir -Filter '*-win-arm64-portable.exe' | Select-Object -First 1).FullName
+          # no display on CI: qt.qpa.plugin must be offscreen; English config also proves
+          # that the frozen i18n tables load from inside the package
+          Set-Content -Path (Join-Path $dir 'config.json') -Value '{"language":"en"}' -Encoding UTF8
+          $env:QT_QPA_PLATFORM = 'offscreen'
+          $p = Start-Process -FilePath $exe -PassThru -RedirectStandardError (Join-Path $dir 'smoke.log')
+          Start-Sleep -Seconds 15
+          if ($p.HasExited) {
+            Get-Content (Join-Path $dir 'smoke.log') -ErrorAction SilentlyContinue | Select-Object -Last 40
+            throw "arm64 build exited after $([int]$p.ExitCode) - see smoke.log"
+          }
+          Stop-Process -Id $p.Id -Force
+          Remove-Item (Join-Path $dir 'config.json'), (Join-Path $dir 'smoke.log') -Force -ErrorAction SilentlyContinue
+          "Smoke OK: process alive for 15s"
+
+      - name: Stage artifacts with ASCII release names
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $v = $env:VERSION
+          New-Item -ItemType Directory -Force -Path out | Out-Null
+          $one = Get-ChildItem -Path dist -Filter '*-win-arm64.exe' | Select-Object -First 1
+          Copy-Item $one.FullName "out/LLama-Launcher-v$v-win-arm64.exe" -Force
+          $dir = (Get-ChildItem -Path dist -Directory -Filter '*-win-arm64-portable' | Select-Object -First 1).FullName
+          Compress-Archive -Path (Join-Path $dir '*') -DestinationPath "out/LLama-Launcher-v$v-win-arm64-portable.zip" -Force
+          Get-ChildItem out | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
+
+      - name: Upload arm64 artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: llama-launcher-arm64-v${{ env.VERSION }}
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30

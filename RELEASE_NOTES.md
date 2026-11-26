@@ -1,6 +1,78 @@
 # LLama 启动器 发布说明 / Release Notes
 
-> 最新版本 / Latest release: **v0.5.14** · 发布日期 / Released: 2026-11-26
+> 最新版本 / Latest release: **v0.5.15** · 发布日期 / Released: 2026-11-27
+
+---
+
+# LLama 启动器 v0.5.15 发布说明 / Release Notes
+
+## English
+
+A feature release: speculative decoding becomes a first-class part of the interface, the model folder is finally sorted by what the files actually are, and every version now ships both x64 and ARM64 builds.
+
+### New Features
+
+- **Speculative decoding** — the "Enable MTP" checkbox on the Advanced page grew into a **Speculative decoding** row right under the model selector: a method dropdown with **Off / Auto** plus 12 methods (MTP, DFlash 2, DFlash, DSpark, LiliCorr, EAGLE-3, small-model draft, and the four n-gram variants), a colour-coded status label, a **Draft model** picker and a **Draft length** spinner. Support is detected, never guessed: which `--spec-type` values your local `llama-server` really accepts (read from its own `--help`), whether the selected model has a built-in MTP head, and whether a draft file actually matches the model. Methods your engine does not know are greyed out with the reason ("update llama.cpp"); methods missing their draft tell you what to download; and **Auto passes no `--spec-type` at all when nothing is usable**, so speculative decoding can never be the reason the server fails to start.
+- **Auto priority editor** — **Sort** opens a dialog where you set which method `Auto` tries first: drag items with the mouse, or use ▲ / ▼ and Alt+↑ / Alt+↓. The order is saved; methods introduced later are appended automatically.
+- **Download draft** — finds draft models on HuggingFace that pair with the model you selected (official GGUF publishers first), shows method / file / repository / size / notes, downloads into the main model's own folder — which is where drafts must live to be recognised — and selects the result for you. Authors' repos that publish safetensors only are not offered as one-click downloads; you get the exact `convert_hf_to_gguf.py … --target-model-dir …` command instead.
+- **Auxiliary files inspector** — a summary line (`vision projection 8 · draft head 4 · calibration file 1 (view)`) opens a table of every non-model GGUF with its role, size, folder and which main model it serves, plus a button to open the folder.
+- **Model list role screening** — vision projections, draft heads and quantization calibration files are no longer offered as "models". Roles are read from GGUF contents (tensor names, `general.type`, architecture) with the filename only as a fallback, and unreadable files are treated as models — a helper may be listed once in a while, but a real model is never silently hidden.
+- **ARM64 support in the updater** — the "Update llama.cpp" page filtered out every asset with `arm` in its name, so Windows-on-ARM users saw an empty list. Both architectures are listed now, your own first.
+
+### Improvements
+
+- The main window was split from 3338 lines into ten focused modules under `src/ui/` with no behaviour change, so future features no longer pile into one file.
+- 93 new interface strings translated into all 7 languages and 7 dead ones removed — the translation tables now match the source exactly (820 keys, 0 missing, 0 unused).
+
+### Fixes
+
+- **Queued downloads were silently dropped**: selecting a second download while one was running did nothing at all, with no message.
+- A method that needs a draft file no longer emits `--spec-type` when the file is missing.
+- The Russian translation table failed to parse (a missing trailing comma), so Russian users were served Chinese without any indication.
+- **Residual-process detection never fired on Chinese Windows** — when no `llama-server` is running, `tasklist` writes a localised (GBK) "no tasks" message, which raised inside Python's reader thread and made the probe always return an empty list. Every text-decoded subprocess call now states its encoding, with a static check that fails the suite if a new call forgets it.
+
+### Downloads
+
+| File | Description |
+|------|-------------|
+| `LLama-Launcher-v0.5.15-win-x64.exe` | Single-file build (x64) — no Python required |
+| `LLama-Launcher-v0.5.15-win-x64-portable.zip` | Portable build (x64) — extract and run |
+| `LLama-Launcher-v0.5.15-win-arm64.exe` | Single-file build (ARM64, Snapdragon / Windows on ARM) |
+| `LLama-Launcher-v0.5.15-win-arm64-portable.zip` | Portable build (ARM64) — extract and run |
+
+## 中文
+
+功能版本：投机解码正式做进界面，模型目录按文件真实身份筛查，并且从本版起每个版本同时发布 x64 与 ARM64 两套产物。
+
+### 🆕 新增功能
+
+- **投机解码**：高级页那个「启用 MTP」勾选框升级成基础页模型选择下方的**投机解码**行——**不启用 / 自动** 加 12 种方式（MTP、DFlash 2、DFlash、DSpark、LiliCorr、EAGLE-3、小模型草稿、4 种 n-gram），配状态标签、草稿模型选择、草稿长度。支持与否全部实测：读本机 `llama-server --help` 看引擎认哪些取值、读模型 GGUF 看有没有内嵌 MTP 头、看草稿与主模型配不配对。本机不认的方式置灰并在悬停里写原因（提示更新 llama.cpp），缺草稿的方式告诉你该下什么；**自动在一种可用方式都没有时完全不下发 `--spec-type`**，投机解码绝不会变成服务起不来的原因。
+- **「自动」优先级排序**：下拉旁的「排序」按钮打开对话框，按住条目上下拖动，或用 ▲▼ 与 Alt+↑ / Alt+↓ 调整；顺序会保存，以后新版本新增的方式自动补在后面。
+- **下载草稿**：按当前选中的模型在 HuggingFace 上找配套草稿（官方 GGUF 发布方优先），列表给出方式 / 文件 / 仓库 / 大小 / 说明，下载直接落到**主模型所在目录**（草稿必须同目录才会被配对），完成后自动选中。只放 safetensors 的原作者仓库不提供假下载，改为给出完整的 `convert_hf_to_gguf.py … --target-model-dir …` 转换命令与放回位置。
+- **辅助文件清单**：模型行下方一行摘要（`视觉投影 8 · 投机草稿头 4 · 量化标定文件 1（查看）`），点开是全部非模型 GGUF 的表格：类型、文件名、大小、所在目录以及它服务于哪个主模型，并可一键打开目录。
+- **模型目录角色筛查**：视觉投影（mmproj）、投机草稿头、量化标定文件（imatrix）不再出现在主模型下拉里。角色以 GGUF **内容**为准（张量名、`general.type`、架构），文件名只作兜底；读不出来的文件一律当主模型——宁可偶尔多显示一个辅助文件，也绝不静默藏掉真模型。
+- **ARM64 支持回归**：「更新 llama.cpp」页以前把所有名字里带 `arm` 的资产都过滤掉了，导致 ARM 设备面对空列表（官方每个版本其实都发 4 个 arm64 包）。现在两种架构都列出，本机架构排最前。
+
+### 🔧 改进
+
+- 主窗口从 3338 行拆成 `src/ui/` 下十个职责单一的模块，行为逐字不变，新功能不必再往一个巨型文件里堆。
+- 93 条新界面文案翻译进全部 7 张语言表，并清掉旧 MTP 勾选框遗留的 7 条死文案：语言表与源码严格一一对应（820 个 key，缺失 0、多余 0）。
+
+### 🐛 修复
+
+- **排队中的下载不再被静默丢弃**：正在下载时再点第二个文件，以前什么都不发生也没有提示。
+- 需要草稿文件的投机方式，在草稿缺失时不再下发 `--spec-type`。
+- 俄语语言表因缺少一个尾逗号而无法解析，导致俄语用户被无声地显示成简体中文。
+- **中文系统上「启动时检测残留进程」一直静默失效**：没有 llama-server 在跑时 `tasklist` 会输出 GBK 的「信息: 没有运行的任务…」，Python 内部读线程解码失败，探测结果永远是空表。现在所有按文本读取的子进程都显式指定编码，并加了静态门禁防止新代码再漏。
+
+### 下载
+
+| 文件 | 说明 |
+|------|------|
+| `LLama-Launcher-v0.5.15-win-x64.exe` | 单文件版（x64），无需安装 Python，双击即用 |
+| `LLama-Launcher-v0.5.15-win-x64-portable.zip` | 便携版（x64），解压即用 |
+| `LLama-Launcher-v0.5.15-win-arm64.exe` | 单文件版（ARM64，骁龙本 / Windows on ARM） |
+| `LLama-Launcher-v0.5.15-win-arm64-portable.zip` | 便携版（ARM64），解压即用 |
 
 ---
 

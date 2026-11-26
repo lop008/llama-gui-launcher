@@ -2,6 +2,35 @@
 
 All notable changes to LLama 启动器 / LLama Launcher.
 
+## [0.5.15] - 2026-11-27
+
+### New Features
+
+- **Speculative decoding** — the old "Enable MTP" checkbox on the Advanced page became a full **Speculative decoding** row under the model selector on the Basic page: a method dropdown (**Off / Auto** plus 12 methods — MTP, DFlash 2, DFlash, DSpark, LiliCorr, EAGLE-3, small-model draft and the four n-gram variants), a colour-coded status label, a **Draft model** dropdown and a **Draft length** spinner (`--spec-draft-n-max`, 0 = engine default). Detection is three-layer and all measured, never guessed: which `--spec-type` values the local `llama-server` actually accepts (parsed from its `--help`), what the selected model supports (GGUF contents: built-in nextn/MTP head, matching draft files nearby) and whether a draft really pairs with the model (base name / architecture). Methods the local engine does not know are greyed out with the reason in the tooltip ("update llama.cpp"), missing drafts say what to download, and mismatches only warn — they never block a launch. `Auto` picks the first currently usable method; if none is usable, **no `--spec-type` is passed at all** and the status bar explains why, so a speculative-decoding mistake can never stop the server from starting.
+- **Auto priority editor** — the **Sort** button beside the dropdown opens a dialog listing the methods in the order `Auto` will try them: reorder by dragging an item, with ▲ / ▼ buttons and Alt+↑ / Alt+↓ as equivalents, plus Restore default order. Persisted to `config.json` (`spec_order`); methods you never ordered are appended, so a new release's methods still get tried.
+- **Download draft** — a dialog that finds speculative drafts on HuggingFace for the currently selected model: it takes the base model name from the GGUF metadata, prefers official GGUF publishers (ggml-org / unsloth / bartowski), then lists each candidate as method / file / repository / size / notes, and downloads it **into the main model's own folder** (drafts are only paired when they sit next to the model) before re-scanning and selecting it. Repos that publish safetensors only are not offered as fake downloads — instead the dialog prints the exact `convert_hf_to_gguf.py … --target-model-dir …` recipe and where to put the result.
+- **Auxiliary files inspector** — a one-line summary under the model row (`Auxiliary files: vision projection 8 · draft head 4 · calibration file 1 (view)`) opens a table of every non-model GGUF in the catalogue with its role, filename, size, folder and which main model it belongs to, and a button to open that folder.
+- **Model catalogue role screening** — vision projections (`mmproj`), speculative draft heads and quantization calibration files (`imatrix_*`) no longer pollute the main model dropdown. Roles are decided by GGUF **contents** (tensor names, `general.type`, architecture) with the filename only as a fallback, and anything unreadable is treated as a main model — a helper file may be shown where it should not be, but a real model is never silently hidden. If the saved main model turns out to be a helper file, it is dropped from the list with an explicit notice.
+- **ARM64 packages are visible again** — the "Update llama.cpp" page used to filter out every asset whose name contained `arm`, so Windows-on-ARM machines saw an empty list although every llama.cpp release ships four arm64 builds. Both architectures are now listed with the machine's own architecture first (`src/llama_updater.win_assets`).
+
+### Improvements
+
+- **Main window split into modules** — `src/main_window.py` went from 3338 to ~500 lines: widgets, workers, page layouts, GPU probing, model probing, launch flow, launch-file I/O, agent tools, tray pill, app preferences, config I/O and the About menu moved into `src/ui/*` mixins. Pure code motion with no behaviour change (member inventory and cross-class name collisions verified), one commit per group.
+- **i18n kept exhaustive** — 93 new strings translated into all 7 tables (en / zh_tw / ja / ko / ru / es / fr) and the 7 strings left over from the retired MTP checkbox removed, so the tables match the source exactly (820 keys, 0 missing, 0 unused, placeholders and mnemonics verified).
+- Two tooltips that still told users to drag items inside the dropdown were rewritten to point at the Sort dialog instead — the dropdown cannot start an internal drag, so the old wording described an action with no effect.
+
+### Fixes
+
+- **Queued downloads are no longer silently dropped** — `ModelDownloader.enqueue()` only appended to the queue when nothing was downloading, so clicking Download on a second file while one was in flight did nothing at all, with no message. Tasks are now always queued and the worker thread is started only when needed (regression-tested with three queued tasks, the last two enqueued mid-download).
+- **No `--spec-type` without its draft** — every method that requires an external draft model omits the flag entirely when the file is absent, instead of handing llama-server a path it cannot open.
+- **Russian translation table loads again** — the last entry of `src/locales/ru.py` had no trailing comma; the file failed to parse, which meant Russian users were silently served Simplified Chinese. The maintenance tooling now normalises trailing commas, and the loader reports the failure reason (`i18n.failed_languages()`) instead of failing quietly.
+- **Residual-process detection works on Chinese Windows** — `find_llama_server_processes()` runs `tasklist`, which on a Chinese system writes "信息: 没有运行的任务…" (GBK) to stdout when nothing matches; with `text=True` and no encoding, Python's internal reader thread raised `UnicodeDecodeError`, `stdout` came back `None` and the check returned nothing — i.e. the "leftover llama-server processes" warning never fired in exactly the case where the command prints localised text. Every text-decoded subprocess call in the app now specifies `encoding`/`errors`, and a static check in the logic suite fails the build if a new one forgets it.
+
+### Testing
+
+- New suites wired into the single serial entry point (`_test_all.py`): role screening of the model catalogue (59 checks, including a real config pointing at a helper file), the speculative-decoding parameter layer (26 checks), draft download candidate ranking / destination / conversion hint / queue regression (35 checks), an opt-in online smoke test that only HEADs a draft URL and skips cleanly when HuggingFace is unreachable, and the ARM64 asset-selection regression against real llama.cpp release asset names.
+- Drag-to-reorder is verified with synthetic mouse events: the implementation deliberately avoids `QDrag` (on Windows it enters an OLE modal loop that scripted events cannot reach, which would make the feature untestable) and avoids `takeItem()` / `rowAt()` during event dispatch, both of which take the whole process down with `0xC0000409`.
+
 ## [0.5.14] - 2026-11-26
 
 ### Fixes

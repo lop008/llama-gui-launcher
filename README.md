@@ -10,14 +10,16 @@ A GUI launcher for llama.cpp local large language models. It turns the whole wor
 
 **[中文文档 / Chinese](README.zh-CN.md)**
 
-> **Latest release: v0.5.14** — a stability release: two crash bugs fixed and a new end-to-end test suite that really starts `llama-server`. Previous highlight: the full multilingual interface (8 UI languages + follow-system) in v0.5.13, plus the tray hover pill, live tok/s, HTTPS + LAN sharing and richer GGUF metadata. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
+> **Latest release: v0.5.15** — speculative decoding is now a first-class feature (12 methods + Auto, draft download, priority editor), the model list is screened by what each GGUF actually *is*, and every release ships both x64 and ARM64 builds. Previous highlight: the full multilingual interface (8 UI languages + follow-system) in v0.5.13. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
 
-## What's New in v0.5.14
+## What's New in v0.5.15
 
-1. **"Validate launch file" no longer dies on an illegal port** — `--port 99999` / `--port 0` used to abort the check with an unhandled `OverflowError`; you now get a clear `✘ --port out of the valid range (1-65535)`.
-2. **Data Statistics survives a damaged `stats.json`** — one malformed record used to throw when opening the window and again from the 5-second usage timer; bad records are skipped and repaired automatically.
-3. **Silent language-table failures now report why** — a language that fails to load in the packaged exe used to fall back to Chinese with no trace; the reason goes to stderr and is queryable via `i18n.failed_languages()`.
-4. **Full end-to-end coverage** — suites that start a real server and exercise the whole OpenAI surface, API-key auth, watchdog cleanup, exported `.bat` files, HTTPS, LAN sharing and the pill's live tok/s / VRAM readings; ten suites run serially from one command and print a pass matrix.
+1. **Speculative decoding, properly exposed** — a **Speculative decoding** row under the model selector with Off / Auto plus 12 methods (MTP, DFlash 2, DFlash, DSpark, LiliCorr, EAGLE-3, small-model draft, 4× n-gram), a colour-coded status label, a draft-model picker and a draft-length spinner. Support is detected from your own `llama-server --help` and the selected model's GGUF contents; unsupported methods are greyed out with the reason, and **Auto passes no `--spec-type` when nothing is usable**, so it can never break your launch.
+2. **Auto priority you control** — the **Sort** dialog reorders which methods Auto tries first: drag items, or use ▲▼ / Alt+↑ / Alt+↓.
+3. **Download draft** — finds drafts on HuggingFace that pair with the selected model (official GGUF repos first), downloads them into the model's own folder where they can actually be paired, and selects the result; safetensors-only authors get the exact `convert_hf_to_gguf.py --target-model-dir` recipe instead of a broken one-click.
+4. **No more helper files posing as models** — vision projectors (mmproj), draft heads and imatrix calibration files are screened out of the main model dropdown by GGUF contents, with a new **Auxiliary files** table showing each file's role, size, folder and matching main model.
+5. **ARM64 builds every release** — the llama.cpp updater stopped filtering out arm64 assets, and v0.5.15 ships 4 artifacts (single-file + portable for x64 and ARM64).
+6. **Two quiet bugs fixed** — downloads queued while another was in flight were silently discarded, and a missing trailing comma had been serving Chinese to Russian users.
 
 ## What Problem Does It Solve?
 
@@ -111,8 +113,10 @@ Download from the [Releases](https://github.com/lop008/llama-gui-launcher/releas
 
 | File | Description |
 |------|-------------|
-| `LLama-Launcher-v0.5.14-win-x64.exe` | **Single-file** build (~47 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
-| `LLama-Launcher-v0.5.14-win-x64-portable.zip` | **Portable** build — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
+| `LLama-Launcher-v0.5.15-win-x64.exe` | **Single-file** build (x64, ~47 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
+| `LLama-Launcher-v0.5.15-win-x64-portable.zip` | **Portable** build (x64) — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
+| `LLama-Launcher-v0.5.15-win-arm64.exe` | **Single-file** build (ARM64) — for Snapdragon laptops / Windows on ARM. |
+| `LLama-Launcher-v0.5.15-win-arm64-portable.zip` | **Portable** build (ARM64) — extract and run. |
 
 Put `llama-server.exe` and its DLLs in the same directory (or set the launcher path in the UI).
 
