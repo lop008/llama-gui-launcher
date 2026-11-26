@@ -36,11 +36,16 @@ class ModelDownloader(QObject):
 
     # ------------------------------------------------------------- 队列控制
     def enqueue(self, url, dest_path, label=None):
-        """加入下载任务；若当前空闲则立即开始。"""
+        """加入下载任务，当前空闲就立刻开始，正在下载就排队。
+
+        坑：这里原来写成「只有 not self._active 时才 append」，于是正在下载时
+        再点别的文件，任务被静默丢掉——界面看起来按了没反应。队列本来就支持排队，
+        所以无条件 append；工作线程还活着就不用管（跑完自己取下一个），
+        没起过或已退出再拉起来。
+        """
         with self._lock:
-            if not self._active:
-                self._queue.append((url, dest_path, label or os.path.basename(dest_path)))
-                self._start_worker()
+            self._queue.append((url, dest_path, label or os.path.basename(dest_path)))
+            self._start_worker()
 
     def cancel_current(self):
         """取消当前下载（保留 .part，可再次续传）；队列继续。"""

@@ -448,7 +448,7 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.combo_draft.currentIndexChanged.connect(self._on_draft_changed)
         self.spin_spec_n.valueChanged.connect(self.update_preview)
         self.btn_spec_order.clicked.connect(self._edit_spec_order)
-        self.btn_spec_download.clicked.connect(self._download_spec_draft)
+        self.btn_spec_download.clicked.connect(self._open_draft_downloader)
         self.btn_aux.clicked.connect(self._show_aux_files)
         self.combo_preset.currentIndexChanged.connect(self._on_preset_changed)
         self.spin_ctx.valueChanged.connect(self._on_ctx_manual)

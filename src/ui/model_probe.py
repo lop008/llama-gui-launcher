@@ -22,6 +22,7 @@ from ..spec_decode import (
     SPEC_CLI, SPEC_IDS, ST_NEED_DRAFT, ST_NO, ST_NO_ENGINE, ST_OK, draft_matches_model,
     engine_spec_types, model_spec_support, pick_auto, spec_label,
 )
+from .draft_download import DraftDownloadDialog
 from .widgets import SpecOrderDialog
 
 
@@ -689,23 +690,30 @@ class ModelProbeMixin:
         lay.addLayout(btns)
         dlg.exec()
 
-    def _download_spec_draft(self):
-        """「下载草稿」：切到「模型下载」页，按当前模型预填检索条件。
+    def _open_draft_downloader(self):
+        """「下载草稿」：打开候选对话框（找草稿 → 下到主模型目录 → 自动配对）。"""
+        model = self.combo_model.currentData() if hasattr(self, "combo_model") else None
+        if not model:
+            QMessageBox.information(self, t('提示'), t('请先选择模型'))
+            return
+        DraftDownloadDialog(self, model).exec()
 
-        草稿头基本与主模型同名（官方 GGUF 仓库里的 MTP/、DFLASH/ 目录，或独立的
-        草稿仓库），所以用 GGUF 元数据里的基础模型名去搜最准；下载页自己按下载量排序，
-        官方仓库会排在前面。
+    def _download_spec_draft(self, query=""):
+        """兜底路径：切到「模型下载」页并预填关键词（草稿对话框里「在模型下载页找」用的）。
+
+        草稿头基本与主模型同名（官方 GGUF 仓库里的 MTP/、DFLASH/ 目录，或独立的草稿仓库），
+        所以用 GGUF 元数据里的基础模型名去搜最准；下载页自己按下载量排序，官方仓库在前。
         """
         model = self.combo_model.currentData() if hasattr(self, "combo_model") else None
         if not model:
             QMessageBox.information(self, t('提示'), t('请先选择模型'))
             return
-        query = ""
-        try:
-            info = read_gguf_info(model) or {}
-            query = info.get("base_model_name") or info.get("general.name") or ""
-        except Exception:
-            query = ""
+        if not query:
+            try:
+                info = read_gguf_info(model) or {}
+                query = info.get("base_model_name") or info.get("general.name") or ""
+            except Exception:
+                query = ""
         if not query:
             query = re.sub(r"\.gguf$", "", os.path.basename(model), flags=re.IGNORECASE)
         tab = getattr(self, "download_tab", None)
