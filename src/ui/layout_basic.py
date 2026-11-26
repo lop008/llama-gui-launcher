@@ -184,7 +184,7 @@ class LayoutBasicMixin:
               '· 投机草稿头 = MTP / DFlash / DSpark 等加速用的小文件；\n'
               '· 量化标定文件（imatrix）= 制作量化模型时用，运行不需要。\n'
               '点击查看清单、所在目录与它对应的主模型。'))
-        self.label_spec_hint = QLabel(t('（点「排序」或在下拉里上下拖动条目 = 调整「自动」的优先级）'))
+        self.label_spec_hint = QLabel(t('（点「排序」调整「自动」的尝试顺序）'))
         self.label_spec_hint.setStyleSheet("color: #8a8a8a;")
 
         aux_row = QWidget()

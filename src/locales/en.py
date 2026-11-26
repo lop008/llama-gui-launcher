@@ -779,7 +779,7 @@ STRINGS = {
     "排序": "Sort",
     "调整「自动」的优先级：排在上面的方式先尝试。\n打开后可以按住条目上下拖动，也可以用 ▲▼ / Alt+↑↓。": "Set the Auto priority: methods listed first are tried first.\nIn the dialog drag items up/down, or use the up/down buttons / Alt+Up / Alt+Down.",
     "这些文件不是独立模型，所以不出现在主模型列表里：\n· 视觉投影（mmproj）= 负责把图片编码成模型能读懂的向量；\n· 投机草稿头 = MTP / DFlash / DSpark 等加速用的小文件；\n· 量化标定文件（imatrix）= 制作量化模型时用，运行不需要。\n点击查看清单、所在目录与它对应的主模型。": "These are not standalone models, so they stay out of the main model list:\n- Vision projection (mmproj) = encodes images into vectors the model understands;\n- Speculative draft head = small files used by MTP / DFlash / DSpark for speed;\n- Quantization calibration file (imatrix) = used when making quantized models, not at runtime.\nClick to see the list, folders and which main model each belongs to.",
-    "（点「排序」或在下拉里上下拖动条目 = 调整「自动」的优先级）": "(Press Sort, or drag items up/down in the dialog = set the Auto priority)",
+    "（点「排序」调整「自动」的尝试顺序）": "(Press Sort, or drag items up/down in the dialog = set the Auto priority)",
     "投机解码:": "Speculative decoding:",
     "草稿模型:": "Draft model:",
     "草稿长度:": "Draft length:",

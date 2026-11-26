@@ -43,7 +43,11 @@ def _npm_bin_dir():
         if os.path.isdir(cand):
             return cand
     try:
+        # 显式指定编码：中文系统上 npm 不存在时，cmd 会把 GBK 错误信息写进管道，
+        # text=True 用本地编码解码失败会在 subprocess 的内部读线程里抛 UnicodeDecodeError
+        # （界面看不出问题，但 npm 全局目录就一直探测不到）。
         r = subprocess.run(["npm", "prefix", "-g"], capture_output=True, text=True,
+                           encoding="utf-8", errors="replace",
                            timeout=10, creationflags=CREATE_NO_WINDOW)
         p = r.stdout.strip()
         if p and os.path.isdir(p):

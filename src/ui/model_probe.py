@@ -668,6 +668,9 @@ class ModelProbeMixin:
                 it.setToolTip(a.path)
                 table.setItem(row, col, it)
         table.setCurrentCell(0, 0)
+        # 必须把表格挂进布局：以前只是创建了 QTableWidget 没 addWidget，
+        # 于是这个对话框打开后只有说明文字和两个按钮，明细表整个不见了。
+        lay.addWidget(table, 1)
 
         btns = QHBoxLayout()
         btns.addStretch(1)

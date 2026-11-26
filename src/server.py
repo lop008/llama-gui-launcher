@@ -171,9 +171,14 @@ def find_llama_server_processes(exclude_pids=None):
     """
     exclude = {int(p) for p in (exclude_pids or []) if str(p).strip().isdigit()}
     try:
+        # 必须显式指定编码：中文系统上「没有匹配进程」时 tasklist 往 stdout 写的是
+        # GBK 的「信息: 没有运行的任务...」，text=True 按本地默认编码解码会在 subprocess
+        # 的内部读线程里抛 UnicodeDecodeError，stdout 变成 None，于是残留进程检测在
+        # 「本来就没有残留进程」这种情况下静默失效（并往 stderr 打一坨线程 traceback）。
         r = subprocess.run(
             ["tasklist", "/FI", "IMAGENAME eq llama-server.exe", "/FO", "CSV", "/NH"],
-            capture_output=True, text=True, timeout=10, creationflags=CREATE_NO_WINDOW,
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=10, creationflags=CREATE_NO_WINDOW,
         )
         out = []
         for line in r.stdout.strip().splitlines():

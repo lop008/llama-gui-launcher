@@ -387,6 +387,7 @@ class SystemMonitor(QObject):
                      "--query-gpu=memory.used,memory.total,utilization.gpu",
                      "--format=csv,noheader,nounits"],
                     capture_output=True, text=True, timeout=5, creationflags=CREATE_NO_WINDOW,
+                    encoding="utf-8", errors="replace",
                 )
                 if r.returncode == 0 and r.stdout.strip():
                     # 多卡：显存求和、利用率取最大

@@ -779,7 +779,7 @@ STRINGS = {
     "排序": "Tri",
     "调整「自动」的优先级：排在上面的方式先尝试。\n打开后可以按住条目上下拖动，也可以用 ▲▼ / Alt+↑↓。": "Regle la priorite d'Auto : les methodes du haut sont essayees d'abord.\nDans la boite, faites glisser les lignes ou utilisez ▲▼ / Alt+↑↓.",
     "这些文件不是独立模型，所以不出现在主模型列表里：\n· 视觉投影（mmproj）= 负责把图片编码成模型能读懂的向量；\n· 投机草稿头 = MTP / DFlash / DSpark 等加速用的小文件；\n· 量化标定文件（imatrix）= 制作量化模型时用，运行不需要。\n点击查看清单、所在目录与它对应的主模型。": "Ce ne sont pas des modeles autonomes, ils restent hors de la liste principale :\n- Projection visuelle (mmproj) = encode les images en vecteurs compris par le modele ;\n- Tete de brouillon = petits fichiers d'acceleration MTP / DFlash / DSpark ;\n- Fichier de calibration (imatrix) = utilise a la creation de modeles quantifies, pas a l'execution.\nCliquez pour voir la liste, les dossiers et le modele principal associe.",
-    "（点「排序」或在下拉里上下拖动条目 = 调整「自动」的优先级）": "(Cliquez sur Tri ou faites glisser les lignes = regler la priorite d'Auto)",
+    "（点「排序」调整「自动」的尝试顺序）": "(Cliquez sur Tri ou faites glisser les lignes = regler la priorite d'Auto)",
     "投机解码:": "Decodage speculatif :",
     "草稿模型:": "Modele brouillon :",
     "草稿长度:": "Longueur du brouillon :",

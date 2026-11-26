@@ -183,6 +183,7 @@ class GpuMixin:
                     ["nvidia-smi", "--query-gpu=memory.total",
                      "--format=csv,noheader,nounits"],
                     capture_output=True, text=True, timeout=10,
+                    encoding="utf-8", errors="replace",
                     creationflags=CREATE_NO_WINDOW)
                 if r.returncode == 0:
                     for line in (r.stdout or "").splitlines():
