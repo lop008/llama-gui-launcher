@@ -293,7 +293,7 @@ class ModelProbeMixin:
         if sid == "off":
             return t('不下发 --spec-type，纯自回归生成。')
         if sid == "auto":
-            return t('按你在本下拉里的顺序（按住条目上下拖动即可改），挑第一个当前可用的方式。')
+            return t('按「排序」里设定的顺序，从上往下挑第一个当前可用的方式。')
         if r is None:
             return ""
         mark = {ST_OK: '✔', ST_NEED_DRAFT: '⚠', ST_NO_ENGINE: '✖', ST_NO: '—'}.get(r["state"], "")

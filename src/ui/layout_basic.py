@@ -158,7 +158,7 @@ class LayoutBasicMixin:
         self.btn_spec_order = QPushButton(t('排序'))
         self.btn_spec_order.setToolTip(
             t('调整「自动」的优先级：排在上面的方式先尝试。\n'
-              '也可以直接在这个下拉里按住条目上下拖动，两种改法效果一样。'))
+              '打开后可以按住条目上下拖动，也可以用 ▲▼ / Alt+↑↓。'))
 
         spec_row = QWidget()
         sp_row = QHBoxLayout(spec_row)
