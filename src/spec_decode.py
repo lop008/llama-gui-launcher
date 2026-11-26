@@ -19,9 +19,12 @@ from .i18n import t
 
 CREATE_NO_WINDOW = 0x08000000
 
-# 下拉框候选顺序（默认值；界面可拖动改，作为「自动」的优先级）
+# 下拉框候选顺序（默认值；界面可拖动改，作为「自动」的优先级）。
+# 顺序按「收益高且更容易可用」在前：内嵌 MTP → 各类草稿头 → 小模型草稿 → n-gram。
+# 取值以本机 llama-server --help 的 --spec-type 列表为准（build 12381 实测 13 项，
+# none 由界面上的「不启用」承担）。
 SPEC_IDS = ("mtp", "dflash2", "dflash", "dspark", "lilicorr", "eagle3", "simple",
-            "ngram-mod", "ngram-map-k", "ngram-cache")
+            "ngram-mod", "ngram-map-k", "ngram-map-k4v", "ngram-cache", "ngram-simple")
 
 # id → (llama.cpp --spec-type 取值, 是否必须外部草稿文件)
 SPEC_CLI = {
@@ -34,7 +37,9 @@ SPEC_CLI = {
     "simple": ("draft-simple", True),
     "ngram-mod": ("ngram-mod", False),
     "ngram-map-k": ("ngram-map-k", False),
+    "ngram-map-k4v": ("ngram-map-k4v", False),
     "ngram-cache": ("ngram-cache", False),
+    "ngram-simple": ("ngram-simple", False),
 }
 
 # 免草稿方式的说明（这些不需要任何额外文件，白捡的加速）
@@ -48,7 +53,9 @@ _SPEC_LABELS = {
     "simple": "",            # 「小模型草稿」，见 spec_label
     "ngram-mod": "n-gram-mod",
     "ngram-map-k": "n-gram-map-k",
+    "ngram-map-k4v": "n-gram-map-k4v",
     "ngram-cache": "n-gram-cache",
+    "ngram-simple": "n-gram-simple",
 }
 
 # 状态常量

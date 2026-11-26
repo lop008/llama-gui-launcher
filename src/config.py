@@ -14,6 +14,8 @@ DEFAULTS = {
     "mmproj": "",
     # 模型列表排序：dir_name=目录+文件名升序 / size_desc=大小降序 / name=名称升序
     "model_sort": "dir_name",
+    # 投机方式「自动」的优先级顺序（下拉框里拖动后保存；空 = spec_decode.SPEC_IDS 默认顺序）
+    "spec_order": [],
     # HF 下载默认保存目录（空 = 使用模型目录）
     "hf_download_dir": "",
     # llama.cpp 更新目标目录（空 = 使用启动器 exe 所在目录/模型目录）
@@ -36,8 +38,14 @@ DEFAULTS = {
         "split_mode": "layer",
         "tensor_split": "",
         "main_gpu": 0,
-        # MTP（多 token 预测，--spec-type draft-mtp）
-        "mtp": False,
+        # 投机解码：off=不启用；auto=按「自动优先级」挑第一个可用的；
+        # 其余取值见 spec_decode.SPEC_IDS（mtp / dflash2 / dflash / dspark /
+        # lilicorr / eagle3 / simple / ngram-*）
+        "spec_mode": "off",
+        # 外部草稿文件（MTP 头 / DFlash / EAGLE-3 …）；空 = 用同目录自动配对的结果
+        "spec_draft": "",
+        # 一次草稿多少 token（--spec-draft-n-max）；0 = 用引擎默认(3)，不下发该参数
+        "spec_draft_n": 0,
         # 对话模板：Jinja 模板开关 / 模板参数(reasoning_effort) / 推理预算
         "jinja": False,
         "reasoning_effort": "",
@@ -82,10 +90,13 @@ DEFAULTS = {
 
 
 def _migrate(data):
-    """旧配置兼容：单键 kv_cache_type 迁移为 kv_cache_k / kv_cache_v。
+    """旧配置兼容：单键 kv_cache_type 迁移为 kv_cache_k / kv_cache_v；
+    v0.5.14 及以前的「启用 MTP」勾选框迁移为「投机方式」下拉的具体取值。
 
     规则：旧键存在且用户改过（非默认 f16）时，覆盖仍处于默认值的 k/v；
     若 k/v 已有用户自定义值则保留。
+    投机解码同理：旧配置勾过 MTP 就等价于选 "mtp"，没勾过等价于 "off"，
+    保证升级后启动参数与升级前完全一致，不擅自给用户打开新的加速方式。
     """
     s = data.get("server")
     if isinstance(s, dict) and "kv_cache_type" in s:
@@ -95,6 +106,10 @@ def _migrate(data):
         for key, dflt in (("kv_cache_k", dflt_k), ("kv_cache_v", dflt_v)):
             if legacy and s.get(key) in (None, "", dflt):
                 s[key] = legacy
+    if isinstance(s, dict) and "mtp" in s:
+        legacy_mtp = bool(s.pop("mtp"))
+        if not str(s.get("spec_mode") or "").strip():
+            s["spec_mode"] = "mtp" if legacy_mtp else "off"
     return data
 
 

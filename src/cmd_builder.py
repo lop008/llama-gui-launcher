@@ -2,6 +2,8 @@ import json
 import os
 import re
 
+from .spec_decode import SPEC_CLI
+
 
 def get_llama_server(llama_dir, launcher_exe=None):
     if launcher_exe and os.path.isfile(launcher_exe):
@@ -22,6 +24,42 @@ KV_CACHE_TYPES = ["f16", "bf16", "f32", "q8_0", "q4_0", "q4_1", "iq4_nl", "q5_0"
 
 # GPU 拆分模式（llama.cpp -sm）
 SPLIT_MODES = ["layer", "row", "tensor", "none"]
+
+
+_SPEC_BY_CLI = {v[0]: (k, v[1]) for k, v in SPEC_CLI.items()}
+
+
+def _spec_args(s):
+    """投机解码参数（--spec-type / --spec-draft-model / --spec-draft-n-max）。
+
+    界面负责把「自动」解析成具体方式并写进 spec_cli（模型/引擎检测在 UI 层做，
+    这里只负责拼参数，保持可单测）；同时兼容 v0.5.14 及以前只有「启用 MTP」
+    勾选框的配置。
+
+    需要外部草稿的方式，如果草稿文件缺失或已被删除，就整体不传：宁可不加速，
+    也不要让 llama-server 因为缺 -md 直接起不来。
+    草稿层数 -ngld 交给引擎默认（auto），不传。
+    """
+    cli = str(s.get("spec_cli") or "").strip().lower()
+    if not cli and s.get("mtp"):
+        cli = "draft-mtp"
+    if not cli or cli == "none" or cli not in _SPEC_BY_CLI:
+        return []
+    _sid, needs_draft = _SPEC_BY_CLI[cli]
+    draft = str(s.get("spec_draft") or "").strip()
+    draft_ok = bool(draft) and os.path.isfile(draft)
+    if needs_draft and not draft_ok:
+        return []
+    args = ["--spec-type", cli]
+    if draft_ok:
+        args += ["--spec-draft-model", draft]
+    try:
+        n = int(s.get("spec_draft_n", 0) or 0)
+    except (TypeError, ValueError):
+        n = 0
+    if n > 0:
+        args += ["--spec-draft-n-max", str(n)]
+    return args
 
 
 def _kv_types(s):
@@ -93,9 +131,8 @@ def build_args(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
             if mg > 0:
                 args += ["-mg", str(mg)]
 
-    # ---- MTP（功能 4）：多 token 预测，作为投机解码的 draft-mtp 类型启用 ----
-    if s.get("mtp"):
-        args += ["--spec-type", "draft-mtp"]
+    # ---- 投机解码（--spec-type / 外部草稿 / 草稿长度；兼容旧配置的 mtp 开关）----
+    args += _spec_args(s)
 
     args += ["--host", str(s.get("host", "127.0.0.1"))]
     args += ["--port", str(int(s.get("port", 8080)))]
