@@ -106,9 +106,9 @@ it out of a full GPU.
 
 ### Testing
 
-- New `_test_v06.py` — draft pairing (architecture family / vocab / embedding), thinking
-  capability detection, MoE and `--reasoning` argument emission, self-update version compare and
-  asset selection (17 checks).
+- New _test_v06.py — draft pairing (architecture family / vocab / embedding), thinking
+  capability detection, MoE and --reasoning argument emission, self-update version compare,
+  asset selection and the frozen-build language bootstrap (19 checks).
 - logic / roles / specargs / draft / arm / layout / pill / gui / edge suites pass; live checks
   confirmed the updater lists `v1.1.0` as "no Windows package", the folder tree groups and
   downloads correctly, `Inkling-2-Mini` + `dspark-*-Q8_0` resolves to
