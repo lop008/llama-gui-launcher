@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """后台线程：读取 llama.cpp 版本（避免卡界面）。"""
 
-from ..llama_updater import get_local_version
+from ..llama_updater import get_local_version_info
 from PyQt6.QtCore import QThread, pyqtSignal
 
 
@@ -21,7 +21,10 @@ class _LlamaVersionWorker(QThread):
         def _record(pid):
             self.probe_pid = pid
         try:
-            ver = get_local_version(self._exe, pid_cb=_record)
+            info = get_local_version_info(self._exe, pid_cb=_record)
+            ver = info.get("build") or info.get("version") or ""
+            if info.get("version") and info.get("build"):
+                ver = f"{info['version']} ({info['build']})"
         except Exception:
             ver = ""
         finally:

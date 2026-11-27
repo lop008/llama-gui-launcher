@@ -1,6 +1,118 @@
 # Changelog
 
 All notable changes to LLama 启动器 / LLama Launcher.
+## [0.6.0] - 2026-11-27
+
+A feature release built around llama.cpp's newest switches: speculative decoding can no
+longer break a launch, MoE expert offloading and the thinking/reasoning-effort split are now
+exposed, the llama.cpp updater and the HuggingFace download page were rebuilt, the launcher
+can update itself, and Inkling 2 (MoE) is fully supported — including a documented way to keep
+it out of a full GPU.
+
+### New Features
+
+- **Speculative decoding is now launch-safe (P0)** — a method you explicitly selected is only
+  passed to `llama-server` when detection says `state=ok` **and** the paired draft is
+  `valid=true`. Otherwise the launcher drops `--spec-type` entirely, starts the server
+  un-accelerated and explains why in the status bar. Previously a saved `spec_mode=mtp` on a
+  model without an MTP head produced `failed to create MTP context` and the server never came up.
+  All 13 `--spec-type` values of a current build are handled
+  (`none`, `draft-mtp`, `draft-dflash`, `draft-dflash2`, `draft-dspark`, `draft-lilicorr`,
+  `draft-eagle3`, `draft-simple`, `ngram-mod`, `ngram-cache`, `ngram-simple`, `ngram-map-k`,
+  `ngram-map-k4v`); `ngram-simple` / `ngram-map-k4v` are correctly reported as needing no draft.
+- **Draft matching rewritten (no more false "architecture mismatch")** — `draft_matches_model()`
+  now compares what actually matters: vocabulary size, `embedding_length` and the
+  **architecture family**. Draft families (`dflash` / `dflash2` /
+  `dspark` / `lilicorr` / `eagle3`) and external heads (`<arch>-mtp`) are allowed to differ from
+  the main model's architecture, so DSpark drafts for Inkling and an external `qwen4exp-mtp`
+  head are no longer rejected. Multi-shard main models are probed across **all** shards
+  (`probe_model_gguf()`), so an MTP head living in shard 3/4 is detected.
+- **MoE expert offloading** — new "MoE experts" row on the Advanced page drives
+  `--cpu-moe` (all experts on CPU), `--n-cpu-moe N` (first N layers' experts on CPU — the usual
+  fix) and `--moe-cache-mib N` (GPU cache for CPU-resident experts). This is the answer to
+  "`-ngl all` pushed every expert into VRAM".
+- **Inkling 2 support** — Inkling's `inkling2_loop` architecture is recognised as MoE
+  (128 experts, 8 active per token, 1 048 576-token context in the released Mini checkpoints),
+  its `dspark-*` drafts (arch `dflash`) now pair automatically, and the draft list prefers the
+  smaller `Q8_0` draft over `BF16` and pushes `*_Old` legacy conversions last. Requires
+  llama.cpp ≥ b12780 — the built-in updater lists those builds, see below.
+- **Thinking switch vs. reasoning effort, properly separated** — a new "Thinking mode" dropdown
+  maps to `--reasoning on|off|auto`, and a separate "Reasoning effort" dropdown emits
+  `--chat-template-kwargs {"reasoning_effort": "…"}`. The effort dropdown is only enabled when
+  the model's own Jinja template really declares `reasoning_effort`, and its entries are
+  rebuilt from the values that template accepts (e.g. Inkling's
+  `minimal/low/medium/high/xhigh/max`); a stale `medium` left in `config.json` for a model that
+  has no such variable is cleared instead of being silently sent to the server.
+- **llama.cpp updater page rebuilt** — stat cards (current version incl. the real
+  `1.1.0-dev (b12780)` string, latest stable, packages found on disk), a visible segmented
+  filter (All / Stable only / Pre-release only), row checkboxes + select-all + "Download
+  selected", a recursive scan of the download folder for already-downloaded packages, and a
+  status column that says current / downloaded / available / **no Windows package**. Releases
+  that ship no Windows binaries (llama.cpp `v1.1.0` ships only `nightly-tag.txt`) are kept
+  visible as a labelled placeholder row with a link to the release, instead of vanishing.
+- **Model download page rebuilt** — organisation/author is now an editable combo with common
+  publishers (`unsloth` default, `ggml-org`, `bartowski`, `Qwen`, …); the file list is a
+  **folder tree** where checking a folder downloads the whole group (multi-shard GGUFs need one
+  click instead of four); repository info gained the folder listing and a clickable
+  `huggingface.co/<repo>` link.
+- **Richer model info** — beyond the GGUF basics the page now shows MoE facts (expert count,
+  experts per token, dense vs MoE), the detected thinking capability, a speculative-decoding
+  support table (state / reason / draft path per method), and clickable model-homepage /
+  HuggingFace-search links rendered in a `QTextBrowser`.
+- **Agent tool management** — column order is now Tool / Type / Path / Description / Open with a
+  stretchy description and a narrow action column; add, edit and delete are wired up (built-in
+  tools are hidden, not erased), and descriptions can be filled automatically from a PE
+  executable's `FileDescription` / `ProductName`. Custom entries persist in `custom_tools`.
+- **Launcher self-update** — "About → Check for launcher update…" reads the latest GitHub
+  release, compares versions, downloads the exe matching the machine's architecture and swaps it
+  in after exit via a detached script, then relaunches. Running from source only opens the
+  release page. A silent start-up check (opt-out on the Advanced page) just flags the new
+  version in the title bar / status bar.
+- **Modern UI kit** — new `src/ui/kit.py` (`Card`, `SectionHeader`, `Badge`, `StatCard`,
+  `SegmentedControl`, `EmptyState`) plus reworked QSS: radio buttons finally have a visible
+  checked state, buttons gained primary / danger / ghost / segment variants, and tables, tabs,
+  progress bars, combos, splitters and menus share one modern look. The header card shows the
+  version, a one-line pitch, service state and the detected llama.cpp version.
+
+### Improvements
+
+- i18n kept exhaustive: 165 new UI strings translated into all 7 locale tables
+  (en / zh_tw / ja / ko / ru / es / fr) and 26 strings orphaned by this release's rewritten
+  pages removed — the tables match the source exactly (959 keys, 0 missing, 0 unused,
+  placeholders / line breaks / HTML tags verified entry by entry).
+- Updater page size 100 → 30 with tag de-duplication, so paged GitHub responses can never
+  append the same release twice.
+- `draft-dflash` also accepts `dflash2` / `dspark` / `lilicorr` drafts, matching upstream's note
+  that draft-dflash auto-detects those variants.
+- The draft dialog is a strict application-modal window (main window disabled while it is open)
+  and download buttons set `autoDefault(False)`, so Enter/clicks cannot leak through to the
+  download page underneath.
+- About dialog now links the GitHub repository next to the Bilibili page.
+
+### Fixes
+
+- An unusable speculative mode can no longer be emitted (`--spec-type` omitted → server starts).
+- Version display shows `1.1.0-dev (b12780)` rather than a bare build number, which read as
+  "not 1.1.0".
+- `list_releases(include_prerelease=False)` no longer misuses `exclude_assets`; pre-releases are
+  filtered locally; `tag_name` (API) and `tag` (parsed) are both accepted.
+- Links in model / repository info are clickable (`QTextBrowser` instead of `QTextEdit`).
+- A start-up update check whose window had been destroyed no longer raises on signal delivery.
+- **The packaged build ignored the saved language** — `main.py` located `config.json` via
+  `__file__`, which in PyInstaller 6 lives in the read-only `_internal\` directory while the
+  user's configuration sits next to the exe. Packaged users were always served the system
+  language. The frozen build now resolves the base directory from `sys.executable`, the same
+  rule `MainWindow` uses (verified: `language=en` next to the portable exe now starts English).
+
+### Testing
+
+- New `_test_v06.py` — draft pairing (architecture family / vocab / embedding), thinking
+  capability detection, MoE and `--reasoning` argument emission, self-update version compare and
+  asset selection (17 checks).
+- logic / roles / specargs / draft / arm / layout / pill / gui / edge suites pass; live checks
+  confirmed the updater lists `v1.1.0` as "no Windows package", the folder tree groups and
+  downloads correctly, `Inkling-2-Mini` + `dspark-*-Q8_0` resolves to
+  `--spec-type draft-dspark`, and a `spec_mode=mtp` config on a model without MTP emits nothing.
 
 ## [0.5.15] - 2026-11-27
 

@@ -8,6 +8,7 @@ from . import __version__, APP_NAME
 from .i18n import t
 
 BILIBILI_URL = "https://space.bilibili.com/3493265957456549"
+GITHUB_URL = "https://github.com/lop008/llama-gui-launcher"
 DEVELOPER_NAME = t('AI创客师')
 
 
@@ -29,7 +30,7 @@ class AboutDialog(QDialog):
         lay.addWidget(title)
 
         info = QLabel(
-            t("开发者: {0}<br/>哔哩入口: <a href='{1}' style='color:#4a7fdb;'>{2}</a><br/>版本: v{3}<br/><br/>本地大模型启动器<br/>基于 llama.cpp 构建").format(DEVELOPER_NAME, BILIBILI_URL, BILIBILI_URL, __version__)
+            t("开发者: {0}<br/>哔哩入口: <a href='{1}' style='color:#4a7fdb;'>{2}</a><br/>GitHub: <a href='{4}' style='color:#4a7fdb;'>{4}</a><br/>版本: v{3}<br/><br/>本地大模型启动器<br/>基于 llama.cpp 构建").format(DEVELOPER_NAME, BILIBILI_URL, BILIBILI_URL, __version__, GITHUB_URL)
         )
         info.setTextFormat(Qt.TextFormat.RichText)
         info.setOpenExternalLinks(True)

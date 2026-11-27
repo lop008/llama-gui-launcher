@@ -10,6 +10,7 @@ from .. import __version__, i18n
 from ..about_dialog import AboutDialog
 from ..i18n import LANGUAGES, t
 from ..ui.workers import _LlamaVersionWorker
+from ..ui.launcher_update_dialog import LauncherUpdateDialog
 
 
 class MenuAboutMixin:
@@ -91,12 +92,20 @@ class MenuAboutMixin:
         self.act_docs = QAction(t('参数说明'), self)
         menu_help.addAction(self.act_docs)
         menu_help.addAction(self.act_about)
-        self.act_update_now = QAction(t('立即更新'), self)
+        menu_help.addSeparator()
+        self.act_update_now = QAction(t('更新 llama.cpp…'), self)
+        self.act_update_now.setToolTip(t('打开「更新 llama.cpp」页，选择版本 / 分支并安装'))
         menu_help.addAction(self.act_update_now)
+        self.act_launcher_update = QAction(t('检查启动器更新…'), self)
+        self.act_launcher_update.setToolTip(t('从 GitHub 检查本程序新版本，下载后退出并自动替换重启'))
+        menu_help.addAction(self.act_launcher_update)
 
     def _on_llama_version(self, ver):
         base = t('LLama 启动器 v{0}').format(__version__)
         self.setWindowTitle(f"{base} · llama {ver}" if ver else base)
+        if hasattr(self, "label_llama_ver"):
+            self.label_llama_ver.setText(
+                t('llama: {0}').format(ver) if ver else t('llama: 未检测到'))
 
     def recheck_llama_version(self):
         """更新安装后重新检测本地 llama-server 版本，刷新标题栏。"""
@@ -109,6 +118,34 @@ class MenuAboutMixin:
     def _goto_updater(self):
         self.tabs.setCurrentIndex(5)
         self.updater_tab.refresh()
+
+    def show_launcher_update(self):
+        LauncherUpdateDialog(self, auto_check=True).exec()
+
+    def check_launcher_update_silent(self):
+        """启动后静默检查一次；有新版本时只改标题/状态栏，不弹窗。"""
+        if not self.cfg.data.get("check_launcher_update", True):
+            return
+
+        def work():
+            try:
+                from .. import launcher_updater
+                rel = launcher_updater.latest_release()
+                if launcher_updater.is_newer(__version__, rel.get("tag") or ""):
+                    try:
+                        self.launcher_update_found.emit(rel.get("tag") or "")
+                    except RuntimeError:
+                        pass
+            except Exception:
+                pass
+
+        import threading
+        threading.Thread(target=work, daemon=True).start()
+
+    def _apply_launcher_update_hint(self, tag):
+        base = t('LLama 启动器 v{0}').format(__version__)
+        self.setWindowTitle(f"{base} · ⬆ {tag}")
+        self._status_tip(t('发现启动器新版本 {0}：菜单「关于 → 检查启动器更新…」可升级').format(tag), 12000)
 
     def show_about(self):
         AboutDialog(self.resource_dir, self).exec()

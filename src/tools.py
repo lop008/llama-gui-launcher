@@ -5,6 +5,58 @@ from .i18n import t
 
 CREATE_NO_WINDOW = 0x08000000
 
+
+def describe_executable(path):
+    """读取 Windows PE 版本信息里的 FileDescription / ProductName。
+
+    读不到时返回空字符串（.cmd/.bat、损坏文件、非 Windows 都走这里）。
+    仅用于「自动更新描述」，不参与启动逻辑。
+    """
+    if not path or not os.path.isfile(path):
+        return ""
+    if not str(path).lower().endswith((".exe", ".dll")):
+        return ""
+    try:
+        import ctypes
+        from ctypes import wintypes
+        ver = ctypes.WinDLL("version")
+        ver.GetFileVersionInfoSizeW.argtypes = [wintypes.LPCWSTR, ctypes.POINTER(wintypes.DWORD)]
+        ver.GetFileVersionInfoSizeW.restype = wintypes.DWORD
+        ver.GetFileVersionInfoW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD,
+                                            wintypes.DWORD, wintypes.LPVOID]
+        ver.GetFileVersionInfoW.restype = wintypes.BOOL
+        ver.VerQueryValueW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR,
+                                       ctypes.POINTER(wintypes.LPVOID),
+                                       ctypes.POINTER(wintypes.UINT)]
+        ver.VerQueryValueW.restype = wintypes.BOOL
+        size = ver.GetFileVersionInfoSizeW(path, None)
+        if not size:
+            return ""
+        buf = ctypes.create_string_buffer(size)
+        if not ver.GetFileVersionInfoW(path, 0, size, buf):
+            return ""
+        ptr = wintypes.LPVOID()
+        length = wintypes.UINT()
+        translations = []
+        if ver.VerQueryValueW(buf, r"\VarFileInfo\Translation", ctypes.byref(ptr),
+                              ctypes.byref(length)) and length.value >= 4:
+            raw = ctypes.string_at(ptr, length.value)
+            for i in range(0, len(raw) - 3, 4):
+                lang = int.from_bytes(raw[i:i + 2], "little")
+                codepage = int.from_bytes(raw[i + 2:i + 4], "little")
+                translations.append(f"{lang:04x}{codepage:04x}")
+        for code in translations + ["040904b0", "040904e4", "080404b0", "000004b0"]:
+            for key in ("FileDescription", "ProductName"):
+                sub = f"\\StringFileInfo\\{code}\\{key}"
+                if ver.VerQueryValueW(buf, sub, ctypes.byref(ptr), ctypes.byref(length)) \
+                        and length.value:
+                    val = ctypes.wstring_at(ptr, length.value).rstrip("\x00").strip()
+                    if val:
+                        return val
+    except Exception:
+        return ""
+    return ""
+
 BUILTIN_TOOLS = [
     {"id": "opencode", "name": t('OpenCode (终端)'), "desc": t('AI 编程 Agent，终端界面（自动连接本服务）'),
      "category": "terminal", "cmds": ["opencode", "opencode.cmd", "opencode.exe"]},

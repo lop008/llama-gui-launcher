@@ -74,6 +74,33 @@ def _kv_types(s):
     return k, v
 
 
+def _moe_args(s):
+    """MoE 专家卸载参数。
+
+    - moe_mode = "cpu"  ：--cpu-moe，全部专家权重放 CPU（最省显存）；
+    - moe_mode = "n"    ：--n-cpu-moe N，前 N 层专家放 CPU（MoE 最常用）；
+    - moe_cache_mib > 0 ：--moe-cache-mib N，CPU 专家缓存（llama.cpp 新参数）。
+    """
+    args = []
+    mode = str(s.get("moe_mode") or "off").strip().lower()
+    if mode == "cpu":
+        args.append("--cpu-moe")
+    elif mode == "n":
+        try:
+            n = int(s.get("moe_layers", 0) or 0)
+        except (TypeError, ValueError):
+            n = 0
+        if n > 0:
+            args += ["--n-cpu-moe", str(n)]
+    try:
+        cache = int(s.get("moe_cache_mib", 0) or 0)
+    except (TypeError, ValueError):
+        cache = 0
+    if cache > 0:
+        args += ["--moe-cache-mib", str(cache)]
+    return args
+
+
 def _selected_devices(s):
     """返回选中的 GPU 设备列表（字符串）。"""
     devs = s.get("devices") or []
@@ -96,6 +123,9 @@ def build_args(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
     ngl = str(s.get("ngl", "all")).strip()
     if ngl:
         args += ["-ngl", "all" if ngl.lower() == "all" else ngl]
+
+    # ---- MoE 专家卸载（-cmoe / -ncmoe / --moe-cache-mib）----
+    args += _moe_args(s)
 
     ctx = int(s.get("ctx", 0) or 0)
     if ctx > 0:
@@ -188,9 +218,12 @@ def build_args(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
     # Prometheus 指标（/metrics）：悬浮窗实时 tok/s 依赖 tokens_predicted_total 计数器差分
     args += ["--metrics"]
 
-    # ---- 对话模板（功能 8）：Jinja 模板 / 思考强度 / 推理预算 ----
+    # ---- 对话模板（功能 8）：Jinja 模板 / 思考开关 / 思考强度 / 推理预算 ----
     if s.get("jinja"):
         args += ["--jinja"]
+    rmode = str(s.get("reasoning_mode") or "").strip().lower()
+    if rmode in ("on", "off", "auto") and s.get("jinja"):
+        args += ["--reasoning", rmode]
     effort = str(s.get("reasoning_effort") or "").strip()
     # 思考强度是对话模板参数，必须配合 --jinja 才有效
     if effort and s.get("jinja"):

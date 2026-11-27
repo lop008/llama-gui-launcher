@@ -24,6 +24,11 @@ DEFAULTS = {
         "host": "127.0.0.1",
         "port": 8080,
         "ngl": "all",
+        # MoE 专家卸载：off=不额外处理；cpu=--cpu-moe（全部专家放 CPU）；
+        # n=--n-cpu-moe N（前 N 层专家放 CPU）；moe_cache_mib>0 时加 --moe-cache-mib
+        "moe_mode": "off",
+        "moe_layers": 0,
+        "moe_cache_mib": 0,
         "ctx": 32768,
         "n_predict": 8192,
         "threads": -1,
@@ -48,6 +53,8 @@ DEFAULTS = {
         "spec_draft_n": 0,
         # 对话模板：Jinja 模板开关 / 模板参数(reasoning_effort) / 推理预算
         "jinja": False,
+        # on/off/auto = 下发给 llama-server 的 --reasoning；只对支持思考的模板有效
+        "reasoning_mode": "auto",
         "reasoning_effort": "",
         "reasoning_budget": -1,
         "slots": -1,
@@ -84,6 +91,10 @@ DEFAULTS = {
     "hover_pill_pos": None,
     # 以下为历史版本出现过、或供扩展使用的键，统一补齐避免 JSON 缺项
     "custom_tools": [],
+    # 用户隐藏的内置 Agent 工具 id（删除内置工具时写入）
+    "tools_hidden": [],
+    # 启动时检查启动器自身是否有新版本（GitHub Release）
+    "check_launcher_update": True,
     "opencode_workdir": "",
     "last_download_dir": "",
 }

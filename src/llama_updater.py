@@ -38,11 +38,22 @@ class UpdaterError(Exception):
 def get_local_version(exe_path, pid_cb=None):
     """运行 llama-server --version 解析本地版本号；失败/未安装返回 ""。阻塞式，请在后台线程调用。
 
-    pid_cb(pid|None)：探测进程创建/退出时回调其 PID，便于调用方在「残留进程检测」
-    中排除本程序自己发起的探测进程（否则每次启动都会误报残留）。
+    优先返回构建号（如 "b12780"），与 GitHub nightly Release tag 一致。
     """
+    info = get_local_version_info(exe_path, pid_cb=pid_cb)
+    return info.get("build") or info.get("version") or ""
+
+
+def get_local_version_info(exe_path, pid_cb=None):
+    """返回 {"build": "b12780", "version": "1.1.0-dev", "raw": "..."}。
+
+    llama.cpp 1.1.0 之后 `--version` 同时包含语义版本与构建号：
+      version: 1.1.0-dev (build 12780, commit 09c141064)
+    只显示 build 会让人误以为不是 1.1.0，所以这里两者都保留。
+    """
+    empty = {"build": "", "version": "", "raw": ""}
     if not exe_path or not os.path.isfile(exe_path):
-        return ""
+        return empty
     proc = None
     try:
         proc = subprocess.Popen(
@@ -60,24 +71,30 @@ def get_local_version(exe_path, pid_cb=None):
             out = ""
         text = (out or "").strip()
     except Exception:
-        return ""
+        return empty
     finally:
         if pid_cb:
             try:
                 pid_cb(None)
             except Exception:
                 pass
-    # 优先取构建号（如 "build 11026" → "b11026"，与 Release tag 一致）
+    build = ""
+    version = ""
     m = re.search(r"\bbuild\s+(\d{3,7})\b", text)
     if m:
-        return "b" + m.group(1)
-    m = re.search(r"\bb(\d{3,7})\b", text)
+        build = "b" + m.group(1)
+    else:
+        m = re.search(r"\bb(\d{3,7})\b", text)
+        if m:
+            build = "b" + m.group(1)
+    m = re.search(r"version\s*[:=]\s*([^\s(]+)", text)
     if m:
-        return "b" + m.group(1)
-    m = re.search(r"version\s*[:=]\s*(.+?)(?:\n|$)", text)
-    if m:
-        return m.group(1).strip()
-    return ""
+        version = m.group(1).strip()
+    return {"build": build, "version": version, "raw": text}
+
+
+def release_web_url(tag):
+    return f"https://github.com/ggml-org/llama.cpp/releases/tag/{tag}"
 
 
 def list_releases(per_page=30, include_prerelease=True, page=1):
@@ -93,7 +110,9 @@ def list_releases(per_page=30, include_prerelease=True, page=1):
     if p > 1:
         params["page"] = p
     if not include_prerelease:
-        params["exclude_assets"] = "true"  # 仅用于减少载荷；仍会返回元数据
+        # GitHub /releases 不支持服务端过滤 prerelease；在本地过滤，避免误用
+        # exclude_assets（那会把 assets 整个去掉，更新页就没法下载了）。
+        pass
     try:
         r = requests.get(url, params=params, headers=HEADERS, timeout=30)
     except requests.exceptions.RequestException as e:
@@ -110,12 +129,40 @@ def list_releases(per_page=30, include_prerelease=True, page=1):
         } for a in (rel.get("assets") or [])]
         out.append({
             "tag": rel.get("tag_name", ""),
+            "tag_name": rel.get("tag_name", ""),   # 兼容旧测试/旧调用方
             "name": rel.get("name", "") or rel.get("tag_name", ""),
             "published_at": (rel.get("published_at") or "")[:10],
             "prerelease": bool(rel.get("prerelease")),
+            "body": rel.get("body") or "",
             "assets": assets,
         })
+    if not include_prerelease:
+        out = [r for r in out if not r["prerelease"]]
     return out
+
+
+def latest_stable_release():
+    """最新稳定版（非 prerelease）。v1.1.0 这类可能没有 Windows 资产，也要展示。"""
+    try:
+        r = requests.get(f"{GH_API}/releases/latest", headers=HEADERS, timeout=30)
+    except requests.exceptions.RequestException as e:
+        raise UpdaterError(t('网络请求失败: {0}').format(e)) from e
+    if not (200 <= r.status_code < 300):
+        raise UpdaterError(t('GitHub API 返回 HTTP {0}').format(r.status_code))
+    rel = r.json() or {}
+    return {
+        "tag": rel.get("tag_name", ""),
+        "tag_name": rel.get("tag_name", ""),
+        "name": rel.get("name", "") or rel.get("tag_name", ""),
+        "published_at": (rel.get("published_at") or "")[:10],
+        "prerelease": bool(rel.get("prerelease")),
+        "body": rel.get("body") or "",
+        "assets": [{
+            "name": a.get("name", ""),
+            "size": int(a.get("size") or 0),
+            "url": a.get("browser_download_url", ""),
+        } for a in (rel.get("assets") or [])],
+    }
 
 
 def release_by_tag(tag):
@@ -132,9 +179,11 @@ def release_by_tag(tag):
     rel = r.json()
     return [{
         "tag": rel.get("tag_name", ""),
+        "tag_name": rel.get("tag_name", ""),
         "name": rel.get("name", "") or rel.get("tag_name", ""),
         "published_at": (rel.get("published_at") or "")[:10],
         "prerelease": bool(rel.get("prerelease")),
+        "body": rel.get("body") or "",
         "assets": [{
             "name": a.get("name", ""),
             "size": int(a.get("size") or 0),

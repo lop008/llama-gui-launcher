@@ -5,8 +5,8 @@
    `--spec-type` 取值。老 build 没有 draft-dflash / draft-dspark，界面据此置灰并提示更新。
 2. 模型层 `model_spec_support()`：读主模型 GGUF（是否内嵌 nextn/MTP 头、有没有配套草稿文件），
    给出每种方式「可用 / 需要下载草稿 / 本机不支持 / 不适用」。
-3. 文件层 `draft_matches_model()`：草稿头与主模型是否同一套（比 basename / base_model / 架构），
-   对不上时提示「接受率会很低」，而不是直接拦死。
+3. 文件层 `draft_matches_model()`：草稿头与主模型是否同一套（比词表 / 嵌入维度 / 架构族 /
+   基础模型名），对不上时标记 `valid=False`，自动挑选会跳过它，而不是直接让服务起不来。
 
 本模块不碰 Qt、不写配置，纯函数 + 结果缓存，便于单测。
 """
@@ -14,14 +14,14 @@ import os
 import re
 import subprocess
 
-from .gguf_reader import (ROLE_DRAFT, QUANT_RE, _name_role, probe_gguf)
+from .gguf_reader import (ROLE_DRAFT, QUANT_RE, _name_role, probe_gguf, probe_model_gguf)
 from .i18n import t
 
 CREATE_NO_WINDOW = 0x08000000
 
 # 下拉框候选顺序（默认值；界面可拖动改，作为「自动」的优先级）。
 # 顺序按「收益高且更容易可用」在前：内嵌 MTP → 各类草稿头 → 小模型草稿 → n-gram。
-# 取值以本机 llama-server --help 的 --spec-type 列表为准（build 12381 实测 13 项，
+# 取值以本机 llama-server --help 的 --spec-type 列表为准（build 12780 实测 13 项，
 # none 由界面上的「不启用」承担）。
 SPEC_IDS = ("mtp", "dflash2", "dflash", "dspark", "lilicorr", "eagle3", "simple",
             "ngram-mod", "ngram-map-k", "ngram-map-k4v", "ngram-cache", "ngram-simple")
@@ -41,6 +41,14 @@ SPEC_CLI = {
     "ngram-cache": ("ngram-cache", False),
     "ngram-simple": ("ngram-simple", False),
 }
+
+# 免草稿方式（这些不需要任何额外文件，白捡的加速）
+NO_DRAFT_IDS = frozenset(("mtp", "ngram-mod", "ngram-map-k", "ngram-map-k4v",
+                          "ngram-cache", "ngram-simple"))
+
+# 草稿架构族：这些是草稿头自己的架构名，允许与主模型架构不同。
+# 例如 DSpark 草稿的 general.architecture 是 dflash，主模型是 inkling2_loop。
+DRAFT_ARCHES = ("dflash", "dflash2", "dspark", "lilicorr", "eagle", "eagle3")
 
 # 免草稿方式的说明（这些不需要任何额外文件，白捡的加速）
 _SPEC_LABELS = {
@@ -136,23 +144,61 @@ def _norm_tokens(text):
     return {tk for tk in re.split(r"[^0-9a-z]+", s.lower()) if len(tk) > 1}
 
 
-def draft_matches_model(draft_path, model_path):
-    """草稿头与主模型是否配套，返回 (是否配套, 原因)。判不出时 (True, "")——不拦人。"""
-    a, b = probe_gguf(draft_path), probe_gguf(model_path)
-    if not a or not b:
-        return True, ""
-    if a["arch"] and b["arch"] and a["arch"] != b["arch"]:
-        return False, t('架构不一致（{0} vs {1}）').format(a["arch"], b["arch"])
-    names_a = " ".join([a["base"], a["base_model"], os.path.basename(str(draft_path))])
-    names_b = " ".join([b["base"], b["base_model"], os.path.basename(str(model_path))])
+def _is_draft_arch(arch):
+    """草稿头自己的架构名（dflash/dspark/...）或外挂 MTP 架构（xxx-mtp）。"""
+    al = str(arch or "").lower()
+    if not al:
+        return False
+    if al.startswith(DRAFT_ARCHES):
+        return True
+    return al == "mtp" or al.endswith("-mtp") or al.endswith("_mtp")
+
+
+def _name_match(a, b):
+    """文件名/基础模型名的词集是否有交集；判不出时返回 True（不拦人）。"""
+    names_a = " ".join([a.get("base") or "", a.get("base_model") or "", a.get("name") or ""])
+    names_b = " ".join([b.get("base") or "", b.get("base_model") or "", b.get("name") or ""])
     ta, tb = _norm_tokens(names_a), _norm_tokens(names_b)
     if not ta or not tb:
         return True, ""
-    # 主模型的型号词（如 qwen3 / 8b / 27b）应出现在草稿头命名里；重叠为 0 视为不配套
     core = {tk for tk in tb if re.search(r"\d", tk)} or tb
-    if not (core & ta):
-        return False, t('命名看不出与 {0} 的对应关系').format(b["base"] or b["base_model"])
-    return True, ""
+    if core & ta:
+        return True, ""
+    return False, t('命名看不出与 {0} 的对应关系').format(
+        b.get("base") or b.get("base_model") or "")
+
+
+def draft_matches_model(draft_path, model_path):
+    """草稿头与主模型是否配套，返回 (是否配套, 原因)。
+
+    判定顺序：
+    1. 词表大小（vocab_size）必须一致——草稿和主模型必须共享同一套 tokenizer；
+    2. 嵌入维度（embedding_length）必须一致；
+    3. 架构：允许草稿架构族（dflash/dspark/...）或外挂 MTP（xxx-mtp）与主模型不同；
+    4. 词表/维度都读不出时，才退回按命名判断，避免误杀。
+
+    判不出时 (True, "")——不拦人；能确认不匹配时才返回 False。
+    """
+    a = probe_gguf(draft_path)
+    b = probe_model_gguf(model_path)
+    if not a or not b:
+        return True, ""
+    va, vb = int(a.get("vocab_size") or 0), int(b.get("vocab_size") or 0)
+    ea, eb = int(a.get("embedding_length") or 0), int(b.get("embedding_length") or 0)
+    if va and vb and va != vb:
+        return False, t('词表大小不一致（{0} vs {1}）').format(va, vb)
+    if ea and eb and ea != eb:
+        return False, t('嵌入维度不一致（{0} vs {1}）').format(ea, eb)
+
+    aa, ab = str(a.get("arch") or "").lower(), str(b.get("arch") or "").lower()
+    if aa and ab and aa != ab and not _is_draft_arch(aa):
+        return False, t('架构不一致（{0} vs {1}）').format(aa, ab)
+
+    # 词表和维度都已经确认一致时，命名不再作为硬条件（外挂 MTP 常叫 mtp-q2_0）。
+    if va and vb and ea and eb:
+        return True, ""
+    ok, why = _name_match(a, b)
+    return ok, why
 
 
 def model_spec_support(model_path, drafts=(), engine_types=None):
@@ -160,13 +206,17 @@ def model_spec_support(model_path, drafts=(), engine_types=None):
 
     drafts: 同目录可用的草稿文件（model_scanner.ModelInfo 或路径字符串）。
     engine_types: engine_spec_types() 的结果，None 表示未知（不因引擎置灰）。
-    返回 [{"id","cli","label","state","reason","draft"}]，顺序同 SPEC_IDS。
+    返回 [{"id","cli","label","state","reason","draft","valid","match_reason","embedded"}]
+    顺序同 SPEC_IDS。
+
+    注意：`state=ok` 只表示「引擎认、文件在」；草稿是否真的配套看 `valid`。
+    自动挑选和启动前校验都会同时检查 state 与 valid。
     """
-    facts = probe_gguf(model_path)
+    facts = probe_model_gguf(model_path)
     embedded = bool(facts and (facts["nextn_layers"] > 0 or
                    any("nextn" in n.lower() or "eh_proj" in n.lower()
-                       for n in facts["names"][:2000])))
-    cli_of_draft = {}
+                       for n in facts["names"][:4000])))
+    by_kind = {}
     for d in drafts or ():
         path = getattr(d, "path", d)
         kind = getattr(d, "kind", "") or ""
@@ -174,44 +224,69 @@ def model_spec_support(model_path, drafts=(), engine_types=None):
             role, kind = _name_role(path)
             if role != ROLE_DRAFT:
                 kind = "mtp" if "mtp" in os.path.basename(str(path)).lower() else ""
-        if kind:
-            cli_of_draft.setdefault(kind, path)
+        if not kind:
+            continue
+        try:
+            valid, why = draft_matches_model(path, model_path)
+        except Exception:
+            valid, why = True, ""
+        by_kind.setdefault(kind, []).append({"path": path, "valid": valid, "why": why})
+
+    def _pick(kind):
+        items = by_kind.get(kind) or []
+        for it in items:
+            if it["valid"]:
+                return it
+        return items[0] if items else None
 
     out = []
     for sid in SPEC_IDS:
         cli, needs = SPEC_CLI[sid]
-        state, reason, draft = ST_OK, "", None
+        state, reason, draft, valid, match_reason = ST_OK, "", None, True, ""
         if sid == "mtp":
-            draft = cli_of_draft.get("mtp")
+            hit = _pick("mtp")
             if embedded:
                 state = ST_OK
                 reason = t('模型已内嵌 MTP 头')
-            elif draft:
+            elif hit:
                 state = ST_OK
                 reason = t('使用外部 MTP 头')
+                draft, valid, match_reason = hit["path"], hit["valid"], hit["why"]
             else:
                 state = ST_NEED_DRAFT
                 reason = t('模型未内嵌 MTP，需下载对应草稿头')
-        elif sid in ("ngram-mod", "ngram-map-k", "ngram-cache"):
+        elif sid in NO_DRAFT_IDS:
             state = ST_OK
             reason = t('无需草稿文件')
         else:
-            draft = cli_of_draft.get(sid)
-            if not draft:
+            hit = _pick(sid)
+            if not hit and sid == "dflash":
+                # 官方注释：draft-dflash 也能自动识别 dflash2 / dspark / lilicorr 草稿
+                for alt in ("dflash2", "dspark", "lilicorr"):
+                    hit = _pick(alt)
+                    if hit:
+                        break
+            if hit:
+                draft, valid, match_reason = hit["path"], hit["valid"], hit["why"]
+                state = ST_OK
+                reason = t('已找到配套草稿')
+            else:
                 state = ST_NEED_DRAFT
                 reason = t('需下载 {0} 草稿模型').format(spec_label(sid))
         if engine_types is not None and cli not in engine_types:
             state, reason = ST_NO_ENGINE, t('本机 llama-server 不支持，请更新 llama.cpp')
         out.append({"id": sid, "cli": cli, "label": spec_label(sid),
-                    "state": state, "reason": reason, "draft": draft})
+                    "state": state, "reason": reason, "draft": draft,
+                    "valid": bool(valid), "match_reason": match_reason,
+                    "embedded": bool(embedded and sid == "mtp")})
     return out
 
 
 def pick_auto(rows, order=None):
-    """按优先级顺序挑第一个可用的方式，返回 (id, cli, draft)；没有可用的返回 (None, None, None)。"""
+    """按优先级顺序挑第一个「引擎支持 + 草稿配套」的方式，返回 (id, cli, draft)。"""
     by_id = {r["id"]: r for r in rows}
     for sid in (order or SPEC_IDS):
         r = by_id.get(sid)
-        if r and r["state"] == ST_OK:
+        if r and r["state"] == ST_OK and r.get("valid", True):
             return r["id"], r["cli"], r.get("draft")
     return None, None, None

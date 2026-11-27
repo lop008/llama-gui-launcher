@@ -9,17 +9,21 @@
 **[English / English](README.md)**
 
 基于 llama.cpp 的本地大模型图形化启动器。让「选模型 → 配参数 → 后台启动 → 实时监控 → 连接 Agent 工具」整条链路一键搞定，不再需要手敲命令行。
+> **最新版本：v0.6.0** —— llama.cpp 的新参数进界面了：MoE 专家卸载（`--cpu-moe` / `--n-cpu-moe` / `--moe-cache-mib`）、思考开关与思考强度分开（`--reasoning` / `reasoning_effort`）、投机解码彻底启动安全（13 种 `--spec-type` 全覆盖）；Inkling 2（MoE）全链路支持并给出配置指引；「更新 llama.cpp」与「模型下载」两页重做；启动器支持自升级。详见 [发布说明](RELEASE_NOTES.md) 与 [更新日志](CHANGELOG.md)。
 
-> **最新版本：v0.5.15** —— 投机解码正式做进界面（12 种方式 + 自动 + 草稿下载 + 优先级排序），模型列表按文件真实身份筛查，并且每个版本都同时提供 x64 与 ARM64 两套产物。上一版重点为 v0.5.13 的全新多语言界面（8 种语言 + 跟随系统语言）。详见 [发布说明](RELEASE_NOTES.md) 与 [更新日志](CHANGELOG.md)。
+## 最新版本 v0.6.0 更新
 
-## 最新版本 v0.5.15 更新
-
-1. **投机解码完整落地**：模型选择下方新增「投机解码」行，包含 不启用 / 自动 + 12 种方式（MTP、DFlash 2、DFlash、DSpark、LiliCorr、EAGLE-3、小模型草稿、4 种 n-gram）、状态标签、草稿模型选择与草稿长度。支持情况全部实测得出（读本机 `llama-server --help` 与模型 GGUF 内容），本机不认的方式置灰并写明原因；**自动在没有任何可用方式时干脆不下发 `--spec-type`**，绝不会因为投机配置导致服务起不来。
-2. **「自动」优先级你说了算**：点「排序」打开对话框，按住条目拖动或用 ▲▼ / Alt+↑ / Alt+↓ 调整自动尝试的先后顺序，顺序会保存，新版本新增的方式自动补在后面。
-3. **一键找草稿**：「下载草稿」按当前模型在 HuggingFace 上找配套草稿（官方 GGUF 仓库优先），下到主模型所在目录（草稿必须同目录才会配对）并自动选中；只放 safetensors 的原作者仓库不给假下载，而是给出完整的 `convert_hf_to_gguf.py --target-model-dir` 转换命令。
-4. **辅助文件不再冒充模型**：视觉投影（mmproj）、投机草稿头、量化标定文件（imatrix）按 GGUF 内容从主模型下拉里筛掉；新增「辅助文件」清单，可查看每个文件的类型、大小、所在目录以及它对应的主模型。
-5. **每版双架构**：「更新 llama.cpp」页不再过滤 arm64 资产，v0.5.15 起发布 4 个产物（x64 与 ARM64 各含单文件版与便携版）。
-6. **修掉两个安静的问题**：正在下载时排队的任务被静默丢弃；一个缺失的尾逗号导致俄语用户一直被显示成简体中文。
+1. **投机解码再也不会把服务搞崩**：明确选中的方式必须「本机 `llama-server` 认识」且「草稿真配套」才下发，否则**完全不带 `--spec-type`**、服务照常启动并在状态栏说明原因。当前构建的 **13 种 `--spec-type`** 全覆盖（`draft-mtp` / `draft-dflash` / `draft-dflash2` / `draft-dspark` / `draft-lilicorr` / `draft-eagle3` / `draft-simple` / `ngram-mod` / `ngram-cache` / `ngram-simple` / `ngram-map-k` / `ngram-map-k4v` / `none`）。
+2. **草稿配对改成真配对**：比较词表大小、`embedding_length` 与**架构族**，DSpark / DFlash / LiliCorr（架构族 `dflash`）与外挂 `xxx-mtp` 头不再被误判「架构不一致」；多分片主模型跨全部分片扫描内嵌 MTP；`ngram-simple` / `ngram-map-k4v` 不再误报缺草稿。
+3. **llama.cpp 新参数可视化**：高级参数新增 **MoE 专家**行——`--cpu-moe`（全部专家放 CPU）、`--n-cpu-moe N`（前 N 层专家放 CPU，最常用）、`--moe-cache-mib N`（CPU 专家的 GPU 缓存）；这是 `-ngl all` 把 MoE 全部专家塞进显存的唯一解。同时新增 `--reasoning on/off/auto` 与 `--chat-template-kwargs {"reasoning_effort":…}`。
+4. **Inkling 2（MoE）支持**：`inkling2_loop` 识别为 MoE（128 个专家、每 token 激活 8 个、上下文 1 048 576），同目录 `dspark-*` 草稿自动配对（`Q8_0` 优先于 `BF16`，`*_Old` 旧转换件排最后）。**配置指引见 [参数说明.md](参数说明.md) 的「Inkling 2 配置指引」**：更新到 b12780 → 草稿与主模型同目录 → 投机解码选 DSpark → 「MoE 专家」选前 N 层放 CPU（N 从 8 起）。
+5. **思考开关 ≠ 思考强度**：只有模型模板真的声明 `reasoning_effort` 才开放强度下拉，并按模板实际取值重建（Inkling 是 `minimal/low/medium/high/xhigh/max`；Qwen3-0.6B、Gemma 4 只有开关）；旧配置残留的 `medium` 会被清掉而不是下发给不支持的模型。
+6. **「更新 llama.cpp」页重做**：统计卡（当前版本按 `1.1.0-dev (b12780)` 显示、最新稳定版、磁盘已下载的包）、**可见的分段筛选**（全部 / 仅稳定 / 仅预发布）、行复选框 + 全选 + 下载选中、递归扫描下载目录；没发 Windows 包的 Release（如 `v1.1.0` 只有 `nightly-tag.txt`）保留一行并标注「无 Windows 包」，不再整条消失。
+7. **「模型下载」页重做**：组织/作者改成**可输入 + 常用作者下拉**（默认 `unsloth`）；文件列表改成**目录树**，勾文件夹即整组下载（多分片模型一键搞定）；仓库信息追加目录清单与可点击的 HuggingFace 链接。
+8. **模型信息增强**：显示 MoE 事实（专家数 / 每 token 激活数 / 稠密或 MoE）、思考能力、**投机解码支持表**（每种方式的状态、原因、草稿路径）与可点击链接。
+9. **Agent 工具可增删改**：列顺序改成 工具 / 类型 / **路径** / 描述 / 打开（路径移到描述左侧），支持添加、编辑、删除，并能从 exe 的 `FileDescription` / `ProductName` 自动读取描述。
+10. **启动器自升级**：菜单「关于 → 检查启动器更新…」按本机架构下载新版 exe，退出后自动替换并重启；源码运行只打开 Release 页面。启动时的静默检查只在标题栏提示。
+11. **界面整体升级**：新增卡片 / 分段控件 / 状态徽章 / 统计块组件，QSS 重做（单选按钮终于有可见选中态、按钮 primary/danger/ghost/segment 变体、表格页签进度条下拉框统一风格），顶部标题卡显示版本、服务状态与 llama.cpp 版本。
 
 ## 一、这个项目解决什么问题？
 
@@ -114,10 +118,10 @@ python main.py
 
 | 文件 | 说明 |
 |------|------|
-| `LLama-Launcher-v0.5.15-win-x64.exe` | **单文件版**（x64，约 47 MB），双击即运行。首次启动较慢（需解压到临时目录，约几秒）；个别杀毒软件可能误报，加入白名单即可。 |
-| `LLama-Launcher-v0.5.15-win-x64-portable.zip` | **便携版**（x64），解压后运行 `LLama启动器-win-x64-portable.exe`，启动更快、无需自解压。 |
-| `LLama-Launcher-v0.5.15-win-arm64.exe` | **单文件版**（ARM64），适用于骁龙笔记本 / Windows on ARM 设备。 |
-| `LLama-Launcher-v0.5.15-win-arm64-portable.zip` | **便携版**（ARM64），解压即用。 |
+| `LLama-Launcher-v0.6.0-win-x64.exe` | **单文件版**（x64，约 47 MB），双击即运行。首次启动较慢（需解压到临时目录，约几秒）；个别杀毒软件可能误报，加入白名单即可。 |
+| `LLama-Launcher-v0.6.0-win-x64-portable.zip` | **便携版**（x64），解压后运行 `LLama启动器-win-x64-portable.exe`，启动更快、无需自解压。 |
+| `LLama-Launcher-v0.6.0-win-arm64.exe` | **单文件版**（ARM64），适用于骁龙笔记本 / Windows on ARM 设备。 |
+| `LLama-Launcher-v0.6.0-win-arm64-portable.zip` | **便携版**（ARM64），解压即用。 |
 | `Arm64.bat` | **ARM64 一键启动脚本**：与 exe 放同一目录后双击，永远优先挑 arm64 包（同目录混放了 x64 也不会拿错；仓库自带的 `一键启动.bat` 对应 x64，优先 x64）。 |
 
 将 `llama-server.exe` 及配套 DLL 放到同一目录（或在界面中指定启动器路径）。

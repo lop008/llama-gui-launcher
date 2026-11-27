@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """模型目录列表与能力检测：投机解码（MTP/DFlash/n-gram）/ 对话模板 / 视觉投影配对 / 模型信息 / HF 查询。"""
 
+import html
 import os
 import re
 import threading
@@ -12,7 +13,8 @@ from PyQt6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
 from .. import hf_info
-from ..gguf_reader import classify_gguf, detect_chat_features, format_gguf_info, read_gguf_info
+from ..gguf_reader import (classify_gguf, detect_chat_capabilities, detect_chat_features,
+                           format_gguf_info, read_gguf_info)
 from ..i18n import t
 from ..model_scanner import (
     ROLE_DRAFT, ROLE_IMATRIX, ROLE_MMPROJ, ROLE_MODEL, drafts_for, find_mmproj_for, human_size,
@@ -185,6 +187,9 @@ class ModelProbeMixin:
             self._clear_info()
             self._update_mmproj_warn()
             return
+        # 切换模型先清掉上一张能力卡，检测结果回来后再补
+        self._chat_caps = {}
+        self._base_info_text = ""
         if not self._loading:
             self.cfg.data["model"] = path
         model = next((m for m in self._models if m.path == path), None)
@@ -297,7 +302,11 @@ class ModelProbeMixin:
         if r is None:
             return ""
         mark = {ST_OK: '✔', ST_NEED_DRAFT: '⚠', ST_NO_ENGINE: '✖', ST_NO: '—'}.get(r["state"], "")
+        if r["state"] == ST_OK and not r.get("valid", True):
+            mark = '⚠'
         line = " ".join(x for x in (mark, r["label"], r["reason"]) if x)
+        if r.get("match_reason"):
+            line += "\n" + t('与主模型：{0}').format(r["match_reason"])
         if r.get("draft"):
             line += "\n" + t('草稿文件: {0}').format(r["draft"])
         return line
@@ -320,10 +329,17 @@ class ModelProbeMixin:
         color = {ST_OK: "#7dffa8", ST_NEED_DRAFT: "#ff9f6a",
                  ST_NO_ENGINE: "#ff6a6a", ST_NO: "#ff9f6a"}.get(r["state"], "#8fd0ff")
         mark = {ST_OK: '✔', ST_NEED_DRAFT: '⚠', ST_NO_ENGINE: '✖', ST_NO: '—'}.get(r["state"], "")
+        if r["state"] == ST_OK and not r.get("valid", True):
+            color, mark = "#ff9f6a", '⚠'
+            return t('{0} {1}：{2}').format(mark, label, r.get("match_reason") or t('草稿与主模型不匹配')), color
         return t('{0} {1}：{2}').format(mark, label, r["reason"]), color
 
     def _rebuild_draft_combo(self, mode):
-        """草稿下拉：只列与该方式对应、且与主模型同目录的草稿文件。"""
+        """草稿下拉：列出同目录的全部草稿头，并标注配套状态。
+
+        以前只有「需要草稿」的方式才启用下拉，导致刚下载完草稿却选不了。
+        现在「自动 / MTP / 具体方式」都可见：自动配对仍是默认项，手动选择优先。
+        """
         if not hasattr(self, "combo_draft"):
             return
         sid = mode if mode in SPEC_CLI else None
@@ -332,44 +348,68 @@ class ModelProbeMixin:
         cur = self.combo_draft.currentData()
         self.combo_draft.blockSignals(True)
         self.combo_draft.clear()
-        if mode in (None, "off", "auto"):
-            self.combo_draft.addItem(t('（由所选方式决定）'), None)
-        elif not needs:
+
+        if sid and str(sid).startswith("ngram"):
             self.combo_draft.addItem(t('（无需草稿文件）'), None)
-        else:
-            items = []
-            for d in self._drafts_for_path(model_path):
-                if (d.kind or "") not in (sid, ""):
-                    continue
-                warn = ""
+            self.combo_draft.setEnabled(False)
+            self.combo_draft.blockSignals(False)
+            return
+
+        drafts = list(self._drafts_for_path(model_path)) if model_path else []
+        if sid == "simple":
+            # 「小模型草稿」是拿一个正常的小模型当草稿（例如给 27B 配 0.6B），
+            # 这种文件本身是真模型、不会被归类成草稿头，所以把更小的模型也列出来。
+            main_size = next((m.size for m in (getattr(self, "_models", []) or [])
+                              if getattr(m, "path", None) == model_path), 0)
+            small = sorted((m for m in (getattr(self, "_models", []) or [])
+                            if getattr(m, "path", None) != model_path
+                            and main_size and m.size and m.size < main_size / 4),
+                           key=lambda m: m.size)
+            for m in small[:12]:
+                drafts.append(type("_SmallDraft", (), {
+                    "path": m.path, "kind": "simple", "name": m.name, "size": m.size})())
+        # 当前方式对应的草稿排前面；其余草稿仍保留，方便用户手动换一种方式
+        drafts.sort(key=lambda d: (0 if (sid and d.kind == sid) else 1,
+                                   0 if d.kind == "mtp" else 1))
+        if drafts:
+            self.combo_draft.addItem(t('（自动配对）'), None)
+            for d in drafts:
+                warn, valid, why = "", True, ""
                 try:
-                    ok_match, why = draft_matches_model(d.path, model_path)
-                    if not ok_match:
-                        warn = " " + t('（{0}）').format(why)
+                    valid, why = draft_matches_model(d.path, model_path)
+                    if not valid:
+                        warn = "  ⚠ " + (why or t('与主模型不匹配'))
                 except Exception:
                     pass
-                items.append((f"{d.name}  ({human_size(d.size)}){warn}", d.path))
-            if sid == "simple":
-                # 「小模型草稿」是拿一个正常的小模型当草稿（例如给 27B 配 0.6B），
-                # 这种文件本身是真模型、不会被归类成草稿头，所以把更小的模型也列出来。
-                main_size = next((m.size for m in (getattr(self, "_models", []) or [])
-                                  if getattr(m, "path", None) == model_path), 0)
-                small = sorted((m for m in (getattr(self, "_models", []) or [])
-                                if getattr(m, "path", None) != model_path
-                                and main_size and m.size and m.size < main_size / 4),
-                               key=lambda m: m.size)
-                for m in small[:12]:
-                    items.append((f"{m.name}  ({human_size(m.size)})", m.path))
-            for label, path in items:
-                self.combo_draft.addItem(label, path)
-                self.combo_draft.setItemData(self.combo_draft.count() - 1, path,
-                                             Qt.ItemDataRole.ToolTipRole)
-            if items:
-                self.combo_draft.insertItem(0, t('（自动配对）'), None)
-            else:
+                kind = (d.kind or "").upper() or "?"
+                label = f"{d.name}  ({kind}, {human_size(d.size)})"
+                if warn:
+                    label += warn
+                self.combo_draft.addItem(label, d.path)
+                idx = self.combo_draft.count() - 1
+                tip = d.path
+                if not valid:
+                    tip += "\n" + (why or t('草稿与主模型不匹配'))
+                self.combo_draft.setItemData(idx, tip, Qt.ItemDataRole.ToolTipRole)
+            # 手动指定「不使用草稿」：主要用于 MTP（模型已内嵌时强制不用外部头）
+            if not needs and mode == "mtp":
+                self.combo_draft.insertItem(1, t('（不使用草稿）'), "")
+        else:
+            if needs:
                 self.combo_draft.addItem(t('（未找到配套草稿，可点「下载草稿」）'), None)
+            else:
+                self.combo_draft.addItem(t('（本机未发现草稿文件）'), None)
+
         idx = self.combo_draft.findData(cur)
+        if idx < 0 and needs and drafts:
+            # 刚下载完：如果当前方式正好有配套草稿，自动选中第一个匹配项
+            for i in range(self.combo_draft.count()):
+                p = self.combo_draft.itemData(i)
+                if p and os.path.isfile(str(p)):
+                    idx = i
+                    break
         self.combo_draft.setCurrentIndex(idx if idx >= 0 else 0)
+        self.combo_draft.setEnabled(bool(drafts) or bool(needs))
         self.combo_draft.blockSignals(False)
 
     def _update_spec_ui(self):
@@ -397,10 +437,15 @@ class ModelProbeMixin:
         self._spec_status(*self._spec_status_text(mode, by_id))
         sid = mode if mode in SPEC_CLI else None
         needs = bool(sid) and SPEC_CLI[sid][1]
-        self.combo_draft.setEnabled(bool(needs))
-        self.btn_spec_download.setEnabled(bool(needs))
-        # --spec-draft-n-max 只对「有草稿」的方式有意义，n-gram 用不上
-        self.spin_spec_n.setEnabled(bool(sid) and not str(sid).startswith("ngram"))
+        has_drafts = self.combo_draft.count() > 1
+        self.combo_draft.setEnabled(has_drafts or bool(needs))
+        model_path = self.combo_model.currentData() if hasattr(self, "combo_model") else None
+        self.btn_spec_download.setEnabled(
+            bool(model_path) and not (sid and str(sid).startswith("ngram")))
+        # --spec-draft-n-max 只对「有草稿」的方式有意义，n-gram 用不上；
+        # 「自动」也允许设置，避免用户选了自动却改不了草稿长度。
+        self.spin_spec_n.setEnabled(mode not in ("off",) and not (sid and str(sid).startswith("ngram")))
+        self._refresh_info_view()
 
     def _spec_rows(self):
         """当前模型的各方式支持表（检测结果缓存；没检测完返回空表）。"""
@@ -451,30 +496,47 @@ class ModelProbeMixin:
     def _on_draft_changed(self):
         if getattr(self, "_loading", False):
             return
+        self._update_spec_ui()
         self.update_preview()
 
     def _spec_resolve(self):
         """把界面选择解析成命令行参数：(spec_mode, spec_cli, spec_draft, spec_draft_n)。
 
-        spec_cli 为空 = 不下发 --spec-type：包括「不启用」，以及「自动」但当前模型
-        一种可用方式都没有的情况（此时照常启动，只在状态栏提示，不弹窗拦人）。
+        `spec_cli` 为空 = 不下发 --spec-type：包括「不启用」，以及「自动」但当前模型
+        一种可用方式都没有、或明确选择的方式当前不可用/草稿不配套的情况。
+        宁可不下发（服务照常启动），也不能把 `draft-mtp` 配给没有 MTP 的模型——
+        llama-server 会直接 `failed to create MTP context` 拒绝启动。
         """
         mode = (self.combo_spec.currentData() or "off") if hasattr(self, "combo_spec") else "off"
         n = self.spin_spec_n.value() if hasattr(self, "spin_spec_n") else 0
         if mode in (None, "off"):
             return "off", "", "", 0
-        by_id = {r["id"]: r for r in self._spec_rows()}
+        rows = self._spec_rows()
+        by_id = {r["id"]: r for r in rows}
         if mode == "auto":
-            sid, cli, draft = pick_auto(self._spec_rows(), self._spec_order())
+            sid, cli, draft = pick_auto(rows, self._spec_order())
             if not sid:
                 return "auto", "", "", 0
         else:
             r = by_id.get(mode)
-            sid, cli, draft = mode, (r["cli"] if r else ""), (r.get("draft") if r else None)
+            # 检测还没完成、引擎不支持、缺草稿、草稿与主模型不配套 → 不下发
+            if not r or r["state"] != ST_OK or not r.get("valid", True):
+                return mode, "", "", 0
+            sid, cli, draft = mode, r["cli"], r.get("draft")
         if sid not in SPEC_CLI:
             return mode, "", "", 0
         manual = self.combo_draft.currentData() if hasattr(self, "combo_draft") else None
+        if manual == "":
+            # 用户显式选择「不使用草稿」
+            manual = None
         draft = manual or draft or ""
+        if manual:
+            try:
+                ok_match, _why = draft_matches_model(manual, self.combo_model.currentData())
+            except Exception:
+                ok_match = True
+            if not ok_match:
+                return mode, "", "", 0
         if SPEC_CLI[sid][1] and not (draft and os.path.isfile(draft)):
             return mode, "", "", 0        # 缺草稿：宁可不加速，也不让服务起不来
         return mode, cli, draft, int(n or 0)
@@ -486,7 +548,7 @@ class ModelProbeMixin:
                 f'<span style="color:{color};"><u>{text}</u></span>')
 
     def _detect_chat_async(self, path):
-        """后台读取 GGUF 的 tokenizer.chat_template，检测 Jinja / 思考强度支持。"""
+        """后台读取 GGUF 的 tokenizer.chat_template，检测 Jinja / 思考开关 / 思考强度。"""
         if not path or not hasattr(self, "check_jinja"):
             return
         if self._chat_cache.get(path) is None:
@@ -494,10 +556,11 @@ class ModelProbeMixin:
 
             def work():
                 try:
-                    tpl, reason = detect_chat_features(path)
+                    caps = detect_chat_capabilities(path)
                 except Exception:
-                    tpl, reason = None, False
-                self._chat_cache[path] = (tpl, reason)
+                    caps = {"has_template": None, "thinking": False, "effort": False,
+                            "efforts": [], "toggle_var": ""}
+                self._chat_cache[path] = caps
                 try:
                     self.chat_detected.emit()
                 except RuntimeError:
@@ -516,11 +579,13 @@ class ModelProbeMixin:
             pass  # 槽函数内异常不外抛
 
     def _apply_chat_result(self, path):
-        tpl, reason = self._chat_cache.get(path, (None, False))
+        caps = self._chat_cache.get(path) or {}
         if not hasattr(self, "check_jinja"):
             return
+        tpl = caps.get("has_template")
         self._chat_has_template = tpl
-        self._chat_has_reasoning = bool(reason)
+        self._chat_caps = caps
+        self._chat_has_reasoning = bool(caps.get("effort"))
         self._loading = True
         if tpl is None:
             # 无法检测：保持可用，允许用户手动决定
@@ -532,39 +597,80 @@ class ModelProbeMixin:
             self.check_jinja.setChecked(False)
             self.check_jinja.setEnabled(False)
         else:
-            if self._chat_has_reasoning:
-                self._chat_status_label(t('✔ 支持 Jinja 模板与思考强度'), "#7dffa8")
+            if caps.get("effort"):
+                levels = "/".join(caps.get("efforts") or ("low", "medium", "high"))
+                self._chat_status_label(
+                    t('✔ Jinja + 思考强度（{0}）').format(levels), "#7dffa8")
+            elif caps.get("thinking"):
+                self._chat_status_label(
+                    t('✔ Jinja + 思考开关（该模板不支持档位）'), "#7dffa8")
             else:
-                self._chat_status_label(t('✔ 支持 Jinja 模板（未检测到思考强度）'), "#7dffa8")
+                self._chat_status_label(t('✔ 支持 Jinja 模板（未检测到思考）'), "#7dffa8")
             self.check_jinja.setEnabled(True)
         self._loading = False
         self._update_chat_controls()
+        self._refresh_info_view()
+
+    def _rebuild_effort_combo(self, caps):
+        """按模板实际支持的档位重建「思考强度」下拉。"""
+        if not hasattr(self, "combo_reasoning"):
+            return
+        cur = self.combo_reasoning.currentData()
+        levels = list(caps.get("efforts") or [])
+        if not levels:
+            levels = ["low", "medium", "high"]
+        self.combo_reasoning.blockSignals(True)
+        self.combo_reasoning.clear()
+        self.combo_reasoning.addItem(t('不设置'), "")
+        for lv in levels:
+            self.combo_reasoning.addItem(lv, lv)
+        idx = self.combo_reasoning.findData(cur)
+        self.combo_reasoning.setCurrentIndex(idx if idx >= 0 else 0)
+        self.combo_reasoning.blockSignals(False)
 
     def _update_chat_controls(self):
-        """按「模型能力 + 是否启用 Jinja」联动思考强度/推理预算的可选状态。
+        """按「模型能力 + 是否启用 Jinja」联动思考开关/强度/预算的可选状态。
 
-        强绑定：思考强度(--chat-template-kwargs) 依赖 --jinja；
-        只有模型模板支持思考时，思考强度与推理预算才可用。
+        - 模板支持 enable_thinking/thinking → 思考开关（--reasoning on/off/auto）可用；
+        - 模板明确支持 reasoning_effort → 思考强度档位可用；
+        - 仅支持思考开关的模型不再误开 low/medium/high。
         """
         if not hasattr(self, "combo_reasoning"):
             return
+        caps = getattr(self, "_chat_caps", None) or {}
         has_tpl = getattr(self, "_chat_has_template", None)
-        has_reason = getattr(self, "_chat_has_reasoning", False)
         jinja_on = self.check_jinja.isChecked()
-        # 模板无法检测(None)时按「可能支持」处理，允许手动使用
         tpl_ok = has_tpl is not False
-        reasoning_ok = tpl_ok and (has_reason or has_tpl is None)
-        self.combo_reasoning.setEnabled(jinja_on and reasoning_ok)
-        self.spin_reasoning_budget.setEnabled(reasoning_ok)
+        thinking_ok = tpl_ok and (bool(caps.get("thinking") or caps.get("effort")) or has_tpl is None)
+        effort_ok = tpl_ok and bool(caps.get("effort"))
+        self._rebuild_effort_combo(caps)
+        if hasattr(self, "combo_thinking"):
+            self.combo_thinking.setEnabled(thinking_ok)
+            if not thinking_ok:
+                self.combo_thinking.setToolTip(
+                    t('当前模型的对话模板未检测到思考开关，无法设置思考模式。'))
+            else:
+                self.combo_thinking.setToolTip(
+                    t('对应 llama-server 的 --reasoning：on=强制思考，off=关闭思考，auto=按模板/请求决定。'))
+        self.combo_reasoning.setEnabled(jinja_on and effort_ok)
+        self.spin_reasoning_budget.setEnabled(thinking_ok)
+        if not effort_ok and self.combo_reasoning.currentIndex() != 0:
+            # 模型不支持档位：界面已禁用，但旧配置可能还留着 medium/high；
+            # 清回「不设置」，避免把无效参数静默下发给服务端。
+            self.combo_reasoning.blockSignals(True)
+            self.combo_reasoning.setCurrentIndex(0)
+            self.combo_reasoning.blockSignals(False)
         if not jinja_on:
             self.combo_reasoning.setToolTip(
                 t('思考强度需要先勾选「启用 Jinja 模板」才会生效。'))
-        elif not reasoning_ok:
+        elif not effort_ok:
             self.combo_reasoning.setToolTip(
-                t('当前模型的对话模板未检测到思考强度（reasoning_effort）支持，暂不可用。'))
+                t('当前模型的对话模板没有 reasoning_effort 变量：只支持思考开/关，不支持 low/medium/high 档位。'))
         else:
             self.combo_reasoning.setToolTip(
-                t('传给对话模板的 reasoning_effort 变量（--chat-template-kwargs）。\nQwen3 等支持思考的模型用它控制「思考深度」：low/medium/high。\n「不设置」= 不传该参数（使用模板默认）。'))
+                t('传给对话模板的 reasoning_effort 变量（--chat-template-kwargs）。\n'
+                  '档位来自模型模板实际支持的取值；不同模型不完全一样。\n'
+                  '「不设置」= 不传该参数（使用模板默认）。'))
 
     def _on_mmproj_changed(self):
         self.cfg.data["mmproj"] = self.combo_mmproj.currentData() or None
@@ -699,7 +805,12 @@ class ModelProbeMixin:
         if not model:
             QMessageBox.information(self, t('提示'), t('请先选择模型'))
             return
-        DraftDownloadDialog(self, model).exec()
+        # 严格隔离：对话框打开期间禁用主窗口，彻底避免鼠标/回车穿透到下面的下载页
+        self.setEnabled(False)
+        try:
+            DraftDownloadDialog(self, model).exec()
+        finally:
+            self.setEnabled(True)
 
     def _download_spec_draft(self, query=""):
         """兜底路径：切到「模型下载」页并预填关键词（草稿对话框里「在模型下载页找」用的）。
@@ -732,18 +843,100 @@ class ModelProbeMixin:
         def work():
             text = format_gguf_info(path)
             try:
-                self.model_info.emit(text)
+                self.model_info.emit(path, text)
             except RuntimeError:
                 pass
         threading.Thread(target=work, daemon=True).start()
 
     def _clear_info(self):
-        self.info_view.setPlainText(t('未选择模型'))
-    # ---------------------------------------------------------- 联网查询
+        self._base_info_text = ""
+        self.info_view.setHtml(f"<p>{html.escape(t('未选择模型'))}</p>")
 
-    def _on_model_info(self, text):
+    def _refresh_info_view(self):
+        """检测结果回来后再补一次：把投机解码/思考能力追加到模型信息底部。"""
+        try:
+            if hasattr(self, "info_view") and getattr(self, "_base_info_text", ""):
+                self.info_view.setHtml(self._build_info_html(self._base_info_text))
+        except Exception:
+            pass
+
+    def _build_info_html(self, base_text):
+        path = self.combo_model.currentData() if hasattr(self, "combo_model") else None
+        parts = [f"<pre style='white-space:pre-wrap;font-family:Consolas,monospace;'>"
+                 f"{html.escape(base_text or '')}</pre>"]
+
+        caps = (getattr(self, "_chat_caps", None) or {}) if path else {}
+        if caps:
+            parts.append("<hr><h3>" + html.escape(t('模型能力')) + "</h3><table cellspacing='0' cellpadding='4'>")
+            if caps.get("has_template") is True:
+                if caps.get("effort"):
+                    lv = " / ".join(caps.get("efforts") or [])
+                    think = t('思考开关 + 思考强度（{0}）').format(lv)
+                elif caps.get("thinking"):
+                    think = t('思考开关（不支持档位）')
+                else:
+                    think = t('无思考能力')
+                parts.append(f"<tr><td>{html.escape(t('对话模板'))}</td><td>✔ Jinja</td></tr>")
+                parts.append(f"<tr><td>{html.escape(t('思考能力'))}</td><td>{html.escape(think)}</td></tr>")
+            elif caps.get("has_template") is False:
+                parts.append(f"<tr><td>{html.escape(t('对话模板'))}</td><td>✖ {html.escape(t('无内置模板'))}</td></tr>")
+            parts.append("</table>")
+
+        rows = self._spec_rows() if path else []
+        if rows:
+            parts.append("<hr><h3>" + html.escape(t('投机解码支持')) + "</h3>")
+            parts.append("<table cellspacing='0' cellpadding='4' width='100%'>")
+            parts.append("<tr><th align='left'>" + html.escape(t('方式')) +
+                         "</th><th align='left'>" + html.escape(t('状态')) +
+                         "</th><th align='left'>" + html.escape(t('说明')) + "</th></tr>")
+            for r in rows:
+                state = r.get("state")
+                if state == ST_OK and r.get("valid", True):
+                    mark, color = "✔", "#2ecc71"
+                    reason = r.get("reason") or ""
+                elif state == ST_OK and not r.get("valid", True):
+                    mark, color = "⚠", "#f39c12"
+                    reason = r.get("match_reason") or t('草稿与主模型不匹配')
+                elif state == ST_NEED_DRAFT:
+                    mark, color = "⚠", "#f39c12"
+                    reason = r.get("reason") or ""
+                elif state == ST_NO_ENGINE:
+                    mark, color = "✖", "#e74c3c"
+                    reason = r.get("reason") or ""
+                else:
+                    mark, color = "—", "#95a5a6"
+                    reason = r.get("reason") or ""
+                if r.get("draft"):
+                    reason += "<br><span style='color:#888;'>" + html.escape(str(r["draft"])) + "</span>"
+                parts.append(
+                    f"<tr><td>{html.escape(r.get('label') or r.get('id') or '')}</td>"
+                    f"<td><span style='color:{color};font-weight:bold;'>{mark}</span></td>"
+                    f"<td>{reason}</td></tr>")
+            parts.append("</table>")
+
+        # 仓库链接：优先用 GGUF 元数据里的 base_model_url；没有就按模型名给 HF 搜索链接
+        repo = ""
+        try:
+            info = read_gguf_info(path) if path else {}
+            repo = (info or {}).get("base_model_url") or (info or {}).get("general.repo_url") or ""
+        except Exception:
+            repo = ""
+        if not repo and path:
+            q = re.sub(r"\.gguf$", "", os.path.basename(path), flags=re.IGNORECASE)
+            q = re.sub(r"[-_.](Q\d.*|BF16|F16|F32)$", "", q, flags=re.IGNORECASE)
+            from urllib.parse import quote
+            repo = "https://huggingface.co/models?search=" + quote(q)
+        if repo:
+            parts.append("<p><a href='{0}'>{1}</a></p>".format(
+                html.escape(repo, quote=True), html.escape(t('打开模型主页 / HuggingFace 搜索'))))
+        return "".join(parts)
+
+    def _on_model_info(self, path, text):
         """本地 GGUF 信息就绪：先显示，若勾选了「联网查询」再自动补充 HF 信息。"""
-        self.info_view.setPlainText(text)
+        if path and self.combo_model.currentData() and os.path.abspath(path) != os.path.abspath(self.combo_model.currentData()):
+            return
+        self._base_info_text = text
+        self.info_view.setHtml(self._build_info_html(text))
         if getattr(self, "check_hf_query", None) is not None and self.check_hf_query.isChecked():
             self._query_hf_info()
 

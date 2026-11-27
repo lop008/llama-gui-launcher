@@ -117,6 +117,10 @@ class LaunchFlowMixin:
         self.btn_stop.setEnabled(running)
         self.act_stop.setEnabled(running)
         self.btn_web.setEnabled(running)
+        if hasattr(self, "badge_service"):
+            self.badge_service.set_status(
+                t('服务运行中') if running else t('服务未运行'),
+                "ok" if running else "neutral")
         self._set_tray_menu_state()
         self._sync_pill_running()
 

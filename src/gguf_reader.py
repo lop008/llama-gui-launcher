@@ -74,6 +74,10 @@ _SUFFIX_MAP = (
     ("nextn_predict_layers", "nextn_layers"),
     ("ssm.state_size", "ssm_state"),
     ("parameter_count", "parameter_count"),
+    ("expert_count", "expert_count"),
+    ("expert_used_count", "expert_used_count"),
+    ("expert_feed_forward_length", "expert_feed_forward_length"),
+    ("expert_shared_count", "expert_shared_count"),
     ("projection_dim", "projection_dim"),
 )
 
@@ -320,7 +324,9 @@ def probe_gguf(path):
     """
     facts = {"version": 0, "tensor_count": 0, "type": "", "arch": "", "block_count": 0,
              "nextn_layers": 0, "has_tokenizer": False, "has_clip": False,
-             "base": "", "base_model": "", "names": []}
+             "base": "", "base_model": "", "names": [],
+             "vocab_size": 0, "embedding_length": 0, "expert_count": 0,
+             "expert_used_count": 0}
     try:
         with open(path, "rb") as f:
             if f.read(4) != GGUF_MAGIC:
@@ -332,8 +338,10 @@ def probe_gguf(path):
                 key = _read_string(f)
                 vtype = _u32(f)
                 if vtype == ARRAY and key in _SKIP_ARRAY_KEYS:
-                    _skip_array(f)
+                    count = _skip_array(f)
                     facts["has_tokenizer"] = True     # 有词表 => 一定是能对话的模型本体
+                    if key == "tokenizer.ggml.tokens":
+                        facts["vocab_size"] = count
                     continue
                 value = _read_value(f, vtype)
                 lk = key.lower()
@@ -350,6 +358,21 @@ def probe_gguf(path):
                 elif lk.endswith(".block_count"):
                     try:
                         facts["block_count"] = int(value)
+                    except (TypeError, ValueError):
+                        pass
+                elif lk.endswith(".embedding_length"):
+                    try:
+                        facts["embedding_length"] = int(value)
+                    except (TypeError, ValueError):
+                        pass
+                elif lk.endswith(".expert_count"):
+                    try:
+                        facts["expert_count"] = int(value)
+                    except (TypeError, ValueError):
+                        pass
+                elif lk.endswith(".expert_used_count"):
+                    try:
+                        facts["expert_used_count"] = int(value)
                     except (TypeError, ValueError):
                         pass
                 elif "nextn" in lk or "mtp" in lk:
@@ -371,6 +394,40 @@ def probe_gguf(path):
     except Exception:
         return None
     return facts
+
+
+def probe_model_gguf(path):
+    """合并多文件分片模型的事实（架构/MTP/词表/专家数）。
+
+    新版 llama.cpp 的分片模型第 1 个文件可能只有元数据、张量表分散在各分片，
+    只看第一个文件会漏掉内嵌 MTP / 张量名。这里把同组所有分片合并：
+    标量取第一个非空值，张量名与 nextn 计数取并集/最大值。
+    """
+    files = _shard_group_files(path)
+    merged = None
+    names = []
+    for fp in files:
+        facts = probe_gguf(fp)
+        if facts is None:
+            continue
+        if merged is None:
+            merged = dict(facts)
+            merged["names"] = []
+        for key in ("version", "tensor_count", "type", "arch", "block_count",
+                    "has_tokenizer", "has_clip", "base", "base_model",
+                    "vocab_size", "embedding_length", "expert_count", "expert_used_count"):
+            if not merged.get(key) and facts.get(key):
+                merged[key] = facts[key]
+        merged["nextn_layers"] = max(int(merged.get("nextn_layers") or 0),
+                                     int(facts.get("nextn_layers") or 0))
+        for n in facts.get("names") or ():
+            if n not in names:
+                names.append(n)
+    if merged is None:
+        return None
+    merged["names"] = names
+    merged["tensor_count"] = max(int(merged.get("tensor_count") or 0), len(names))
+    return merged
 
 
 def _blk_indexes(names):
@@ -526,17 +583,55 @@ def detect_chat_features(path):
 
     返回 (has_template, has_reasoning)：
     - has_template: True=含 chat_template（可启用 --jinja）；False=无；None=无法检测；
-    - has_reasoning: 模板是否支持思考强度/思考开关（reasoning_effort / enable_thinking / thinking）。
+    - has_reasoning: 模板是否真的支持「思考强度档位」（reasoning_effort）。
+
+    注意：enable_thinking / thinking 只代表支持「思考开/关」，不代表支持
+    low/medium/high 档位。两者混为一谈会把 Qwen3、Gemma 等误判成支持档位。
+    """
+    caps = detect_chat_capabilities(path)
+    if not caps.get("has_template"):
+        return caps.get("has_template"), False
+    return True, bool(caps.get("effort"))
+
+
+_EFFORT_LEVELS = ("minimal", "low", "medium", "high", "xhigh", "max")
+
+
+def detect_chat_capabilities(path):
+    """读取模板并区分「思考开关」与「思考档位」。
+
+    返回 dict:
+      has_template: True/False/None
+      thinking: 模板是否接受思考开关（enable_thinking / thinking / reasoning）
+      effort: 模板是否接受 reasoning_effort 档位
+      efforts: 从模板中能确认的档位列表（至少包含常用 6 档）
+      toggle_var: 找到的开关变量名（用于提示）
     """
     parsed, tpl = read_chat_template(path)
     if not parsed:
-        return None, False
+        return {"has_template": None, "thinking": False, "effort": False,
+                "efforts": [], "toggle_var": ""}
     if not tpl:
-        return False, False
+        return {"has_template": False, "thinking": False, "effort": False,
+                "efforts": [], "toggle_var": ""}
     low = tpl.lower()
-    has_reasoning = ("reasoning_effort" in low or "enable_thinking" in low
-                     or "thinking" in low)
-    return True, has_reasoning
+    toggle = ""
+    for var in ("enable_thinking", "thinking", "reasoning"):
+        if var in low:
+            toggle = var
+            break
+    effort = "reasoning_effort" in low
+    efforts = []
+    if effort:
+        # 模板里出现过的档位名；没写全时补常用档位，避免界面只剩 low/high
+        for lv in _EFFORT_LEVELS:
+            if lv in low:
+                efforts.append(lv)
+        for lv in _EFFORT_LEVELS:
+            if lv not in efforts:
+                efforts.append(lv)
+    return {"has_template": True, "thinking": bool(toggle), "effort": effort,
+            "efforts": efforts, "toggle_var": toggle}
 
 
 def _quant_label(name, info):
@@ -605,6 +700,18 @@ def format_gguf_info(path):
         lines.append(t('嵌入维度: {0}').format(info['embedding_length']))
     if info.get("feed_forward_length") is not None:
         lines.append(t('前馈维度: {0}').format(info['feed_forward_length']))
+    experts = info.get("expert_count")
+    if experts:
+        used = info.get("expert_used_count")
+        if used:
+            lines.append(t('模型类型: MoE（{0} 个专家，每 token 激活 {1} 个）').format(experts, used))
+        else:
+            lines.append(t('模型类型: MoE（{0} 个专家）').format(experts))
+        if info.get("expert_feed_forward_length") is not None:
+            lines.append(t('专家前馈维度: {0}').format(info['expert_feed_forward_length']))
+        lines.append(t('提示: -ngl all 会把全部专家权重放进显存；显存不足请在「高级参数 → MoE 专家」设为前 N 层放 CPU。'))
+    else:
+        lines.append(t('模型类型: 稠密（Dense）'))
 
     def _first_int(v):
         if isinstance(v, (list, tuple)):

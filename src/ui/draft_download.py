@@ -12,7 +12,7 @@
 import os
 import threading
 
-from PyQt6.QtCore import pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtWidgets import (
     QAbstractItemView, QDialog, QHBoxLayout, QHeaderView, QLabel, QLineEdit,
     QMessageBox, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
@@ -45,6 +45,9 @@ class DraftDownloadDialog(QDialog):
 
         self.setWindowTitle(t('下载投机解码草稿'))
         self.resize(1080, 560)
+        # 严格模态：避免打开/关闭时的鼠标释放或回车穿透到主窗口下面的下载按钮
+        self.setModal(True)
+        self.setWindowModality(Qt.WindowModality.ApplicationModal)
 
         lay = QVBoxLayout(self)
         head = QLabel(t('主模型: {0}\n草稿会下载到: {1}（必须和主模型同目录才会被认出来）')
@@ -67,6 +70,8 @@ class DraftDownloadDialog(QDialog):
         self.btn_full_page.setToolTip(t('想看完整仓库列表（不只草稿）时用，会切到下载页并预填关键词。'))
         self.btn_full_page.clicked.connect(self._open_full_page)
         row.addWidget(self.btn_full_page)
+        for _b in (self.btn_search, self.btn_open_dir, self.btn_full_page):
+            _b.setAutoDefault(False)
         lay.addLayout(row)
 
         self.table = QTableWidget(0, 6)
@@ -98,6 +103,7 @@ class DraftDownloadDialog(QDialog):
         btns.addStretch(1)
         self.btn_close = QPushButton(t('关闭'))
         self.btn_close.clicked.connect(self.reject)
+        self.btn_close.setAutoDefault(False)
         btns.addWidget(self.btn_close)
         lay.addLayout(btns)
 
@@ -143,7 +149,9 @@ class DraftDownloadDialog(QDialog):
                     errors.append("{0}: {1}".format(r["id"], e))
                     continue
                 rows.extend(draft_hub.pick_files(r["id"], info.get("files"), self.query))
-            rows.sort(key=lambda x: (-x["score"], -x["size"]))
+            rows.sort(key=lambda x: (-x["score"],
+                                     1 if "old" in str(x.get("path", "")).lower() else 0,
+                                     x["size"]))
             self._found.emit(rows[:40], errors)
 
         threading.Thread(target=work, daemon=True).start()
@@ -162,6 +170,7 @@ class DraftDownloadDialog(QDialog):
                 it.setToolTip(r["repo"] + "/" + r["path"])
                 self.table.setItem(i, col, it)
             btn = QPushButton(t('下载'))
+            btn.setAutoDefault(False)
             btn.clicked.connect(lambda _=False, row=r: self._download(row))
             self.table.setCellWidget(i, 5, btn)
         if not rows:
@@ -225,7 +234,26 @@ class DraftDownloadDialog(QDialog):
             if isinstance(cache, dict):
                 cache.pop(self.model_path, None)
             self.mw.refresh_models(keep_selection=True)
-            self.mw._status_tip(t('草稿已放到模型目录，投机解码下拉里的「草稿模型」可以直接选它'), 6000)
+            self.mw._status_tip(t('草稿已放到模型目录，正在刷新并自动选中…'), 6000)
+
+            # 扫描是异步的：稍后再把新文件选中；同时把方式切到对应类型
+            from PyQt6.QtCore import QTimer
+
+            def _select():
+                try:
+                    kind = draft_hub.guess_spec_kind(path)
+                    if kind:
+                        idx = self.mw.combo_spec.findData(kind)
+                        if idx >= 0:
+                            self.mw.combo_spec.setCurrentIndex(idx)
+                    i = self.mw.combo_draft.findData(path)
+                    if i >= 0:
+                        self.mw.combo_draft.setCurrentIndex(i)
+                        self.mw._status_tip(t('已自动选中新下载的草稿'), 5000)
+                except Exception:
+                    pass
+
+            QTimer.singleShot(1200, _select)
         except Exception:
             pass    # 刷新失败不影响下载本身，用户手动点「刷新模型」也一样能认
 

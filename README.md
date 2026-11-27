@@ -9,17 +9,21 @@
 A GUI launcher for llama.cpp local large language models. It turns the whole workflow — **pick a model → configure parameters → start the server in the background → monitor resources in real time → connect to Agent tools** — into a one-click experience. No more memorizing long command lines.
 
 **[中文文档 / Chinese](README.zh-CN.md)**
+> **Latest release: v0.6.0** — llama.cpp's newest switches are now in the UI: MoE expert offloading (`--cpu-moe` / `--n-cpu-moe` / `--moe-cache-mib`), thinking on/off separated from reasoning effort (`--reasoning` / `reasoning_effort`), and speculative decoding that can never break a launch (all 13 `--spec-type` values covered). Inkling 2 (MoE) is supported end to end with a configuration guide, the llama.cpp updater and the model download page were rebuilt, and the launcher can now update itself. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
 
-> **Latest release: v0.5.15** — speculative decoding is now a first-class feature (12 methods + Auto, draft download, priority editor), the model list is screened by what each GGUF actually *is*, and every release ships both x64 and ARM64 builds. Previous highlight: the full multilingual interface (8 UI languages + follow-system) in v0.5.13. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
+## What's New in v0.6.0
 
-## What's New in v0.5.15
-
-1. **Speculative decoding, properly exposed** — a **Speculative decoding** row under the model selector with Off / Auto plus 12 methods (MTP, DFlash 2, DFlash, DSpark, LiliCorr, EAGLE-3, small-model draft, 4× n-gram), a colour-coded status label, a draft-model picker and a draft-length spinner. Support is detected from your own `llama-server --help` and the selected model's GGUF contents; unsupported methods are greyed out with the reason, and **Auto passes no `--spec-type` when nothing is usable**, so it can never break your launch.
-2. **Auto priority you control** — the **Sort** dialog reorders which methods Auto tries first: drag items, or use ▲▼ / Alt+↑ / Alt+↓.
-3. **Download draft** — finds drafts on HuggingFace that pair with the selected model (official GGUF repos first), downloads them into the model's own folder where they can actually be paired, and selects the result; safetensors-only authors get the exact `convert_hf_to_gguf.py --target-model-dir` recipe instead of a broken one-click.
-4. **No more helper files posing as models** — vision projectors (mmproj), draft heads and imatrix calibration files are screened out of the main model dropdown by GGUF contents, with a new **Auxiliary files** table showing each file's role, size, folder and matching main model.
-5. **ARM64 builds every release** — the llama.cpp updater stopped filtering out arm64 assets, and v0.5.15 ships 4 artifacts (single-file + portable for x64 and ARM64).
-6. **Two quiet bugs fixed** — downloads queued while another was in flight were silently discarded, and a missing trailing comma had been serving Chinese to Russian users.
+1. **Speculative decoding can no longer break a launch** — an explicitly selected method is passed only when your `llama-server` knows it *and* the draft really matches the model; otherwise **no `--spec-type` is emitted at all**, the server starts un-accelerated and the status bar says why. All **13 `--spec-type` values** of a current build are covered (`draft-mtp`, `draft-dflash`, `draft-dflash2`, `draft-dspark`, `draft-lilicorr`, `draft-eagle3`, `draft-simple`, `ngram-mod`, `ngram-cache`, `ngram-simple`, `ngram-map-k`, `ngram-map-k4v`, `none`).
+2. **Real draft matching** — vocabulary size, `embedding_length` and the *architecture family* are compared, so DSpark / DFlash / LiliCorr drafts (family `dflash`) and external `xxx-mtp` heads are no longer rejected; multi-shard main models are scanned across every shard for an embedded MTP head; `ngram-simple` / `ngram-map-k4v` are correctly reported as needing no draft.
+3. **New llama.cpp parameters in the UI** — an **MoE experts** row on the Advanced page drives `--cpu-moe` (all experts on CPU), `--n-cpu-moe N` (first N layers' experts on CPU — the usual fix) and `--moe-cache-mib N` (GPU cache for CPU experts). This is what `-ngl all` pushing every expert into VRAM needs. `--reasoning on/off/auto` and `--chat-template-kwargs {"reasoning_effort":…}` are wired up as well.
+4. **Inkling 2 (MoE) supported** — `inkling2_loop` is recognised as MoE (128 experts, 8 active per token, 1 048 576-token context); `dspark-*` drafts next to the model are paired automatically (`Q8_0` preferred over `BF16`, legacy `*_Old` last). **Step-by-step recipe in [参数说明.md](参数说明.md)** (update to b12780 → draft in the model's folder → pick DSpark → set experts to "first N layers on CPU", starting at N=8).
+5. **Thinking switch ≠ reasoning effort** — the effort dropdown is only enabled when the model's Jinja template really declares `reasoning_effort`, and its entries are rebuilt from that template (Inkling: `minimal/low/medium/high/xhigh/max`; Qwen3-0.6B and Gemma 4 only expose the switch). A stale `medium` in `config.json` is cleared instead of being sent to a model that ignores it.
+6. **llama.cpp updater rebuilt** — stat cards (current version shown as `1.1.0-dev (b12780)`, latest stable, packages found on disk), a **visible segmented filter** (All / Stable only / Pre-release only), row checkboxes + select-all + Download selected, and a recursive scan of the download folder. Releases without Windows binaries (`v1.1.0` ships only `nightly-tag.txt`) stay visible and labelled instead of vanishing.
+7. **Model download page rebuilt** — organisation/author is an editable combo with common publishers (`unsloth` default); the file list is a **folder tree**, so checking a folder downloads a whole multi-shard model in one click; repository info gained the folder layout and a clickable HuggingFace link.
+8. **Richer model info** — MoE facts (expert count, experts per token, dense vs MoE), detected thinking capability, a **speculative-decoding support table** (state / reason / draft path per method) and clickable links.
+9. **Agent tools are manageable** — columns are now Tool / Type / **Path** / Description / Open, with add, edit, delete and "read description from the exe" (`FileDescription` / `ProductName`).
+10. **Launcher self-update** — *About → Check for launcher update…* downloads the exe for your architecture and swaps it in after exit, then relaunches; running from source just opens the release page. The silent start-up check only flags a new version in the header.
+11. **Interface overhaul** — a new widget kit (cards, segmented controls, badges, stat blocks) and reworked styles: radio buttons finally show a checked state, buttons gained primary / danger / ghost / segment variants, tables, tabs, progress bars, combos and menus were restyled, and the header card shows version, service state and the detected llama.cpp version.
 
 ## What Problem Does It Solve?
 
@@ -113,10 +117,10 @@ Download from the [Releases](https://github.com/lop008/llama-gui-launcher/releas
 
 | File | Description |
 |------|-------------|
-| `LLama-Launcher-v0.5.15-win-x64.exe` | **Single-file** build (x64, ~47 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
-| `LLama-Launcher-v0.5.15-win-x64-portable.zip` | **Portable** build (x64) — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
-| `LLama-Launcher-v0.5.15-win-arm64.exe` | **Single-file** build (ARM64) — for Snapdragon laptops / Windows on ARM. |
-| `LLama-Launcher-v0.5.15-win-arm64-portable.zip` | **Portable** build (ARM64) — extract and run. |
+| `LLama-Launcher-v0.6.0-win-x64.exe` | **Single-file** build (x64, ~47 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
+| `LLama-Launcher-v0.6.0-win-x64-portable.zip` | **Portable** build (x64) — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
+| `LLama-Launcher-v0.6.0-win-arm64.exe` | **Single-file** build (ARM64) — for Snapdragon laptops / Windows on ARM. |
+| `LLama-Launcher-v0.6.0-win-arm64-portable.zip` | **Portable** build (ARM64) — extract and run. |
 | `Arm64.bat` | **One-click launcher for ARM64** — put it next to the exe and double-click; it always picks the arm64 build even if an x64 exe sits in the same folder (`一键启动.bat` is the x64 counterpart and prefers x64). |
 
 Put `llama-server.exe` and its DLLs in the same directory (or set the launcher path in the UI).

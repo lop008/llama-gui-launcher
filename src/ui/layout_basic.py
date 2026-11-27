@@ -144,6 +144,7 @@ class LayoutBasicMixin:
             t('草稿模型文件。默认「（自动配对）」= 使用与主模型同一目录、命名配套的草稿头；\n'
               '需要草稿的方式找不到配套文件时会提示下载。悬停可查看完整路径。'))
         self.btn_spec_download = QPushButton(t('下载草稿'))
+        self.btn_spec_download.setAutoDefault(False)
         self.btn_spec_download.setToolTip(
             t('在 HuggingFace 上找与当前模型配套的草稿模型：官方 GGUF 仓库优先（可直接下载）；\n'
               '第三方仓库需要自己转换格式，列表里会标注说明。'))
@@ -324,49 +325,100 @@ class LayoutBasicMixin:
         grid.addWidget(self.check_mlock, 1, 2)
         grid.addWidget(self.check_mmap, 1, 3)
 
-        # ---- 第 2 行：对话模板（Jinja 模板 / 思考强度 / 推理预算）----
+        # ---- 第 2 行：对话模板（Jinja 模板 / 思考模式 / 思考强度）----
         self.check_jinja = QCheckBox(t('启用 Jinja 模板'))
         self.check_jinja.setToolTip(
-            t('启用模型自带的 Jinja 对话模板（--jinja）。\nllama-server 默认用内置的硬编码模板；开启后改用模型 GGUF 元数据里的\ntokenizer.chat_template，能正确套用新版模型（Qwen3.x 等）自己的对话格式，\n并且是「思考强度」(--chat-template-kwargs) 生效的前提。'))
+            t('启用模型自带的 Jinja 对话模板（--jinja）。\nllama-server 默认用内置的硬编码模板；开启后改用模型 GGUF 元数据里的\ntokenizer.chat_template，能正确套用新版模型（Qwen3.x 等）自己的对话格式，\n并且是「思考模式 / 思考强度」生效的前提。'))
         grid.addWidget(self.check_jinja, 2, 0, 1, 2)
 
-        grid.addWidget(QLabel(t('思考强度:')), 2, 2)
+        grid.addWidget(QLabel(t('思考模式:')), 2, 2)
+        self.combo_thinking = QComboBox()
+        for _name, _val in ((t('自动 (auto)'), "auto"), (t('开启思考 (on)'), "on"),
+                            (t('关闭思考 (off)'), "off")):
+            self.combo_thinking.addItem(_name, _val)
+        self.combo_thinking.setToolTip(
+            t('对应 llama-server 的 --reasoning：on=强制思考，off=关闭思考，auto=按模板/请求决定。\n'
+              '只有模板里包含 enable_thinking / thinking / reasoning 时可用；\n'
+              '它控制「想不想」，不控制「想多深」——深度由右侧思考强度决定。'))
+        grid.addWidget(self.combo_thinking, 2, 3)
+
+        grid.addWidget(QLabel(t('思考强度:')), 2, 4)
         self.combo_reasoning = QComboBox()
         for _name, _val in ((t('不设置'), ""), (t('低 (low)'), "low"),
                             (t('中 (medium)'), "medium"), (t('高 (high)'), "high")):
             self.combo_reasoning.addItem(_name, _val)
         self.combo_reasoning.setToolTip(
-            t('传给对话模板的 reasoning_effort 变量（--chat-template-kwargs）。\nQwen3 等支持思考的模型用它控制「思考深度」：low/medium/high。\n「不设置」= 不传该参数（使用模板默认）。\n需同时勾选「启用 Jinja 模板」才会生效。'))
-        grid.addWidget(self.combo_reasoning, 2, 3)
+            t('传给对话模板的 reasoning_effort 变量（--chat-template-kwargs）。\n'
+              '只有模板里真的包含 reasoning_effort 时可用；档位会按模型实际支持的取值重建。\n'
+              '「不设置」= 不传该参数（使用模板默认）。'))
+        grid.addWidget(self.combo_reasoning, 2, 5)
+        self.label_chat_status = QLabel("")
+        self.label_chat_status.setStyleSheet("color: #8fd0ff;")
+        self.label_chat_status.setToolTip(t('对话模板检测结果（读取模型 GGUF 的 tokenizer.chat_template）：绿色=支持，橙色=不支持/无法检测'))
+        grid.addWidget(self.label_chat_status, 2, 6, 1, 2)
 
-        grid.addWidget(QLabel(t('推理预算:')), 2, 4)
+        # ---- 第 3 行：推理预算 + 启动行为 ----
+        grid.addWidget(QLabel(t('推理预算:')), 3, 0)
         self.spin_reasoning_budget = QSpinBox()
         self.spin_reasoning_budget.setRange(-1, 1000000)
         self.spin_reasoning_budget.setValue(-1)
         self.spin_reasoning_budget.setSpecialValueText(t('-1 = 不限制'))
         self.spin_reasoning_budget.setToolTip(
             t('思考段最多能消耗的 token 数（--reasoning-budget）。\n模型在 reasoning/thinking 里用完这么多 token 后会被强制收尾、输出正式答案。\n-1 = 不限制（默认）。与「思考强度」是两套机制：一个是软引导，一个是硬上限。'))
-        grid.addWidget(self.spin_reasoning_budget, 2, 5)
-        self.label_chat_status = QLabel("")
-        self.label_chat_status.setStyleSheet("color: #8fd0ff;")
-        self.label_chat_status.setToolTip(t('对话模板检测结果（读取模型 GGUF 的 tokenizer.chat_template）：绿色=支持，橙色=不支持/无法检测'))
-        grid.addWidget(self.label_chat_status, 2, 6, 1, 2)
-
-        # ---- 第 3 行：启动时行为（残留进程检测 / 端口占用建议）----
+        grid.addWidget(self.spin_reasoning_budget, 3, 1)
         self.check_residual = QCheckBox(t('启动时检测残留进程'))
         self.check_residual.setToolTip(
             t('启动时扫描系统中残留的 llama-server 进程并询问是否清理。\n若在弹窗中勾选了「不再提示」，可在此重新开启。'))
-        grid.addWidget(self.check_residual, 3, 0, 1, 4)
-
+        grid.addWidget(self.check_residual, 3, 2, 1, 3)
         self.check_port_hint = QCheckBox(t('端口被占用时建议更换端口'))
         self.check_port_hint.setToolTip(
             t('启动时若发现配置的端口已被占用，则建议一个可用端口，\n确认后自动更新主界面的端口号。'))
-        grid.addWidget(self.check_port_hint, 3, 4, 1, 2)
+        grid.addWidget(self.check_port_hint, 3, 5, 1, 3)
 
+        # ---- 第 4 行：悬浮小窗 ----
         self.check_hover_pill = QCheckBox(t('缩到托盘时显示悬浮小窗'))
         self.check_hover_pill.setToolTip(
             t('点 X 收起主窗口后，屏幕右下角显示一个小胶囊：状态圆点 + 实时输出速度(tok/s)。\n鼠标停留展开数据卡片：速度 / CPU / 内存 / GPU 负载 / 显存 / API 接入数 / 模型名；\n单击=展开或收起，拖动=移动位置，双击=返回主界面，右键=菜单（打开主界面/启动模型/停止模型/隐藏图标/退出），✕=停用（可再勾选恢复）。'))
-        grid.addWidget(self.check_hover_pill, 3, 6, 1, 2)
+        grid.addWidget(self.check_hover_pill, 4, 0, 1, 4)
+        self.check_launcher_update = QCheckBox(t('启动时检查启动器更新'))
+        self.check_launcher_update.setToolTip(
+            t('启动后静默检查 GitHub 是否有新版启动器；有新版时只在标题栏/状态栏提示，\n'
+              '不会自动下载。可在「关于 → 检查启动器更新…」里手动升级。'))
+        grid.addWidget(self.check_launcher_update, 4, 4, 1, 4)
+
+        # ---- 第 5 行：MoE 专家卸载（解决 -ngl all 把全部专家塞进显存）----
+        grid.addWidget(QLabel(t('MoE 专家:')), 5, 0)
+        self.combo_moe = QComboBox()
+        self.combo_moe.addItem(t('不额外处理（-ngl 决定）'), "off")
+        self.combo_moe.addItem(t('全部放 CPU（--cpu-moe）'), "cpu")
+        self.combo_moe.addItem(t('前 N 层放 CPU（--n-cpu-moe）'), "n")
+        self.combo_moe.setToolTip(
+            t('MoE 模型的专家权重默认跟着 -ngl 一起进显存。\n'
+              '显存不够时：全部放 CPU = --cpu-moe（最省显存、最慢）；\n'
+              '前 N 层放 CPU = --n-cpu-moe N（MoE 最常用，按显存试 N）。\n'
+              '稠密模型此设置无效。'))
+        grid.addWidget(self.combo_moe, 5, 1)
+        grid.addWidget(QLabel(t('专家层数 N:')), 5, 2)
+        self.spin_moe_layers = QSpinBox()
+        self.spin_moe_layers.setRange(0, 512)
+        self.spin_moe_layers.setValue(0)
+        self.spin_moe_layers.setSpecialValueText(t('0 = 不启用'))
+        self.spin_moe_layers.setToolTip(
+            t('--n-cpu-moe N：把前 N 层的专家权重放 CPU，其余层仍在 GPU。\n'
+              '从 1 开始逐层加，直到显存够用；N 越大越省显存、越慢。'))
+        grid.addWidget(self.spin_moe_layers, 5, 3)
+        grid.addWidget(QLabel(t('专家缓存(MiB):')), 5, 4)
+        self.spin_moe_cache = QSpinBox()
+        self.spin_moe_cache.setRange(0, 65536)
+        self.spin_moe_cache.setValue(0)
+        self.spin_moe_cache.setSpecialValueText(t('0 = 不设置'))
+        self.spin_moe_cache.setToolTip(
+            t('--moe-cache-mib N：CPU 专家权重的 GPU 缓存大小。\n'
+              '0 = 不传该参数；显存有富余时可设 256~2048 提升 MoE 速度。'))
+        grid.addWidget(self.spin_moe_cache, 5, 5)
+        self.label_moe_hint = QLabel(t('MoE 模型显存不足时优先用「前 N 层放 CPU」'))
+        self.label_moe_hint.setStyleSheet("color: #8a8a8a;")
+        grid.addWidget(self.label_moe_hint, 5, 6, 1, 2)
 
         # ---- 「生成参数」分组：每行 4 组 ----
         # 第 0 行末尾：批大小（前三组 上下文预设/上下文长度/预测Token 在 _build_basic）

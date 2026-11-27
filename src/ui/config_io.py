@@ -22,11 +22,21 @@ class ConfigIOMixin:
             self.check_cont, self.spin_temp, self.spin_topp, self.spin_topk,
             self.spin_rp, self.edit_apikey, self.check_mlock, self.check_mmap,
             self.check_browser, self.spin_timeout, self.edit_host, self.spin_port,
-            self.check_lan, self.check_ssl,
+            self.check_lan, self.check_ssl, self.check_launcher_update,
             self.combo_split_mode, self.edit_tensor_split, self.spin_main_gpu,
+            self.combo_moe, self.spin_moe_layers, self.spin_moe_cache,
             self.combo_spec, self.combo_draft, self.spin_spec_n,
-            self.check_jinja, self.combo_reasoning, self.spin_reasoning_budget,
+            self.check_jinja, self.combo_thinking, self.combo_reasoning,
+            self.spin_reasoning_budget,
         ]
+
+    def _on_moe_changed(self):
+        """MoE 模式联动：只有「前 N 层」才需要 N。"""
+        if not hasattr(self, "combo_moe"):
+            return
+        mode = self.combo_moe.currentData() or "off"
+        self.spin_moe_layers.setEnabled(mode == "n")
+        self.spin_moe_cache.setEnabled(mode != "off")
 
     def _gather_server_cfg(self):
         ssl_on = self.check_ssl.isChecked()
@@ -49,6 +59,10 @@ class ConfigIOMixin:
             # KV 缓存 K / V 独立类型（功能 2）
             "kv_cache_k": self.combo_kvc_k.currentText(),
             "kv_cache_v": self.combo_kvc_v.currentText(),
+            # MoE 专家卸载
+            "moe_mode": self.combo_moe.currentData() or "off",
+            "moe_layers": self.spin_moe_layers.value(),
+            "moe_cache_mib": self.spin_moe_cache.value(),
             # 多显卡（功能 3）
             "devices": [c.property("dev_name") for c in getattr(self, "gpu_checks", [])
                         if c.isChecked() and c.property("dev_name")],
@@ -63,7 +77,14 @@ class ConfigIOMixin:
             "spec_draft_n": spec_draft_n,
             # 对话模板（功能 8）
             "jinja": self.check_jinja.isChecked(),
-            "reasoning_effort": self.combo_reasoning.currentData() or "",
+            "reasoning_mode": (self.combo_thinking.currentData() or "auto")
+                              if (getattr(self, "_chat_caps", {}) or {}).get("thinking")
+                              or (getattr(self, "_chat_caps", {}) or {}).get("effort")
+                              else "",
+            "reasoning_effort": (self.combo_reasoning.currentData() or "")
+                                if (self.combo_reasoning.isEnabled()
+                                    and (getattr(self, "_chat_caps", {}) or {}).get("effort"))
+                                else "",
             "reasoning_budget": self.spin_reasoning_budget.value(),
             "slots": self.spin_slots.value(),
             "temp": self.spin_temp.value(),
@@ -127,6 +148,15 @@ class ConfigIOMixin:
             self.spin_main_gpu.setValue(int(s.get("main_gpu", 0)))
         except (TypeError, ValueError):
             pass
+        # MoE 专家卸载
+        mi = self.combo_moe.findData(str(s.get("moe_mode") or "off"))
+        self.combo_moe.setCurrentIndex(mi if mi >= 0 else 0)
+        try:
+            self.spin_moe_layers.setValue(int(s.get("moe_layers", 0) or 0))
+            self.spin_moe_cache.setValue(int(s.get("moe_cache_mib", 0) or 0))
+        except (TypeError, ValueError):
+            pass
+        self._on_moe_changed()
         # 投机解码：老配置的「启用 MTP」已由 config._migrate 迁成 spec_mode，
         # 这里只负责把下拉/数字框回显成配置里的样子
         mode = self._spec_mode()
@@ -144,6 +174,9 @@ class ConfigIOMixin:
 
         # 对话模板（功能 8）
         self.check_jinja.setChecked(bool(s.get("jinja", False)))
+        _rmode = str(s.get("reasoning_mode") or "auto")
+        _ri = self.combo_thinking.findData(_rmode)
+        self.combo_thinking.setCurrentIndex(_ri if _ri >= 0 else 0)
         _effort = str(s.get("reasoning_effort") or "")
         _idx = self.combo_reasoning.findData(_effort)
         self.combo_reasoning.setCurrentIndex(_idx if _idx >= 0 else 0)
@@ -156,6 +189,7 @@ class ConfigIOMixin:
         self.check_residual.setChecked(bool(d.get("check_residual", True)))
         self.check_port_hint.setChecked(bool(d.get("port_hint", True)))
         self.check_hover_pill.setChecked(bool(d.get("hover_pill", True)))
+        self.check_launcher_update.setChecked(bool(d.get("check_launcher_update", True)))
         self.check_hf_query.setChecked(bool(d.get("hf_query_enabled", False)))
 
         # 模型排序（功能 1）
@@ -199,6 +233,7 @@ class ConfigIOMixin:
             return
         self.cfg.data["check_residual"] = self.check_residual.isChecked()
         self.cfg.data["port_hint"] = self.check_port_hint.isChecked()
+        self.cfg.data["check_launcher_update"] = self.check_launcher_update.isChecked()
         self.cfg.save()
 
     def export_config(self):

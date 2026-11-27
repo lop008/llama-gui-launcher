@@ -4,9 +4,9 @@ import sys
 from PyQt6.QtCore import QTimer, pyqtSignal
 from PyQt6.QtGui import QCloseEvent, QPixmap
 from PyQt6.QtWidgets import (
-    QApplication, QCheckBox, QGridLayout, QHBoxLayout, QLabel, QMainWindow, QMenu, QMessageBox,
-    QPlainTextEdit, QPushButton, QSystemTrayIcon, QTabWidget, QTableWidget, QTextEdit, QVBoxLayout,
-    QWidget,
+    QApplication, QCheckBox, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QMainWindow,
+    QMenu, QMessageBox, QPlainTextEdit, QPushButton, QSystemTrayIcon, QTabWidget,
+    QTableWidget, QTextBrowser, QVBoxLayout, QWidget,
 )
 
 from . import __version__
@@ -18,6 +18,7 @@ from .themes import THEMES
 from .updater_tab import UpdaterTab
 from .i18n import t
 from .ui.widgets import CollapsibleBox, _AspectImageLabel
+from .ui.kit import Badge, Card
 from .ui.workers import _LlamaVersionWorker
 from .ui.gpu_probe import GpuMixin
 from .ui.layout_basic import LayoutBasicMixin
@@ -48,12 +49,13 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
                  ModelProbeMixin, LayoutBasicMixin, GpuMixin, QMainWindow):
     tool_scan_done = pyqtSignal()
     model_scan_done = pyqtSignal()
-    model_info = pyqtSignal(str)
+    model_info = pyqtSignal(str, str)
     hf_info_done = pyqtSignal(str)
     gpu_detected = pyqtSignal()
     mtp_detected = pyqtSignal()
     chat_detected = pyqtSignal()
     vram_weights = pyqtSignal(list)   # A5: nvidia-smi 显存查询完成（整数权重列表）
+    launcher_update_found = pyqtSignal(str)
 
     def __init__(self, base_dir):
         super().__init__()
@@ -93,6 +95,9 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self._chat_cache = {}            # path -> (has_template|None, has_reasoning)
         self._chat_has_template = None   # 当前模型的模板能力（None=未检测/无法检测）
         self._chat_has_reasoning = False
+        self._chat_caps = {}
+        self._base_info_text = ""
+        self._spec_cache = {}
         self._gpu_probe_pid = None       # --list-devices 探测进程 PID（残留检测需排除）
 
         # 数字框不响应鼠标滚轮：滚动窗口/参数区经过 spinbox 时不再误改数值
@@ -133,6 +138,8 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.statusBar().showMessage(t('就绪'))
         if not os.environ.get("LLAMA_LAUNCHER_NO_GPU_DETECT"):
             QTimer.singleShot(2000, self.detect_gpus)   # 启动时自动检测多显卡（功能 3）
+        if not os.environ.get("LLAMA_LAUNCHER_NO_UPDATE_CHECK"):
+            QTimer.singleShot(6000, self.check_launcher_update_silent)
 
 
     def _build_ui(self):
@@ -140,6 +147,27 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.setCentralWidget(central)
         root = QVBoxLayout(central)
         root.setContentsMargins(8, 8, 8, 8)
+
+        # ---- 顶部标题卡（版本 / llama 版本 / 一句话定位）----
+        hero = Card(padding=10, spacing=2)
+        hero_row = QHBoxLayout()
+        hero_row.setSpacing(10)
+        _title = QLabel(t('LLama 启动器'))
+        _title.setObjectName("SectionTitle")
+        hero_row.addWidget(_title)
+        _ver = Badge(f"v{__version__}", "info")
+        hero_row.addWidget(_ver)
+        _sub = QLabel(t('本地大模型控制台 · 模型 / 投机解码 / 下载 / 更新，一处搞定'))
+        _sub.setObjectName("Muted")
+        hero_row.addWidget(_sub)
+        hero_row.addStretch(1)
+        self.badge_service = Badge(t('服务未运行'), "neutral")
+        hero_row.addWidget(self.badge_service)
+        self.label_llama_ver = QLabel(t('llama: 检测中…'))
+        self.label_llama_ver.setObjectName("Muted")
+        hero_row.addWidget(self.label_llama_ver)
+        hero.add_layout(hero_row)
+        root.addWidget(hero)
 
         splitter_widget = QWidget()
         splitter_layout = QVBoxLayout(splitter_widget)
@@ -178,21 +206,48 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.log_view.setReadOnly(True)
         self.preview_view = QPlainTextEdit()
         self.preview_view.setReadOnly(True)
-        self.info_view = QTextEdit()
+        self.info_view = QTextBrowser()
         self.info_view.setReadOnly(True)
+        self.info_view.setOpenExternalLinks(True)
 
         tool_tab = QWidget()
         tt = QVBoxLayout(tool_tab)
         tt.setContentsMargins(0, 0, 0, 0)
         tool_bar = QHBoxLayout()
-        tip = QLabel(t('双击行 = 打开；选中行后点底部「打开 Agent 工具」；未找到的工具双击可手动指定路径'))
-        tip.setStyleSheet("color: #888;")
+        tip = QLabel(t('双击行 = 打开；选中行后可编辑/删除；路径在描述左侧，描述列会自动拉伸'))
+        tip.setObjectName("Muted")
         tool_bar.addWidget(tip)
         tool_bar.addStretch(1)
+        self.btn_tool_add = QPushButton(t('＋ 添加'))
+        self.btn_tool_add.setProperty("variant", "primary")
+        self.btn_tool_add.clicked.connect(self._add_agent_tool)
+        self.btn_tool_edit = QPushButton(t('编辑'))
+        self.btn_tool_edit.setProperty("variant", "ghost")
+        self.btn_tool_edit.clicked.connect(self._edit_agent_tool)
+        self.btn_tool_del = QPushButton(t('删除'))
+        self.btn_tool_del.setProperty("variant", "danger")
+        self.btn_tool_del.clicked.connect(self._delete_agent_tool)
+        self.btn_tool_desc = QPushButton(t('自动更新描述'))
+        self.btn_tool_desc.setProperty("variant", "ghost")
+        self.btn_tool_desc.clicked.connect(self._auto_describe_tools)
+        self.btn_tool_refresh = QPushButton(t('重新检测'))
+        self.btn_tool_refresh.setProperty("variant", "ghost")
+        self.btn_tool_refresh.clicked.connect(self.scan_tools)
+        for b in (self.btn_tool_add, self.btn_tool_edit, self.btn_tool_del,
+                  self.btn_tool_desc, self.btn_tool_refresh):
+            tool_bar.addWidget(b)
         tt.addLayout(tool_bar)
         self.tool_table = QTableWidget(0, 5)
-        self.tool_table.setHorizontalHeaderLabels([t('工具'), t('类型'), t('描述'), t('状态'), t('打开')])
-        self.tool_table.horizontalHeader().setStretchLastSection(True)
+        self.tool_table.setHorizontalHeaderLabels([t('工具'), t('类型'), t('路径'), t('描述'), t('打开')])
+        th = self.tool_table.horizontalHeader()
+        th.setStretchLastSection(False)
+        th.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
+        th.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.tool_table.setColumnWidth(0, 170)
+        self.tool_table.setColumnWidth(1, 70)
+        self.tool_table.setColumnWidth(2, 320)
+        self.tool_table.setColumnWidth(4, 80)
+        self.tool_table.setAlternatingRowColors(True)
         self.tool_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.tool_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.tool_table.doubleClicked.connect(self._tool_table_double)
@@ -252,6 +307,10 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.btn_agent.setToolTip(t('打开「Agent 工具」列表中当前选中（高亮）的工具'))
         self.btn_save = QPushButton(t('保存配置'))
         self.btn_save.setToolTip(t('将当前所有设置保存到 config.json（服务器参数、所选模型、视觉模型、工具路径、主题等），下次启动自动恢复'))
+        self.btn_start.setProperty("variant", "primary")
+        self.btn_stop.setProperty("variant", "danger")
+        for _b in (self.btn_web, self.btn_agent, self.btn_save):
+            _b.setProperty("variant", "ghost")
         # C1: 第 2 排 —— 校验启动文件 + 导入启动文件（7 号位）+ 导出启动文件 + 2 个占位按钮
         self.btn_validate_bat = QPushButton(t('校验启动文件'))
         self.btn_validate_bat.setToolTip(
@@ -320,6 +379,7 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
 
         self.btn_theme = QPushButton(t('🎨 主题'))
         self.btn_theme.setMinimumWidth(96)
+        self.btn_theme.setProperty("variant", "ghost")
         self.btn_theme.setToolTip(t('选择配色方案：深色 / 浅色 / 橙色 / 绿色 / 灰色 / 棕色'))
         theme_menu = QMenu(self)
         for _key, _th in THEMES.items():
@@ -421,14 +481,18 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.act_about.triggered.connect(self.show_about)
         self.act_docs.triggered.connect(self.open_docs)
         self.act_update_now.triggered.connect(self._goto_updater)
+        self.act_launcher_update.triggered.connect(self.show_launcher_update)
+        self.launcher_update_found.connect(self._apply_launcher_update_hint)
 
         # 多显卡 / MTP / 排序（功能 1/3/4）+ A5 显存权重
         self.gpu_detected.connect(self._on_gpus_detected)
         self.mtp_detected.connect(self._on_mtp_detected)
         self.chat_detected.connect(self._on_chat_detected)
         self.check_jinja.toggled.connect(self._update_chat_controls)
+        self.combo_moe.currentIndexChanged.connect(self._on_moe_changed)
         self.check_residual.toggled.connect(self._save_startup_prefs)
         self.check_port_hint.toggled.connect(self._save_startup_prefs)
+        self.check_launcher_update.toggled.connect(self._save_startup_prefs)
         self.check_hover_pill.toggled.connect(self._on_pill_hover_toggled)
         # 局域网共享 / HTTPS / 本机 IP 提示
         self.check_lan.toggled.connect(self._on_lan_toggled)

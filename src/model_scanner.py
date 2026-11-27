@@ -185,9 +185,11 @@ def drafts_for(model, aux):
             continue
         overlap = len(mtok & _base_tokens(a.name))
         pref = DRAFT_KIND_PREF.index(a.kind) if a.kind in DRAFT_KIND_PREF else 99
-        out.append((-overlap, pref, -a.size, a))
-    out.sort(key=lambda x: x[:3])
-    return [x[3] for x in out]
+        # 同类型优先：非 Old > 体积小（Q8_0 比 BF16 更省显存）；Old 转换件排最后
+        old_penalty = 1 if "old" in a.name.lower() else 0
+        out.append((-overlap, pref, old_penalty, a.size, a))
+    out.sort(key=lambda x: x[:4])
+    return [x[4] for x in out]
 
 
 def find_draft_for(model, aux):

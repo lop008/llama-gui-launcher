@@ -1,6 +1,150 @@
 # LLama 启动器 发布说明 / Release Notes
 
-> 最新版本 / Latest release: **v0.5.15** · 发布日期 / Released: 2026-11-27
+> 最新版本 / Latest release: **v0.6.0** · 发布日期 / Released: 2026-11-27
+
+---
+
+# LLama 启动器 v0.6.0 发布说明 / Release Notes
+
+## English
+
+A release about llama.cpp's newest switches: speculative decoding can no longer break a launch, MoE expert offloading is finally exposed, thinking on/off and reasoning effort are separated, Inkling 2 (MoE) is supported end to end, the llama.cpp updater and the HuggingFace download page were rebuilt, and the launcher can update itself.
+
+### New Features
+
+- **Speculative decoding can no longer fail a launch** — a method you explicitly pick is passed to `llama-server` only when it is both supported by your build (`--spec-type` appears in its `--help`) **and** paired with a draft that actually matches the model. Otherwise the launcher emits **no `--spec-type` at all**, the server starts un-accelerated, and the status bar tells you why. All 13 values of a current build are handled (`none`, `draft-mtp`, `draft-dflash`, `draft-dflash2`, `draft-dspark`, `draft-lilicorr`, `draft-eagle3`, `draft-simple`, `ngram-mod`, `ngram-cache`, `ngram-simple`, `ngram-map-k`, `ngram-map-k4v`).
+- **Draft matching is now real matching** — vocabulary size, `embedding_length` and the *architecture family* are compared, so DSpark / DFlash / LiliCorr drafts (family `dflash`) and external `<arch>-mtp` heads are no longer rejected as "architecture mismatch"; multi-shard main models are scanned across all shards, so an MTP head in part 3 of 4 is found. `ngram-simple` / `ngram-map-k4v` are correctly reported as needing no draft file.
+- **New llama.cpp parameters you can now set from the UI**
+  - `--cpu-moe` — keep **all** MoE expert weights on the CPU (biggest VRAM saving, slowest);
+  - `--n-cpu-moe N` — keep the experts of the **first N** layers on the CPU, the rest stay on the GPU (the usual MoE fix; raise N until VRAM fits);
+  - `--moe-cache-mib N` — GPU cache for CPU-resident expert weights (256–2048 when VRAM has room to spare);
+  - `--reasoning on|off|auto` — force / disable / defer thinking, distinct from the effort level;
+  - `--chat-template-kwargs {"reasoning_effort":"…"}` — the effort level, only for templates that declare the variable;
+  - `--jinja` with a per-model capability probe, and `--spec-type` / `--spec-draft-model` / `--spec-draft-n-max` for speculative decoding.
+- **Inkling 2 supported (and configurable on a full GPU)** — `inkling2_loop` is recognised as MoE (128 experts, 8 active per token, 1 048 576-token context), DSpark drafts sitting next to the model are paired automatically with `Q8_0` preferred over `BF16` and legacy `*_Old` files last. Set the expert offloading above and a ~11 GB Inkling runs on a GPU that is already busy. See the Chinese section for a step-by-step recipe.
+- **Thinking switch vs. reasoning effort** — "Thinking mode" (`--reasoning`) and "Reasoning effort" (`reasoning_effort`) are two controls now. The effort dropdown is only enabled when the selected model's Jinja template really declares `reasoning_effort`, and its entries are rebuilt from that template (Inkling: `minimal / low / medium / high / xhigh / max`; Qwen3-0.6B and Gemma 4 expose only the on/off switch). A stale `medium` left in `config.json` is cleared rather than sent to a model that cannot use it.
+- **llama.cpp updater page rebuilt** — stat cards (current version shown as `1.1.0-dev (b12780)`, latest stable, packages found on disk), a visible segmented filter (All / Stable only / Pre-release only), row checkboxes + select-all + Download selected, and a status column: current / downloaded / available / **no Windows package**. Releases that ship no Windows binaries — llama.cpp `v1.1.0` publishes only `nightly-tag.txt` — stay visible as a labelled row with a link, instead of disappearing from the list.
+- **Model download page rebuilt** — organisation/author is an editable combo pre-filled with common publishers (`unsloth` default, plus `ggml-org`, `bartowski`, `Qwen`, …) but free-typed for anything else; the file list is a **folder tree** where checking a folder downloads the whole group, so a 4-shard GGUF is one click; repository info shows the folder layout and a clickable `huggingface.co/<repo>` link.
+- **Richer model info** — MoE facts (expert count, experts per token, dense vs MoE), detected thinking capability, a speculative-decoding support table (state / reason / draft path per method) and clickable homepage / HuggingFace-search links.
+- **Agent tools are manageable** — Tool / Type / **Path** / Description / Open (path now left of the description, action column narrowed), plus add / edit / delete and "read description from the exe" (`FileDescription` / `ProductName`).
+- **The launcher updates itself** — "About → Check for launcher update…" fetches the latest GitHub release, compares versions, downloads the exe for your architecture and swaps it in after exit, then relaunches. Running from source just opens the release page. A silent start-up check only flags a new version in the header.
+- **Modern UI** — a new widget kit (cards, segmented controls, badges, stat blocks, empty states) and reworked styles: radio buttons finally have a visible checked state, buttons gained primary / danger / ghost / segment variants, tables, tabs, progress bars, combos, splitters and menus were restyled, and the header card shows version, service state and the detected llama.cpp version.
+
+### Improvements
+
+- 165 new interface strings translated into all 7 languages, and 26 strings orphaned by the rewritten pages removed — the tables match the source exactly (959 keys, 0 missing, 0 unused).
+- Updater page size 100 → 30 with tag de-duplication, so paged results can never list a release twice.
+- `draft-dflash` also accepts `dflash2` / `dspark` / `lilicorr` drafts, matching upstream's auto-detection note.
+- The draft-download dialog is strictly modal and its download buttons no longer react to Enter, so clicks cannot leak through to the page underneath.
+
+### Fixes
+
+- An unusable speculative mode can no longer reach the command line (`--spec-type` omitted → server starts).
+- The updater showed a bare `b12780`; it now shows `1.1.0-dev (b12780)`.
+- `list_releases(include_prerelease=False)` no longer misuses the asset filter; `tag` / `tag_name` both accepted.
+- Model / repository links are clickable (`QTextBrowser`).
+- A start-up update check no longer raises if its window closed while the request was in flight.
+- **The packaged build ignored your language choice**: `main.py` looked for `config.json` next to `__file__`, which in PyInstaller 6 is the read-only `_internal\` folder, while the real configuration lives next to the exe — so packaged users always got the system language. The frozen build now uses `sys.executable`, the same rule as the main window.
+
+### Downloads
+
+| File | Description |
+|------|-------------|
+| `LLama-Launcher-v0.6.0-win-x64.exe` | Single-file build (x64) — no Python required |
+| `LLama-Launcher-v0.6.0-win-x64-portable.zip` | Portable build (x64) — extract and run |
+| `LLama-Launcher-v0.6.0-win-arm64.exe` | Single-file build (ARM64, Snapdragon / Windows on ARM) |
+| `LLama-Launcher-v0.6.0-win-arm64-portable.zip` | Portable build (ARM64) — extract and run |
+| `Arm64.bat` | One-click launcher for ARM64 — put it next to the exe, it always starts the arm64 build |
+
+## 中文
+
+本次围绕 llama.cpp 的新参数：投机解码不再可能把服务启动搞崩、MoE 专家卸载参数终于进了界面、思考开关与思考强度分开、Inkling 2（MoE）全链路支持、llama.cpp 更新页与模型下载页重做、启动器支持自升级。
+
+### 🆕 新增功能
+
+- **投机解码绝不再拖垮启动** — 明确选中的方式必须「本机 `llama-server` 认识这个 `--spec-type`」且「草稿与主模型真配套」才下发；否则**完全不带 `--spec-type`**，服务照常启动，状态栏说明原因。当前构建的 13 个取值全部覆盖：`none`、`draft-mtp`、`draft-dflash`、`draft-dflash2`、`draft-dspark`、`draft-lilicorr`、`draft-eagle3`、`draft-simple`、`ngram-mod`、`ngram-cache`、`ngram-simple`、`ngram-map-k`、`ngram-map-k4v`。
+- **草稿配对改成真配对** — 比较词表大小、`embedding_length` 与**架构族**：DSpark / DFlash / LiliCorr（架构族 `dflash`）与外挂 `<arch>-mtp` 头不再被误判「架构不一致」；多分片主模型跨全部分片扫描，MTP 头在第 3/4 片也能识别；`ngram-simple` / `ngram-map-k4v` 不再误报缺草稿。
+- **新增可直接设置的 llama.cpp 参数**
+  - `--cpu-moe`：全部 MoE 专家权重放 CPU（最省显存、最慢）；
+  - `--n-cpu-moe N`：**前 N 层**的专家放 CPU，其余仍在 GPU（MoE 最常用，N 越大越省显存）；
+  - `--moe-cache-mib N`：给驻留在内存里的专家留 N MiB 的 GPU 缓存（显存有富余时 256~2048）；
+  - `--reasoning on|off|auto`：强制思考 / 关闭思考 / 交给模板与请求，与「强度」是两件事；
+  - `--chat-template-kwargs {"reasoning_effort":"…"}`：思考强度档位，仅对声明了该变量的模板开放；
+  - `--jinja`（配合逐模型能力探测）以及投机解码的 `--spec-type` / `--spec-draft-model` / `--spec-draft-n-max`。
+- **Inkling 2 支持** — `inkling2_loop` 被识别为 MoE（**128 个专家、每 token 激活 8 个**、上下文 1 048 576），同目录的 `dspark-*` 草稿自动配对，草稿排序优先 `Q8_0`、其次 `BF16`、`*_Old` 旧转换件排最后。配合下面的专家卸载，显存已被占满的卡也能跑起约 11 GB 的 Inkling。详细步骤见本节末尾「Inkling 2 配置指引」。
+- **思考开关 ≠ 思考强度** — 「思考模式」对应 `--reasoning`，「思考强度」对应 `reasoning_effort`。只有模型的 Jinja 模板真的声明了 `reasoning_effort` 才启用强度下拉，并按该模板实际支持的取值重建（Inkling：`minimal / low / medium / high / xhigh / max`；Qwen3-0.6B、Gemma 4 只有开关）。旧配置里残留的 `medium` 会被清掉，不会下发给不支持的模型。
+- **llama.cpp 更新页重做** — 顶部统计卡（当前版本按 `1.1.0-dev (b12780)` 显示、最新稳定版、磁盘上已下载的包）、**可见的分段筛选**（全部 / 仅稳定 / 仅预发布）、行复选框 + 全选 + 下载选中、递归扫描下载目录，状态列直接写「当前版本 / 已下载 / 可下载 / 无 Windows 包」。没发 Windows 二进制包的 Release（llama.cpp `v1.1.0` 只有 `nightly-tag.txt`）不再整条消失，而是保留一行标注并给出 Release 链接。
+- **模型下载页重做** — 组织/作者改成**可输入 + 常用作者下拉**（默认 `unsloth`，预置 `ggml-org`、`bartowski`、`Qwen` 等，其他作者直接输入）；右侧文件列表改成**目录树**，勾选文件夹即整组下载，4 分片模型不用一片片点；仓库信息追加目录清单与可点击的 `huggingface.co/<仓库>` 链接。
+- **模型信息更丰富** — 除基础 GGUF 信息外，显示 MoE 事实（专家数 / 每 token 激活数 / 稠密还是 MoE）、思考能力、投机解码支持表（每种方式的状态、原因、草稿路径），以及可点击的模型主页 / HuggingFace 搜索链接。
+- **Agent 工具可管理** — 列顺序改成 工具 / 类型 / **路径** / 描述 / 打开（路径移到描述左侧、「打开」列收窄），并支持添加、编辑、删除，以及「从 exe 版本信息自动读取描述」（`FileDescription` / `ProductName`）。
+- **启动器自升级** — 菜单「关于 → 检查启动器更新…」读取 GitHub 最新 Release、比较版本、按本机架构下载 exe，退出后由独立脚本替换并自动重启；源码运行模式只打开 Release 页面。启动时的静默检查只在标题栏/状态栏提示，不会自动下载。
+- **界面整体升级** — 新增组件库（卡片、分段控件、状态徽章、统计块、空状态），QSS 重做：单选按钮终于有可见选中态，按钮新增 primary / danger / ghost / segment 变体，表格、页签、进度条、下拉框、分栏、菜单统一风格；顶部标题卡显示版本、服务状态与检测到的 llama.cpp 版本。
+
+### 🔧 改进
+
+- 165 条新增界面字符串全部译入 7 张语言表，并清掉改版后失效的 26 条：与源码严格对齐（959 个 key，缺失 0、多余 0）。
+- 更新页每页 100 → 30 并按 tag 去重，翻页不会重复列出同一个版本。
+- `draft-dflash` 同时接受 `dflash2` / `dspark` / `lilicorr` 草稿，与上游「draft-dflash 自动识别变体」的说明一致。
+- 「下载草稿」对话框改成严格模态（打开期间禁用主窗口），下载按钮不再响应回车，鼠标点击不会穿透到下方下载页。
+
+### 🐛 修复
+
+- 不可用的投机解码方式不再进入命令行（改为省略 `--spec-type`，服务正常启动）。
+- 更新页只显示 `b12780` 的问题：现在显示 `1.1.0-dev (b12780)`。
+- `list_releases(include_prerelease=False)` 误用资产过滤参数；`tag` / `tag_name` 两种字段都兼容。
+- 模型 / 仓库里的链接可以点了（改用 `QTextBrowser`）。
+- 启动时的静默更新检查，窗口已关闭时不再因信号投递报错。
+- **打包版不再忽略语言设置**：`main.py` 原先按 `__file__` 找 `config.json`，而 PyInstaller 6 的入口脚本在只读的 `_internal\` 里、用户配置在 exe 同级目录，导致打包版永远读不到 `language`、固定跟随系统语言。现在冻结态按 `sys.executable` 定位（便携版实测：`language=en` 生效，标题显示 `LLama Launcher v0.6.0`）。
+
+### Inkling 2 配置指引
+
+**1. 先更新 llama.cpp**：Inkling 2 需要 **b12780 及以后** 的构建。打开「更新 llama.cpp」页，选 `b12780`（或更高的 nightly）安装。注意 `v1.1.0` 那个 tag 只发布了 `nightly-tag.txt`，没有 Windows 包，页面会标成「无 Windows 包」，不要选它。
+
+**2. 放文件**：主模型与草稿放**同一个目录**（草稿只有和主模型同目录才会被配对），例如：
+
+```
+H:\llama-cpp\Inkling-2\
+├─ Inkling-2-Mini-UD-IQ3_XXS.gguf          ← 主模型
+└─ dspark-Inkling-2-Mini-Q8_0.gguf         ← DSpark 草稿（优先 Q8_0）
+```
+
+**3. 基本页**：选中主模型 → 投机解码选 `DSpark`，草稿下拉会自动选中 `dspark-*-Q8_0.gguf`；「草稿长度」保持 0 用引擎默认即可。模型状态那行应显示 `✔ DSpark：已找到配套草稿`。
+
+**4. 高级参数 → MoE 专家**（关键，决定显存够不够）：
+
+| 显存情况 | 设置 |
+|---|---|
+| 显存充裕（≥20 GB 空闲） | 「不额外处理」，`-ngl all` |
+| 已被其他模型占掉一半 | 「前 N 层放 CPU」，N 从 **8** 起，不够就 12 / 16 / 24 |
+| 几乎没显存了 | 「全部放 CPU（`--cpu-moe`）」，再配合把上下文调小 |
+| 用 `--n-cpu-moe` 后速度明显掉 | 「专家缓存(MiB)」设 **512~2048** |
+
+MoE 的专家权重默认跟着 `-ngl all` 一起进显存，这就是「怎么全进显存了」的原因；`--n-cpu-moe` 是唯一能按层把专家挪出显存的开关。
+
+**5. 上下文与思考**：Inkling 元数据上下文是 1 048 576，但按显存设更实际（32K/64K 起步）。勾上 Jinja 模板 → 思考模式选 `auto` 或 `on` → 思考强度可选 `minimal / low / medium / high / xhigh / max`。
+
+**6. 最终命令大致长这样**（「命令预览」里可以看到实际下发的）：
+
+```bat
+llama-server.exe -m Inkling-2-Mini-UD-IQ3_XXS.gguf ^
+  --spec-type draft-dspark --spec-draft-model dspark-Inkling-2-Mini-Q8_0.gguf ^
+  -ngl all --n-cpu-moe 12 --moe-cache-mib 1024 ^
+  -c 32768 --jinja --reasoning auto ^
+  --chat-template-kwargs "{\"reasoning_effort\":\"medium\"}" ^
+  --port 8080 --metrics
+```
+
+**7. 还是起不来？** 依次试：把上下文减半 → `-ngl` 从 `all` 降到 20 → `--n-cpu-moe` 加大 → 换更小量化（IQ3_XXS 已经很小）。启动失败时状态栏与日志会给出最后 20 行原始输出。
+
+### 下载
+
+| 文件 | 说明 |
+|------|------|
+| `LLama-Launcher-v0.6.0-win-x64.exe` | 单文件版（x64），无需安装 Python，双击即用 |
+| `LLama-Launcher-v0.6.0-win-x64-portable.zip` | 便携版（x64），解压即用 |
+| `LLama-Launcher-v0.6.0-win-arm64.exe` | 单文件版（ARM64，骁龙本 / Windows on ARM） |
+| `LLama-Launcher-v0.6.0-win-arm64-portable.zip` | 便携版（ARM64），解压即用 |
+| `Arm64.bat` | ARM64 一键启动脚本，与 exe 同目录双击即可（优先 arm64） |
 
 ---
 

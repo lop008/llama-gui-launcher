@@ -132,7 +132,7 @@ def pick_files(repo_id, files, base_name, limit=8):
             "note": t('官方 GGUF，直接下载可用') if official
                     else t('第三方仓库：一般是已转好的 GGUF，个别需自行转换'),
         })
-    rows.sort(key=lambda r: (-r["score"], -r["size"]))
+    rows.sort(key=lambda r: (-r["score"], 1 if "old" in r["path"].lower() else 0, r["size"]))
     return rows[:limit]
 
 
