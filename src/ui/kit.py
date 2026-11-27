@@ -6,7 +6,7 @@
 """
 from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QButtonGroup, QFrame, QHBoxLayout, QHeaderView, QLabel, QPushButton,
+    QButtonGroup, QComboBox, QFrame, QHBoxLayout, QHeaderView, QLabel, QPushButton,
     QSizePolicy, QTreeView, QVBoxLayout, QWidget,
 )
 
@@ -224,7 +224,7 @@ class ColumnResizer(QObject):
         self.fill_col = fill_col
         self.min_width = min_width
         self._filling = False
-        self._touched = False
+        self._touched_cols = set()
         # QTableWidget 用 horizontalHeader()，QTreeWidget 只有 header()
         self.hdr = view.header() if isinstance(view, QTreeView) else view.horizontalHeader()
         hdr = self.hdr
@@ -238,14 +238,16 @@ class ColumnResizer(QObject):
         view.installEventFilter(self)
 
     # -- 内部 ---------------------------------------------------------
-    def _on_resized(self, _col, _old, new):
-        # 程序补宽期间的高度/宽度变化不算用户意图
-        if not self._filling and new > 0:
-            self._touched = True
+    def _on_resized(self, col, _old, new):
+        # 只有用户拖了「补宽那一列」才锁定自动补宽。
+        # 之前是拖任意一列就永久停止补宽：那样窗口最大化 / 拉宽后右侧会留一大块空白，
+        # 用户以为表格不能铺满（把文件名拉宽 ≠ 不想要表格铺满）。
+        if not self._filling and new > 0 and col == self.fill_col:
+            self._touched_cols.add(col)
 
     def eventFilter(self, obj, event):
         if (obj is self.view and event.type() == QEvent.Type.Resize
-                and not self._touched):
+                and self.fill_col not in self._touched_cols):
             self.refill()
         return False
 
@@ -281,3 +283,87 @@ class ColumnResizer(QObject):
             finally:
                 self._filling = False
             self.refill()
+
+
+class CheckComboBox(QComboBox):
+    """多选下拉框：下拉里每行一个复选框，勾选后下拉不收起，可以一口气勾好几个。
+
+    为什么不用原生 QComboBox：它只能单选。更新页要按「推理后端」筛（CUDA / Vulkan /
+    ROCm / SYCL / OpenVINO…），而官方一个版本同时发 6~7 种包，单选表达不了
+    「CUDA 和 Vulkan 都想看」。这里同维度内是「或」，勾选集合对外用 `checked_keys()`。
+    """
+
+    changed = pyqtSignal()                     # 勾选集合变了（用户操作才会发）
+
+    def __init__(self, all_text=None, parent=None):
+        super().__init__(parent)
+        self._all_text = all_text or t('全部')
+        self._keys = []
+        # 用「只读的可编辑框」显示当前选择：不可编辑的下拉框只能显示被选中那一项的文字，
+        # 而多选框没有「选中项」的概念（也不能靠 setItemText 改文案，会踩 Qt 的坑）。
+        self.setEditable(True)
+        self.lineEdit().setReadOnly(True)
+        self.lineEdit().setCursor(Qt.CursorShape.PointingHandCursor)
+        self.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.view().pressed.connect(self._on_pressed)
+
+    # -- 对外 ---------------------------------------------------------
+    def set_options(self, options, keep=None):
+        """重填选项 `[(key, 显示名), …]`；`keep` 为 None 时自动保留仍存在的旧勾选。"""
+        chosen = set(self.checked_keys() if keep is None else keep)
+        self.blockSignals(True)
+        self.clear()
+        self._keys = []
+        for key, label in options:
+            self.addItem(label, key)
+            self._keys.append(key)
+            item = self.model().item(self.count() - 1)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Checked if key in chosen
+                               else Qt.CheckState.Unchecked)
+        self.blockSignals(False)
+        self._sync_text()
+
+    def checked_keys(self):
+        """当前勾选的 key 列表（顺序与选项顺序一致，空列表 = 一个都没勾 = 不限）。"""
+        model = self.model()
+        return [k for i, k in enumerate(self._keys)
+                if model is not None and model.item(i) is not None
+                and model.item(i).checkState() == Qt.CheckState.Checked]
+
+    def set_checked(self, keys):
+        chosen = set(keys)
+        model = self.model()
+        for i, key in enumerate(self._keys):
+            item = model.item(i) if model else None
+            if item is not None:
+                item.setCheckState(Qt.CheckState.Checked if key in chosen
+                                   else Qt.CheckState.Unchecked)
+        self._sync_text()
+
+    # -- 内部 ---------------------------------------------------------
+    def _on_pressed(self, index):
+        """点一行 = 切换它的勾选（原生行为是选中并收起下拉，多选必须自己接管）。"""
+        if not index.isValid():
+            return
+        item = self.model().item(index.row()) if self.model() else None
+        if item is None:
+            return
+        item.setCheckState(Qt.CheckState.Unchecked
+                           if item.checkState() == Qt.CheckState.Checked
+                           else Qt.CheckState.Checked)
+        self._sync_text()
+        self.changed.emit()
+        self.showPopup()          # 保持展开，方便连续勾选
+
+    def _sync_text(self):
+        sel = self.checked_keys()
+        if not sel or len(sel) == len(self._keys):
+            text = self._all_text
+        elif len(sel) == 1:
+            text = self.itemText(self._keys.index(sel[0]))
+        else:
+            text = '{} {} {}'.format(self.itemText(self._keys.index(sel[0])), t('等'),
+                                     len(sel))
+        self.lineEdit().setText(text)

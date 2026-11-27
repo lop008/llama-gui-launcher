@@ -211,6 +211,14 @@ class BatIOMixin:
             if "no_mmap" in kv:
                 self.check_mmap.setChecked(True)
                 applied += 1
+            if "load_mode" in kv:
+                # 新版 llama.cpp 的 -lm/--load-mode 反推界面勾选：
+                # mmap+mlock = 只勾「锁定内存」；mlock = 锁定且不 mmap；dio = 不走 mmap
+                # 与本软件 cmd_builder.load_mode_args 的映射保持一致（禁用 mmap → none）
+                lm = str(kv["load_mode"]).strip().lower()
+                self.check_mlock.setChecked(lm.endswith("mlock"))
+                self.check_mmap.setChecked(lm in ("mlock", "none", "dio"))
+                applied += 1
             if "spec_type" in kv:
                 # 导入的 .bat 写了 --spec-type：按取值反选「投机方式」下拉。
                 # 认不出（none / 本机没有的方式）就不动，避免把用户的配置改坏。

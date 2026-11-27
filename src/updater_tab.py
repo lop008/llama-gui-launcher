@@ -15,20 +15,23 @@ from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QDesktopServices, QTextCursor
 from PyQt6.QtWidgets import (
     QAbstractItemView, QCheckBox, QGridLayout, QHBoxLayout, QLabel,
-    QMessageBox, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem,
+    QMessageBox, QProgressBar, QPushButton, QSplitter, QTableWidget, QTableWidgetItem,
     QTextBrowser, QVBoxLayout, QWidget,
 )
 
-from .llama_updater import (MODE_ALL, MODE_SERVER, UpdaterError, backup_launcher_dir,
+from .llama_updater import (BACKENDS, MODE_ALL, MODE_SERVER, UpdaterError, all_assets,
+                            asset_backend, asset_platform, backup_launcher_dir, backends_in,
                             get_local_version_info, install_from_zip, latest_stable_release,
-                            list_releases, release_web_url, schedule_self_update, win_assets)
+                            list_releases, release_web_url, schedule_self_update)
 from .model_downloader import ModelDownloader
 from .model_scanner import human_size
 from .i18n import t
-from .ui.kit import (Badge, Card, ColumnResizer, SectionHeader, SegmentedControl,
-                     StatCard)
+from .ui.kit import (Badge, Card, CheckComboBox, ColumnResizer, SectionHeader,
+                     SegmentedControl, StatCard)
 
 PER_PAGE = 30
+#: 官方发布页（⑫：说明文字旁给一个一键打开的入口）
+RELEASES_URL = "https://github.com/ggml-org/llama.cpp/releases"
 
 
 class _ListWorker(QThread):
@@ -163,15 +166,22 @@ class UpdaterTab(QWidget):
         # ---------------- 顶部概览卡 ----------------
         hero = Card()
         head = SectionHeader(t('更新 llama.cpp'),
-                             t('从官方 GitHub Release 下载 Windows 预编译包；模型、配置不受影响。'))
+                             t('从官方 GitHub Release 下载预编译包（CUDA / Vulkan / ROCm 等都有）；'
+                               '模型、配置不受影响。'))
         self.btn_refresh = QPushButton(t('刷新'))
         self.btn_refresh.setProperty("variant", "primary")
         self.btn_refresh.clicked.connect(self.refresh)
+        self.btn_releases = QPushButton(t('打开 llama.cpp 下载页'))
+        self.btn_releases.setProperty("variant", "ghost")
+        self.btn_releases.setToolTip(t('在浏览器打开官方 Releases 页面：{0}').format(RELEASES_URL))
+        self.btn_releases.clicked.connect(
+            lambda *_: QDesktopServices.openUrl(QUrl(RELEASES_URL)))
         self.btn_open_dl = QPushButton(t('打开下载目录'))
         self.btn_open_dl.setProperty("variant", "ghost")
         self.btn_open_dl.setToolTip(t('打开更新包下载目录'))
         self.btn_open_dl.clicked.connect(self._open_dl_dir)
         head.add_action(self.btn_refresh)
+        head.add_action(self.btn_releases)
         head.add_action(self.btn_open_dl)
         hero.add(head)
 
@@ -199,11 +209,26 @@ class UpdaterTab(QWidget):
         self.seg_channel.changed.connect(lambda _v: self._apply_filter())
         row.addWidget(self.seg_channel)
         self.chk_downloaded = QCheckBox(t('仅显示已下载'))
-        self.chk_downloaded.toggled.connect(self._apply_filter)
+        self.chk_downloaded.toggled.connect(lambda _=False: self._filter_changed(save=True))
         row.addWidget(self.chk_downloaded)
         self.chk_win = QCheckBox(t('仅显示有 Windows 包'))
-        self.chk_win.toggled.connect(self._apply_filter)
+        # 官方每个版本同时发 win / ubuntu / macos / android 好几套包，默认只看 Windows；
+        # 想看别的平台就把这里的勾去掉（数据本来就全部取回，只是界面先筛掉）。
+        self.chk_win.setChecked(bool(self._pref("upd_only_win", True)))
+        self.chk_win.toggled.connect(lambda _=False: self._filter_changed(save=True))
         row.addWidget(self.chk_win)
+        row.addSpacing(6)
+        row.addWidget(QLabel(t('后端:')))
+        self.combo_backend = CheckComboBox(t('全部后端'))
+        self.combo_backend.setToolTip(
+            t('按推理后端筛选（可多选，多选之间是「或」）：取自官方包名里的 '
+              'cuda / cpu / vulkan / rocm / sycl / openvino 等。\n'
+              '与上面的「仅显示有 Windows 包」同时生效；一个都不勾 = 不限后端。'))
+        self.combo_backend.setMinimumWidth(118)
+        self.combo_backend.set_options(list(BACKENDS))
+        self.combo_backend.set_checked(list(self._pref("upd_backends", []) or []))
+        self.combo_backend.changed.connect(lambda: self._filter_changed(save=True))
+        row.addWidget(self.combo_backend)
         row.addSpacing(8)
         self.chk_all_rows = QCheckBox(t('全选'))
         self.chk_all_rows.toggled.connect(self._toggle_all_rows)
@@ -236,10 +261,11 @@ class UpdaterTab(QWidget):
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
             [t('选择'), t('文件名'), t('版本'), t('日期'), t('通道'), t('状态'), t('操作')])
-        # 列宽策略：全部可手动拖动（名称列吃掉了原来的 Stretch，导致那一列拖不动，
-        # 用户没法把「文件名」拉宽看全名）；多余宽度由 ColumnResizer 补给名称列。
+        # 列宽策略：全部可手动拖动；多余宽度补给文件名列。
+        # 文件名不再给到 340px（官方包名长但看开头就够辨认后端），把宽度让给操作列，
+        # 「下载 / 进度 / 安装」才不会被裁；操作列实际宽度由 _fit_op_column 按按钮实测值定。
         self._col_resizer = ColumnResizer(
-            self.table, [42, 340, 100, 96, 92, 110, 300], fill_col=1, min_width=56)
+            self.table, [42, 240, 96, 96, 88, 104, 320], fill_col=1, min_width=56)
         self.table.verticalHeader().setVisible(False)
         # 行高要装得下「下载 / 进度条 / 安装」这一排控件（默认行高会把按钮文字裁掉）
         self.table.verticalHeader().setDefaultSectionSize(40)
@@ -249,19 +275,28 @@ class UpdaterTab(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.itemClicked.connect(self._on_row_clicked)
-        root.addWidget(self.table, 1)
+        # ---------------- 版本表 / 版本信息 / 操作日志：三块之间可拖动分隔 ----------------
+        # 原来详情区写死 maximumHeight，拖不动也长不大；改成竖向分栏后
+        # 「看版本说明」「看日志」「看列表」各自能占到需要的高度。
+        self.split = QSplitter(Qt.Orientation.Vertical, self)
+        self.split.setChildrenCollapsible(False)
+        self.split.setHandleWidth(6)
+        self.split.addWidget(self.table)
+        root.addWidget(self.split, 1)
 
         # ---------------- 详情 / 日志 ----------------
         self.detail_view = QTextBrowser()
         self.detail_view.setOpenExternalLinks(True)
-        self.detail_view.setMaximumHeight(92)
         self.detail_view.setPlaceholderText(t('点击某一行查看该版本信息'))
-        root.addWidget(self.detail_view)
+        self.split.addWidget(self.detail_view)
 
         self.log_view = QTextBrowser()
-        self.log_view.setMaximumHeight(110)
         self.log_view.setPlaceholderText(t('操作日志…'))
-        root.addWidget(self.log_view, 0)
+        self.split.addWidget(self.log_view)
+        self.split.setStretchFactor(0, 1)
+        self.split.setStretchFactor(1, 0)
+        self.split.setStretchFactor(2, 0)
+        self.split.setSizes([520, 96, 112])
 
         self._downloader.task_started.connect(self._on_task_started)
         self._downloader.progress.connect(self._on_progress)
@@ -318,9 +353,10 @@ class UpdaterTab(QWidget):
             if tag and tag in seen:
                 continue
             seen.add(tag)
-            assets = win_assets(rel)
+            assets = all_assets(rel)
             self._releases.append({"release": rel, "assets": assets})
             self._append_release_rows(rel, assets)
+        self._refresh_backend_options()
         self._apply_filter()
         self._fit_op_column()
         self._refresh_version_cards()
@@ -352,7 +388,9 @@ class UpdaterTab(QWidget):
         self.table.setCellWidget(r, 0, cb)
 
         it_name = QTableWidgetItem(asset["name"])
-        it_name.setToolTip(t('大小: {0}\n{1}').format(human_size(asset['size']), asset['url']))
+        plat, backend = asset_platform(asset["name"]), asset_backend(asset["name"])
+        it_name.setToolTip(t('平台: {0}    后端: {1}\n大小: {2}\n{3}').format(
+            plat, backend, human_size(asset['size']), asset['url']))
         self.table.setItem(r, 1, it_name)
         self.table.setItem(r, 2, QTableWidgetItem(rel["tag"]))
         self.table.setItem(r, 3, QTableWidgetItem(rel["published_at"]))
@@ -374,13 +412,18 @@ class UpdaterTab(QWidget):
             "size": asset.get("size", 0), "rel": rel,
         }
         dest = self._tmp_path(rel["tag"], asset["name"])
+        if plat != "win":
+            # 非 Windows 的包（Ubuntu / macOS / Android / s390x）：允许下载备用，
+            # 但装进本机只会得到一个跑不起来的 llama-server，所以「安装」直接不给点。
+            op[3].setEnabled(False)
+            op[3].setToolTip(t('非 Windows 包：可以下载备用，不能安装到本机'))
         if self._file_ok(dest):
             st = self._state[key]
             st["downloaded"] = True
             st["dest"] = dest
             st["progress"].setValue(100)
             st["progress"].setFormat(t('已下载'))
-            st["install_btn"].setEnabled(True)
+            st["install_btn"].setEnabled(plat == "win")
 
     def _append_placeholder_row(self, rel):
         r = self.table.rowCount()
@@ -390,13 +433,14 @@ class UpdaterTab(QWidget):
         cb.setEnabled(False)
         cb.setStyleSheet("margin-left: 8px;")
         self.table.setCellWidget(r, 0, cb)
-        item = QTableWidgetItem(t('（该版本未提供 Windows 预编译包）'))
-        item.setToolTip(t('GitHub Release「{0}」只有源码/说明文件，没有 llama-*-bin-win-*.zip。').format(rel['tag']))
+        item = QTableWidgetItem(t('（该版本未提供预编译包）'))
+        item.setToolTip(t('GitHub Release「{0}」只有源码/说明文件，没有 llama-*-bin-* 的预编译包。')
+                        .format(rel['tag']))
         self.table.setItem(r, 1, item)
         self.table.setItem(r, 2, QTableWidgetItem(rel["tag"]))
         self.table.setItem(r, 3, QTableWidgetItem(rel["published_at"]))
         self.table.setItem(r, 4, QTableWidgetItem(t('稳定') if not rel["prerelease"] else t('预发布')))
-        status = QTableWidgetItem(t('无 Windows 包'))
+        status = QTableWidgetItem(t('无预编译包'))
         status.setForeground(QBrush(QColor("#8a8a8a")))
         self.table.setItem(r, 5, status)
         w = QWidget()
@@ -432,21 +476,76 @@ class UpdaterTab(QWidget):
         return w, dl, pb, inst
 
     def _note_op_width(self, widget):
-        """记下操作列实际需要多宽：固定列宽在大字号 / 其他语言下会把按钮文字裁掉。"""
-        need = widget.sizeHint().width() + 16        # 16px 单元格余量，避免贴边
+        """记下操作列实际需要多宽：固定列宽在大字号 / 其他语言下会把按钮文字裁掉。
+
+        余量给到 28px（不是 16px）：进度条挤在「下载」和「安装」中间，
+        余量小了会显示成「安…」，看着像按钮坏了。
+        """
+        need = widget.sizeHint().width() + 28
         self._op_need = max(getattr(self, "_op_need", 0), need)
 
     def _fit_op_column(self):
         """按实测按钮宽度定操作列（第 6 列），剩余空间仍归名称列。"""
         need = getattr(self, "_op_need", 0)
         if need:
-            self._col_resizer.set_column_width(6, need)
+            self._col_resizer.set_column_width(6, max(need, 330))
 
     # ------------------------------------------------------------- 筛选
+    def _pref(self, key, default=None):
+        """读界面偏好（没有主窗口时给默认值，独立测试也能构造这一页）。"""
+        try:
+            cfg = self.mw.cfg.data
+        except AttributeError:
+            return default
+        return cfg.get(key, default)
+
+    def _set_pref(self, key, value):
+        try:
+            self.mw.cfg.data[key] = value
+        except AttributeError:
+            pass
+
+    def _filter_changed(self, save=False):
+        """筛选控件变了：先记住偏好（列表可能还没加载，构造阶段也不能炸），再应用。"""
+        if save:
+            self._set_pref("upd_only_win", bool(self.chk_win.isChecked()))
+            self._set_pref("upd_backends", list(self.combo_backend.checked_keys()))
+        if self._row_meta:
+            self._apply_filter()
+
+    def _refresh_backend_options(self):
+        """后端下拉只列当前列表里**真实出现过**的后端，不凭空列官方没发过的选项。"""
+        opts = [(k, k) for k in backends_in([x["assets"] for x in self._releases])]
+        if opts:
+            labels = dict(BACKENDS)
+            opts = [(k, labels.get(k, k)) for k, _ in opts]
+        self.combo_backend.set_options(opts)
+
+    def _is_downloaded(self, row):
+        """「已下载」只认硬盘上真实存在的文件。
+
+        以前还把状态「当前版本」也当成已下载，但那只代表本机装的 llama.cpp 正好是这个
+        版本，不代表 zip 还留在下载目录里（装完被清理、或从别处装的都算），
+        于是勾「仅显示已下载」会冒出一堆其实没下载的包。
+        """
+        meta = self._row_meta.get(row) or {}
+        if meta.get("kind") != "asset":
+            return False
+        st = self._state.get(meta["key"]) or {}
+        if st.get("downloaded") and self._file_ok(str(st.get("dest") or "")):
+            return True
+        return self._file_ok(self._tmp_path(meta["release"]["tag"], meta["asset"]["name"]))
+
     def _apply_filter(self):
+        """显示哪些行：**维度之间是「且」，同一维度内多选是「或」**。
+
+        例：勾「仅显示有 Windows 包」+ 后端选 CUDA、Vulkan → 显示 Windows 的 CUDA 包
+        与 Vulkan 包；「仅显示已下载」「发布通道」照常生效。后端一个都不勾 = 不限后端。
+        """
         channel = self.seg_channel.value() if hasattr(self, "seg_channel") else "all"
         only_dl = self.chk_downloaded.isChecked() if hasattr(self, "chk_downloaded") else False
         only_win = self.chk_win.isChecked() if hasattr(self, "chk_win") else False
+        backends = set(self.combo_backend.checked_keys()) if hasattr(self, "combo_backend") else set()
         for r, meta in self._row_meta.items():
             rel = meta["release"]
             show = True
@@ -454,17 +553,18 @@ class UpdaterTab(QWidget):
                 show = False
             elif channel == "pre" and not rel["prerelease"]:
                 show = False
-            if only_win and meta["kind"] == "release":
+            if show and only_dl and not self._is_downloaded(r):
                 show = False
-            if only_dl:
-                if meta["kind"] != "asset":
+            if show and meta["kind"] != "asset":
+                # 「该版本没发预编译包」的占位行：只看 Windows 时它没有任何意义
+                if only_win:
                     show = False
-                else:
-                    key = meta["key"]
-                    st = self._state.get(key) or {}
-                    if not st.get("downloaded") and self._row_status(rel, meta["asset"])[0] not in (
-                            t('当前版本'), t('已下载')):
-                        show = False
+            elif show:
+                name = meta["asset"]["name"]
+                plat_ok = (not only_win) or asset_platform(name) == "win"
+                backend_ok = (not backends) or asset_backend(name) in backends
+                if not (plat_ok and backend_ok):
+                    show = False
             self.table.setRowHidden(r, not show)
 
     def _toggle_all_rows(self, checked):
@@ -498,8 +598,8 @@ class UpdaterTab(QWidget):
         dest = self._tmp_path(tag, asset["name"])
         if self._file_ok(dest):
             return t('已下载'), "ok"
-        if tag.startswith("v") and not win_assets(rel):
-            return t('无 Windows 包'), "muted"
+        if tag.startswith("v") and not all_assets(rel):
+            return t('无预编译包'), "muted"
         return t('可下载'), "muted"
 
     def _file_ok(self, path):
@@ -528,7 +628,7 @@ class UpdaterTab(QWidget):
         dl_pkgs = sum(len(v) for v in self._download_index.values())
         self.card_downloaded.set_value(f"{len(dl_tags)} / {dl_pkgs}")
         self.card_downloaded.set_hint(t('已下载 {0} 个版本，共 {1} 个包').format(len(dl_tags), dl_pkgs))
-        text = t('共 {0} 个版本 / {1} 个 Windows 包').format(n_rel, n_assets)
+        text = t('共 {0} 个版本 / {1} 个预编译包').format(n_rel, n_assets)
         if dl_pkgs:
             text += t(' · 已下载 {0} 个包').format(dl_pkgs)
         self.label_status.setText(text)
@@ -665,6 +765,11 @@ class UpdaterTab(QWidget):
     def _on_install(self, key):
         st = self._state.get(key)
         if not st:
+            return
+        if asset_platform(st["name"]) != "win":
+            QMessageBox.information(
+                self, t('提示'),
+                t('「{0}」不是 Windows 包，不能安装到本机（下载备用可以）。').format(st["name"]))
             return
         if not st["downloaded"] or not os.path.isfile(st["dest"]):
             QMessageBox.information(self, t('提示'), t('请先下载该文件再安装。'))

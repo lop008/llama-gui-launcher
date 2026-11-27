@@ -7,6 +7,8 @@ CONFIG_FILE = "config.json"
 DEFAULTS = {
     # 界面语言：auto=跟随系统；或 zh-CN / zh-TW / en / ja / ko / ru / es / fr
     "language": "auto",
+    # 界面字号缩放倍数（Ctrl+滚轮调，0.8~1.8；1.0=主题出厂默认，不改默认字号本身）
+    "ui_scale": 1.0,
     "llama_dir": "",
     "launcher_exe": "",
     "data_dir": "",

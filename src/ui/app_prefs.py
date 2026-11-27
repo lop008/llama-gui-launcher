@@ -4,12 +4,13 @@
 import os
 import time
 
-from PyQt6.QtCore import QEvent, QPoint, QTimer
+from PyQt6.QtCore import QEvent, QPoint, Qt, QTimer
+from PyQt6.QtGui import QFont, QWheelEvent
 from PyQt6.QtWidgets import QAbstractSpinBox, QApplication, QMessageBox
 from ..i18n import t
 from ..presets import PRESETS, SAMPLING_PRESETS
 from ..stats_dialog import StatsDialog
-from ..themes import THEMES, build_qss
+from ..themes import THEMES, build_qss, font_scale, set_font_scale, step_font_scale
 from ..usage_stats import StatsStore, parse_log_line
 
 
@@ -70,10 +71,72 @@ class AppPrefsMixin:
         """吞掉所有数字框（QSpinBox/QDoubleSpinBox）的滚轮事件。
 
         否则滚动窗口时鼠标掠过任意一个数值框，值就会被顺带改小/改大
-        （表现为「数字只能往下调」）。上下箭头与直接键入不受影响。"""
+        （表现为「数字只能往下调」）。上下箭头与直接键入不受影响。
+
+        Ctrl+滚轮 = 缩放整个界面字号（在吞掉滚轮之前先判 Ctrl，
+        否则鼠标停在某个数字框上时就放不出缩放了）。"""
+        if ev.type() == QEvent.Type.Wheel and isinstance(ev, QWheelEvent) and \
+                (ev.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            delta = ev.angleDelta().y() or ev.pixelDelta().y()
+            if delta:
+                self._zoom_font(1 if delta > 0 else -1)
+            return True
         if ev.type() == QEvent.Type.Wheel and isinstance(obj, QAbstractSpinBox):
             return True
         return super().eventFilter(obj, ev)
+
+    # ------------------------------------------------------------- 界面字号缩放
+    def _init_font_scale(self):
+        """启动时把上次记住的缩放倍数应用到「应用字体 + 样式表」。
+
+        缩放只乘在应用字体和 QSS 字号上，主题里写的出厂字号一个字都没改；
+        Ctrl+0 或「工具 → 字号 → 恢复默认字号」立刻回到原样。"""
+        app = QApplication.instance()
+        if getattr(self, "_base_font", None) is None:
+            self._base_font = QFont(app.font())
+        set_font_scale(self.cfg.data.get("ui_scale", 1.0))
+        self._apply_font_scale(notice=False)
+
+    def _apply_font_scale(self, notice=True):
+        scale = font_scale()
+        base = getattr(self, "_base_font", None)
+        if base is None:
+            base = QFont(QApplication.instance().font())
+            self._base_font = base
+        font = QFont(base)
+        if base.pointSizeF() > 0:
+            font.setPointSizeF(base.pointSizeF() * scale)
+        elif base.pixelSize() > 0:
+            font.setPixelSize(max(8, int(round(base.pixelSize() * scale))))
+        QApplication.instance().setFont(font)
+        self._apply_theme()          # 样式表里是 px 字号，必须重建才跟着变
+        self._rescale_fixed_metrics(scale)
+        self._reflow_window()
+        if notice:
+            pct = int(round(scale * 100))
+            self.statusBar().showMessage(
+                t('界面字号 {0}%（Ctrl+滚轮调整，Ctrl+0 恢复默认）').format(pct), 2600)
+
+    def _rescale_fixed_metrics(self, scale):
+        """少数按像素写死的行高跟着缩放，否则字放大后会在行里被裁掉。"""
+        tab = getattr(self, "updater_tab", None)
+        if tab is not None:
+            tab.table.verticalHeader().setDefaultSectionSize(max(24, int(round(40 * scale))))
+
+    def _zoom_font(self, direction):
+        target = step_font_scale(None, 1 if direction > 0 else -1)
+        if abs(target - font_scale()) < 1e-6:
+            self.statusBar().showMessage(
+                t('界面字号已到达边界（{0}%）').format(int(round(font_scale() * 100))), 2000)
+            return
+        set_font_scale(target)
+        self.cfg.data["ui_scale"] = font_scale()
+        self._apply_font_scale()
+
+    def _reset_font_scale(self):
+        set_font_scale(1.0)
+        self.cfg.data["ui_scale"] = 1.0
+        self._apply_font_scale()
 
     def _on_preset_changed(self):
         idx = self.combo_preset.currentIndex()

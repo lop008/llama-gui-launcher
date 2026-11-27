@@ -95,6 +95,20 @@ class GpuMixin:
             self.btn_auto_split.setToolTip(tip)
         self.gpu_ratio_panel.setVisible(bool(devices))
 
+    def prefetch_engine_flags(self):
+        """后台预热本机 llama.cpp 参数表（`llama-server --help`）。
+
+        生成命令时要靠它决定「锁定内存 / 禁用 mmap」写老参数还是新的 `-lm/--load-mode`；
+        不预热的话第一次点启动会卡在 --help 子进程上（约 0.4s）。
+        """
+        if getattr(self, "_closing", False):
+            return          # 由无父对象的 QTimer.singleShot 触发，关窗后仍会到点
+        try:
+            from ..launch_advisor import prefetch_engine_flags
+            prefetch_engine_flags(self._launcher_exe())
+        except Exception:
+            pass            # 预热失败无所谓：真正用到时会自己查一次
+
     def detect_gpus(self):
         """调用 llama-server --list-devices 检测本机 GPU（后台线程）。"""
         if getattr(self, "_closing", False):

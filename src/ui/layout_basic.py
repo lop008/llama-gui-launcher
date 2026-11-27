@@ -318,9 +318,13 @@ class LayoutBasicMixin:
         self.check_cont.setToolTip(
             t('连续批处理（--cont-batching）：\n多个客户端并发请求时，新请求可以在解码过程中随时插入当前批次，不必等整批全部生成完才处理下一个，显著提升总吞吐量、降低等待。\n多客户端场景推荐开启；单客户端使用时无影响。'))
         self.check_mlock = QCheckBox(t('mlock 锁定内存'))
-        self.check_mlock.setToolTip(t('--mlock：把模型锁定在内存中，防止被系统换出到磁盘。\n占内存更多，但推理更稳定。'))
+        self.check_mlock.setToolTip(t('把模型锁定在内存中，防止被系统换出到磁盘。\n占内存更多，但推理更稳定。\n\n'
+                                      '写法按本机版本自动选择：旧版用 --mlock，'
+                                      'llama.cpp 0.4.1 起该参数已被删除，改用 -lm mmap+mlock。'))
         self.check_mmap = QCheckBox(t('禁用 mmap'))
-        self.check_mmap.setToolTip(t('--no-mmap：关闭内存映射加载。\n加载更慢但内存占用更可控，个别磁盘/内存环境可改善稳定性。'))
+        self.check_mmap.setToolTip(t('关闭内存映射加载。\n加载更慢但内存占用更可控，个别磁盘/内存环境可改善稳定性。\n\n'
+                                     '写法按本机版本自动选择：旧版用 --no-mmap，'
+                                     'llama.cpp 0.4.1 起该参数已被删除，改用 -lm none。'))
         grid.addWidget(self.check_cont, 1, 0, 1, 2)
         grid.addWidget(self.check_mlock, 1, 2)
         grid.addWidget(self.check_mmap, 1, 3)

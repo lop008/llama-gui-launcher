@@ -1,7 +1,7 @@
 import os
 import sys
 
-from PyQt6.QtCore import QTimer, pyqtSignal
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtGui import QCloseEvent, QFont, QPixmap
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QMainWindow,
@@ -116,6 +116,8 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self._connect()
         self._apply_config()
         self._apply_theme()
+        # 上次记住的界面字号缩放（Ctrl+滚轮调的倍数）；出厂默认字号本身不变
+        self._init_font_scale()
         self._restore_geometry()
         self._setup_tray()
         self.monitor.start()
@@ -146,6 +148,8 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.statusBar().showMessage(t('就绪'))
         if not os.environ.get("LLAMA_LAUNCHER_NO_GPU_DETECT"):
             QTimer.singleShot(2000, self.detect_gpus)   # 启动时自动检测多显卡（功能 3）
+            # 预热本机 llama.cpp 参数表：生成命令行时要靠它判断该写 --mlock 还是 -lm
+            QTimer.singleShot(3000, self.prefetch_engine_flags)
         if not os.environ.get("LLAMA_LAUNCHER_NO_UPDATE_CHECK"):
             QTimer.singleShot(6000, self.check_launcher_update_silent)
 
@@ -233,9 +237,22 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         pv = QVBoxLayout(self.preview_box)
         pv.setContentsMargins(6, 6, 6, 6)
         pv.setSpacing(4)
-        pv.addWidget(self.preview_tree, 3)
-        pv.addWidget(preview_caption)
-        pv.addWidget(self.preview_view, 2)
+        # 上下两块之间可拖动：拆解表看长命令时要高一点，只看完整命令时压矮一点。
+        self.preview_split = QSplitter(Qt.Orientation.Vertical, self.preview_box)
+        self.preview_split.setChildrenCollapsible(False)
+        self.preview_split.setHandleWidth(6)
+        self.preview_split.addWidget(self.preview_tree)
+        lower = QWidget()
+        lv = QVBoxLayout(lower)
+        lv.setContentsMargins(0, 0, 0, 0)
+        lv.setSpacing(4)
+        lv.addWidget(preview_caption)
+        lv.addWidget(self.preview_view, 1)
+        self.preview_split.addWidget(lower)
+        self.preview_split.setStretchFactor(0, 3)
+        self.preview_split.setStretchFactor(1, 2)
+        self.preview_split.setSizes([420, 260])
+        pv.addWidget(self.preview_split)
         self.info_view = QTextBrowser()
         self.info_view.setReadOnly(True)
         self.info_view.setOpenExternalLinks(True)
@@ -269,14 +286,12 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         tt.addLayout(tool_bar)
         self.tool_table = QTableWidget(0, 5)
         self.tool_table.setHorizontalHeaderLabels([t('工具'), t('类型'), t('路径'), t('描述'), t('打开')])
-        th = self.tool_table.horizontalHeader()
-        th.setStretchLastSection(False)
-        th.setSectionResizeMode(2, QHeaderView.ResizeMode.Interactive)
-        th.setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
-        self.tool_table.setColumnWidth(0, 170)
-        self.tool_table.setColumnWidth(1, 70)
-        self.tool_table.setColumnWidth(2, 320)
-        self.tool_table.setColumnWidth(4, 80)
+        # 路径太长时从**中间**省略：显示成 C:\Users\…\opencode.exe
+        # 原来是末尾省略 + 列只有 320px 且不可拖，长路径被压得只剩「C....」，等于没显示。
+        # 完整路径本来就有悬停提示（_fill_tool_table 里给 path_item 设了 tooltip）。
+        self.tool_table.setTextElideMode(Qt.TextElideMode.ElideMiddle)
+        self._tool_resizer = ColumnResizer(
+            self.tool_table, [170, 70, 380, 300, 80], fill_col=3, min_width=60)
         self.tool_table.setAlternatingRowColors(True)
         self.tool_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.tool_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
@@ -516,6 +531,10 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.act_stop.triggered.connect(self.stop_server)
         self.act_quit.triggered.connect(self.quit_app)
         self.act_refresh.triggered.connect(lambda: self.refresh_models())
+        self.act_validate_bat.triggered.connect(self.open_bat_validator)
+        self.act_font_in.triggered.connect(lambda: self._zoom_font(1))
+        self.act_font_out.triggered.connect(lambda: self._zoom_font(-1))
+        self.act_font_reset.triggered.connect(self._reset_font_scale)
         self.act_open_dir.triggered.connect(self.open_model_dir)
         self.act_web.triggered.connect(self.open_web)
         self.act_api.triggered.connect(self.open_api)

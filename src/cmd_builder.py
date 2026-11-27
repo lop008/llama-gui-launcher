@@ -208,10 +208,11 @@ def build_args(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
     if ssl_key and ssl_cert:
         args += ["--ssl-key-file", ssl_key, "--ssl-cert-file", ssl_cert]
 
-    if s.get("mlock"):
-        args += ["--mlock"]
-    if s.get("no_mmap"):
-        args += ["--no-mmap"]
+    if s.get("mlock") or s.get("no_mmap"):
+        # 内存加载模式：llama.cpp 0.4.1（2026-09）删掉了 --mlock / --mmap / --no-mmap
+        # / --direct-io，合并成 -lm/--load-mode。照旧写会直接 `error: invalid argument`
+        # 启动失败，所以必须按本机版本翻译（本机 llama-server --help 是唯一依据）。
+        args += load_mode_args(bool(s.get("mlock")), bool(s.get("no_mmap")), args[0])
 
     args += ["--timeout", str(int(s.get("timeout", 3600) or 3600))]
     args += ["-a", model_alias(model_path)]
@@ -237,6 +238,43 @@ def build_args(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
     if rbudget >= 0:
         args += ["--reasoning-budget", str(rbudget)]
     return args
+
+
+def load_mode_args(mlock, no_mmap, exe):
+    """把「锁定内存 / 禁用 mmap」翻译成本机 llama.cpp 认得的加载模式写法。
+
+    llama.cpp 0.4.1（2026-09）删掉了 `--mlock` / `--mmap` / `--no-mmap` / `--direct-io`，
+    合并成 `-lm/--load-mode`（可选值 auto / none / mmap / mlock / mmap+mlock / dio）。
+    旧写法在新版本上是 `error: invalid argument` 直接启动失败，所以不能照旧硬写；
+    判断依据只有本机 `llama-server --help`（结果按 exe 缓存，不会每次都开子进程）。
+
+      勾了锁定内存            新版 → -lm mmap+mlock     旧版 → --mlock
+      勾了禁用 mmap           新版 → -lm none           旧版 → --no-mmap
+      两个都勾                新版 → -lm mlock          旧版 → 两个都写
+    """
+    if not (mlock or no_mmap):
+        return []
+    try:
+        # 用带缓存的 engine_flags：只有用户真勾了这两项才会走到这里，
+        # 第一次 ~0.4s（启动时会后台预热），之后是纯查表。缓存必须命中，
+        # 否则猜错写法就是 `error: invalid argument` 启动失败。
+        from .launch_advisor import engine_flags
+        engine = engine_flags(exe)
+    except Exception:
+        engine = None
+    new = bool(engine) and "--load-mode" in engine
+    if new:
+        if mlock and no_mmap:
+            return ["-lm", "mlock"]          # 锁内存且不 mmap
+        if mlock:
+            return ["-lm", "mmap+mlock"]     # 等价于老版 --mlock（仍然 mmap + 锁定）
+        return ["-lm", "none"]               # 等价于老版 --no-mmap
+    out = []
+    if mlock:
+        out.append("--mlock")
+    if no_mmap:
+        out.append("--no-mmap")
+    return out
 
 
 def quote_arg(a):

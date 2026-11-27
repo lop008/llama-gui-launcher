@@ -281,7 +281,97 @@ def win_assets(release, arch=None):
     return out
 
 
+def all_assets(release, arch=None):
+    """从 Release 中挑出**所有平台**的官方预编译包（Windows / Ubuntu / macOS / Android…）。
+
+    更新页原本只用 `win_assets()`，非 Windows 的包在取数据阶段就被丢掉，
+    界面上根本没有筛选余地。改成先取全量、再由界面按平台 / 后端筛，用户才能
+    一眼看到「这个版本到底发了哪些包」。排序仍以 Windows 优先（本启动器只服务
+    Windows），其次是本机架构、avx2 通用包、体积。
+    """
+    want = arch or host_arch()
+    out = [a for a in release.get("assets", []) if is_platform_asset(a["name"])]
+    out.sort(key=lambda a: (0 if asset_platform(a["name"]) == "win" else 1,
+                            0 if asset_arch(a["name"]) == want else 1,
+                            0 if "avx2" in a["name"].lower() else 1, -a["size"]))
+    return out
+
+
+def is_platform_asset(name):
+    """是否为「某平台 + 某后端」的预编译包（排除 cudart 运行库、ui、xcframework 等附属包）。"""
+    n = str(name).lower()
+    return bool(_ASSET_RE.match(n)) and not n.startswith("cudart-")
+
+
+def asset_platform(name):
+    """包名里的平台段："win" / "ubuntu" / "linux" / "macos" / "android"，认不出返回 "other"。"""
+    m = _ASSET_RE.match(str(name).lower())
+    return m.group("plat") if m else "other"
+
+
+def asset_backend(name):
+    """包名里的推理后端，归一到 `BACKENDS` 里的键；没写后端的官方就是纯 CPU 包。
+
+    只看真实出现过的官方包名（对 200 个 Release 统计）：中间可能夹着架构、
+    发行版版本号（`ubuntu-26.04-s390x`）、变体后缀（`arm64-snapdragon`），
+    这些都不是后端。不剔掉的话纯 CPU 包会被判成 "other"，用户勾「CPU」就筛不到它们。
+    """
+    m = _ASSET_RE.match(str(name).lower())
+    if not m:
+        return "other"
+    toks = [p for p in m.group("rest").split("-") if p]
+    toks = [p for p in toks if p not in _ARCH_WORDS and p not in _VARIANT_WORDS
+            and not _VERSION_RE.match(p)]
+    if not toks:
+        return "cpu"
+    for tok in toks:
+        for key, names in _BACKEND_TOKENS:
+            if tok in names:
+                return key
+    return "other"
+
+
+def backends_in(releases_assets):
+    """当前列表里真实出现过的后端（用于填下拉：不凭空列出官方没发过的选项）。"""
+    seen = set()
+    for assets in releases_assets:
+        for a in assets:
+            if is_platform_asset(a["name"]):
+                seen.add(asset_backend(a["name"]))
+    return [k for k, _ in BACKENDS if k in seen] + (["other"] if "other" in seen else [])
+
+
+# 官方包命名：llama-<版本>-bin-<平台>[-<后端>][-<后端版本号>]-<架构>.zip|.tar.gz
+# 以下组合是对 200 个真实 Release 统计出来的（不是我猜的）：
+#   win    ：cpu / cuda / vulkan / rocm / sycl / openvino / opencl-adreno（x64 与 arm64）
+#   ubuntu ：cpu / cuda / vulkan / rocm / openvino / sycl-fp16 / zdnn（x64 / arm64 / s390x）
+#   macos  ：x64、arm64（不写后端＝CPU）    android、linux：arm64 / arm-snapdragon
+_ASSET_RE = re.compile(
+    r"^llama-(?:b\d+|v[\d.]+)-bin-(?P<plat>[a-z0-9]+)-(?P<rest>[a-z0-9._-]+)\.(?:zip|tar\.gz)$")
+
+#: 官方包名末尾会出现的架构词（用来把「架构」和「后端」分开）。
+_ARCH_WORDS = ("x64", "arm64", "aarch64", "s390x", "riscv64", "ppc64le", "arm")
+
+#: 纯版本号段（`ubuntu-26.04-s390x`、`ubuntu-openvino-2026.4.1-x64`），不是后端名。
+_VERSION_RE = re.compile(r"^\d+(?:\.\d+)*$")
+
+#: 后端/架构之外的变体后缀（`android-arm64-snapdragon`、`win-opencl-adreno-arm64`）。
+_VARIANT_WORDS = ("snapdragon", "adreno")
+
+#: 下拉选项（键 → 显示名）。都是技术专有名词，七种语言里都按原文显示，无需翻译。
+BACKENDS = (("cpu", "CPU"), ("cuda", "CUDA"), ("vulkan", "Vulkan"), ("rocm", "ROCm"),
+            ("sycl", "SYCL"), ("openvino", "OpenVINO"), ("opencl", "OpenCL"),
+            ("zdnn", "zDNN"))
+
+#: 官方在不同时期给同一后端用过的包名片段（cublas 是早期 CUDA 包名，hipblas 是 ROCm 旧名）。
+_BACKEND_TOKENS = (("cuda", ("cuda", "cublas", "musa")), ("rocm", ("rocm", "hipblas", "hip")),
+                   ("vulkan", ("vulkan",)), ("sycl", ("sycl",)),
+                   ("openvino", ("openvino",)), ("opencl", ("opencl",)),
+                   ("zdnn", ("zdnn",)), ("cpu", ("cpu",)))
+
+
 def list_zip_entries(zip_path):
+
     """列出 zip 内文件 [{name, size}]（仅根目录层，llama.cpp win 包为扁平结构）。"""
     with zipfile.ZipFile(zip_path) as z:
         return [{"name": i.filename, "size": i.file_size} for i in z.infolist() if not i.is_dir()]

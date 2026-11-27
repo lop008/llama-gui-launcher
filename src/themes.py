@@ -8,6 +8,8 @@
     app.setStyleSheet(build_qss("dark"))
 """
 from string import Template
+import re
+
 from .i18n import t
 
 # 深色（默认）
@@ -375,7 +377,54 @@ QToolTip { border-radius: 4px; }
 """)
 
 
+# ------------------------------------------------------------------ 界面字号缩放
+# Ctrl+滚轮调的是这个倍数（1.0 = 出厂默认，主题里写的字号一个都不改）。
+# 样式表是纯文本、字号写死成 px，所以重建 QSS 时必须知道当前倍数；
+# 应用字体（QApplication.setFont）由界面层负责。
+_FONT_SCALE = 1.0
+FONT_SCALE_MIN = 0.8
+FONT_SCALE_MAX = 1.8
+FONT_SCALE_STEPS = (0.8, 0.9, 1.0, 1.1, 1.2, 1.35, 1.5, 1.65, 1.8)   # 首尾必须等于下面两个界限
+
+
+def font_scale():
+    return _FONT_SCALE
+
+
+def set_font_scale(scale):
+    """设置缩放倍数（越界自动夹到 [0.8, 1.8]），返回真正生效的值。"""
+    global _FONT_SCALE
+    try:
+        value = float(scale)
+    except (TypeError, ValueError):
+        value = 1.0
+    _FONT_SCALE = min(FONT_SCALE_MAX, max(FONT_SCALE_MIN, value))
+    return _FONT_SCALE
+
+
+def step_font_scale(scale, direction):
+    """按档位缩放（+1 放大 / -1 缩小）。用档位而不是 ±0.05：每档肉眼差别稳定。"""
+    cur = font_scale() if scale is None else set_font_scale(scale)
+    steps = FONT_SCALE_STEPS
+    if direction > 0:
+        nxt = next((s for s in steps if s > cur + 1e-6), steps[-1])
+    else:
+        nxt = next((s for s in reversed(steps) if s < cur - 1e-6), steps[0])
+    return nxt
+
+
+def scale_font_sizes(qss):
+    """把样式表里的 `font-size: Npx` 按当前倍数缩放（只动字号，间距/圆角/边框一律不动）。"""
+    if _FONT_SCALE == 1.0:
+        return qss
+
+    def _rep(match):
+        return 'font-size: %dpx' % max(8, int(round(int(match.group(1)) * _FONT_SCALE)))
+
+    return re.sub(r"font-size:\s*(\d+)px", _rep, qss)
+
+
 def build_qss(key):
     """按主题键生成完整样式表；未知键回退到深色。"""
     theme = THEMES.get(key) or THEMES["dark"]
-    return _QSS_TEMPLATE.substitute(**theme["colors"])
+    return scale_font_sizes(_QSS_TEMPLATE.substitute(**theme["colors"]))

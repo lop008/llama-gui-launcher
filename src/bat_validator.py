@@ -14,11 +14,14 @@ import os
 import re
 import shutil
 import socket
+import threading
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtGui import QBrush, QColor
 from PyQt6.QtWidgets import (
     QAbstractItemView, QDialog, QFileDialog, QHBoxLayout, QHeaderView, QLabel,
-    QMessageBox, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
+    QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QTabWidget, QTableWidget,
+    QTableWidgetItem, QVBoxLayout,
 )
 from .i18n import t
 
@@ -55,6 +58,8 @@ _PARAM_FLAGS = {
     "--reasoning-budget": "reasoning_budget",
     "--ssl-key-file": "ssl_key_file",
     "--ssl-cert-file": "ssl_cert_file",
+    # llama.cpp 0.4.1 起用 -lm/--load-mode 取代 --mlock/--mmap/--no-mmap/--direct-io
+    "-lm": "load_mode", "--load-mode": "load_mode",
 }
 
 # 布尔开关（不带值）：识别后不吞掉下一个 token。
@@ -78,6 +83,7 @@ _PARAM_LABELS = {
     "repeat_penalty": t('重复惩罚'), "timeout": t('超时(秒)'), "alias": t('模型别名(-a)'),
     "slots": t('并行slots(-np)'), "split_mode": t('拆分模式(-sm)'), "main_gpu": t('主GPU(-mg)'),
     "reasoning_format": t('推理格式'),
+    "load_mode": t('加载模式(-lm)'),
     "chat_template_kwargs": t('模板参数(--chat-template-kwargs)'),
     "reasoning_budget": t('推理预算(--reasoning-budget)'),
     "ssl_key_file": t('SSL私钥(--ssl-key-file)'),
@@ -486,16 +492,31 @@ _STATUS_ICON = {"ok": "✔", "warn": "⚠", "fail": "✘"}
 
 
 class ValidateBatDialog(QDialog):
-    """启动文件校验报告：左列源文件（可编辑），右列解析说明（只读）。"""
+    """启动文件校验报告：①逐行解析（源文件 / 说明）②合理性体检（检查项 / 说明与建议）。
 
-    def __init__(self, parent=None):
+    「合理性体检」是内置规则引擎，完全离线：拿本机 `llama-server --help` 核对参数、
+    按 GGUF 元数据 + 本机 CPU/内存/显存/磁盘估算资源。
+    「让模型分析」是**可选**增强：只有本机服务在跑、且用户手动点击时，才把体检数据
+    （已打码，不含 API Key）发给本机模型要一份报告；不点就绝不出网、也不调用模型。
+    """
+
+    advisor_ready = pyqtSignal(list, dict)
+    ai_done = pyqtSignal(str, str)
+
+    def __init__(self, parent=None, path=""):
         super().__init__(parent)
         self.setWindowTitle(t('启动文件校验报告'))
         self.setMinimumWidth(720)
-        self.resize(860, 560)
+        self.resize(900, 600)
         self._path = ""
         self._encoding = "gbk"     # 原始解码所用编码；保存时优先沿用
         self._raw_bytes = b""
+        self._line_rows = []
+        self._base_checks = []
+        self._adv_items = []
+        self._adv_info = {}
+        self._adv_worker = None
+        self._ai_worker = None
 
         lay = QVBoxLayout(self)
 
@@ -509,7 +530,14 @@ class ValidateBatDialog(QDialog):
         hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         hh.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.setEditTriggers(_ALL_CELLS_EDIT)   # 所有单元格随时可编辑（兼容 Qt 6.11+）
-        lay.addWidget(self.table, 1)
+
+        # 原来报告只有「逐行解析」，看不到「这份文件到底能不能跑、怎么改更好」；
+        # 体检结果单独一栏，两栏各司其职，不把表格撑成看不完的长列。
+        self.tabs = QTabWidget()
+        self.tabs.addTab(self.table, t('逐行解析'))
+        self.tab_checks, self.table_checks, self.ai_view = self._build_checks_tab()
+        self.tabs.addTab(self.tab_checks, t('合理性体检'))
+        lay.addWidget(self.tabs, 1)
 
         row = QHBoxLayout()
         self.btn_revalidate = QPushButton(t('重新校验'))
@@ -519,15 +547,174 @@ class ValidateBatDialog(QDialog):
         self.btn_save_cfg = QPushButton(t('保存配置'))
         self.btn_save_cfg.setToolTip(t('把左列各行按原顺序写回源文件（bat 在中文 Windows 下建议 GBK 编码写出）'))
         self.btn_save_cfg.clicked.connect(self._save_back)
+        self.btn_ai = QPushButton(t('让模型分析'))
+        self.btn_ai.setToolTip(t('把体检数据（机器配置 + 模型元数据 + 参数，不含 API Key）交给\n'
+                                 '本机正在运行的 llama-server 生成一份分析报告。\n'
+                                 '服务未运行时不可点击；不点就不会调用任何模型。'))
+        self.btn_ai.clicked.connect(self._on_ai)
         row.addWidget(self.btn_revalidate)
         row.addWidget(self.btn_save_cfg)
+        row.addWidget(self.btn_ai)
         row.addStretch(1)
         self.label_status = QLabel("")
         self.label_status.setStyleSheet("color: #8fd0ff;")
         row.addWidget(self.label_status, 1)
         lay.addLayout(row)
 
-        self._pick_file()
+        self.advisor_ready.connect(self._on_advisor_ready)
+        self.ai_done.connect(self._on_ai_done)
+        if path:
+            if not self.load_path(path):
+                self.close()
+        else:
+            self._pick_file()
+
+    # ------------------------------------------------------- 合理性体检这一栏
+    def _build_checks_tab(self):
+        tab = QVBoxLayout()
+        tab.setContentsMargins(6, 6, 6, 6)
+        table = QTableWidget(0, 2)
+        table.setHorizontalHeaderLabels([t('检查项'), t('说明与建议')])
+        th = table.horizontalHeader()
+        th.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        th.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.setWordWrap(True)
+        table.verticalHeader().setVisible(False)
+
+        self.ai_view = QPlainTextEdit()
+        self.ai_view.setReadOnly(True)
+        self.ai_view.setPlaceholderText(
+            t('这里显示「让模型分析」的报告。\n不点按钮时，本页全部结论都来自内置规则引擎，不经过任何模型。'))
+        split = QSplitter(Qt.Orientation.Vertical)
+        split.addWidget(table)
+        split.addWidget(self.ai_view)
+        split.setSizes([420, 180])
+        split.setChildrenCollapsible(False)
+        tab.addWidget(split)
+        widget = QDialog()          # 只是容器：QTabWidget 需要一个 QWidget 页
+        widget.setLayout(tab)
+        return widget, table, self.ai_view
+
+    def _advisor_ctx(self):
+        """体检环境（GPU / 显存 / 模型目录 / llama-server 路径）。"""
+        from . import launch_advisor as advisor     # 延迟导入：launch_advisor 依赖本模块
+        return advisor.context_from_window(self.parent())
+
+    def _merged_checks(self):
+        """基础检查 + 体检项（同名以体检项为准，体检项说明更具体）。"""
+        merged = [(n, s, d) for n, s, d in (self._base_checks or [])]
+        names = {n for n, _s, _d in merged}
+        for n, s, d in (self._adv_items or []):
+            if n in names:
+                merged = [(n2, s2, d2) if n2 != n else (n, s, d) for n2, s2, d2 in merged]
+            else:
+                merged.append((n, s, d))
+                names.add(n)
+        return merged
+
+    def _render_checks(self, pending=False):
+        rows = self._merged_checks()
+        if pending:
+            rows = rows + [(t('合理性体检'), "warn", t('正在核对参数表与本机硬件，请稍候…'))]
+        self.table_checks.setRowCount(len(rows))
+        warn = 0
+        for r, (name, st, desc) in enumerate(rows):
+            it0 = QTableWidgetItem("%s %s" % (_STATUS_ICON.get(st, '?'), name))
+            it1 = QTableWidgetItem(desc)
+            if st != "ok":
+                warn += 1
+                color = "#ff8a8a" if st == "fail" else "#ffcf7a"
+                it0.setForeground(QBrush(QColor(color)))
+                it1.setForeground(QBrush(QColor(color)))
+            self.table_checks.setItem(r, 0, it0)
+            self.table_checks.setItem(r, 1, it1)
+        self.table_checks.resizeRowsToContents()
+        return len(rows) - warn, warn
+
+    def _run_advisor(self, text):
+        """后台跑体检（要跑 --help 与 nvidia-smi，别卡住界面），完成后填表。"""
+        from . import launch_advisor as advisor
+
+        self._render_checks(pending=True)
+        path = self._path
+
+        def work():
+            try:
+                items, info = advisor.build_report(path, text, self._advisor_ctx())
+            except Exception as exc:                # 体检失败不能带崩对话框
+                items, info = [(t('合理性体检'), "warn", t('体检未完成：{0}').format(exc))], {}
+            try:
+                self.advisor_ready.emit(items, info)
+            except RuntimeError:
+                pass                                # 对话框已关闭
+
+        self._adv_worker = threading.Thread(target=work, daemon=True)
+        self._adv_worker.start()
+
+    def _on_advisor_ready(self, items, info):
+        self._adv_items, self._adv_info = items, info
+        ok, warn = self._render_checks()
+        self.label_status.setText(
+            t('体检完成：{0} 项通过 / {1} 项需要注意').format(ok, warn))
+        self._render_lines()
+        self._sync_ai_button()
+
+    def _sync_ai_button(self):
+        """服务没在跑就明确告诉用户为什么不能点，而不是点了弹个莫名错误。"""
+        from . import launch_advisor as advisor
+
+        ep = advisor.local_endpoint(self.parent())
+        self.btn_ai.setEnabled(bool(ep))
+        if ep:
+            self.btn_ai.setToolTip(t('发送给本机服务 {0} 分析（数据不含 API Key）').format(ep[0]))
+        else:
+            self.btn_ai.setToolTip(t('需要先在主界面启动服务：分析用的是本机正在运行的模型，'
+                                     '不会联网调用任何外部模型'))
+
+    # ------------------------------------------------------------- 让模型分析
+    def _on_ai(self):
+        from . import launch_advisor as advisor
+
+        if not self._adv_info:
+            QMessageBox.information(self, t('提示'), t('体检还没完成，请稍候再试。'))
+            return
+        ep = advisor.local_endpoint(self.parent())
+        if not ep:
+            QMessageBox.information(
+                self, t('提示'),
+                t('「让模型分析」需要本机服务正在运行：\n'
+                  '先在主界面点「启动服务」，再回来点这里。\n'
+                  '（本页的内置体检结论不依赖模型，现在就能看。）'))
+            return
+        payload = advisor.build_payload(self._path, self._adv_info.get("machine"),
+                                       self._adv_info.get("model"),
+                                       self._adv_info.get("params"), self._adv_items)
+        self.btn_ai.setEnabled(False)
+        self.btn_ai.setText(t('分析中…'))
+        self.ai_view.setPlainText(t('正在让本机模型分析，可能需要几十秒…'))
+        worker = advisor.AiReportWorker(ep[0], payload, api_key=ep[1], model_id=ep[2])
+
+        def done(text, err):
+            try:
+                self.ai_done.emit(text, err)
+            except RuntimeError:
+                pass
+
+        worker.callback = done
+        self._ai_worker = worker
+        worker.start()
+
+    def _on_ai_done(self, text, err):
+        self.btn_ai.setEnabled(True)
+        self.btn_ai.setText(t('让模型分析'))
+        if text:
+            self.ai_view.setPlainText(text)
+            self.label_status.setText(t('模型分析完成'))
+        else:
+            self.ai_view.setPlainText(t('模型分析失败：{0}\n\n'
+                                        '「合理性体检」表格里的内置结论与这条无关，仍然有效。').format(err))
+            self.label_status.setText(t('模型分析失败'))
 
     # ---------------------------------------------------------- 文件选择/刷新
     def _pick_file(self):
@@ -538,27 +725,31 @@ class ValidateBatDialog(QDialog):
         if not path:
             self.close()
             return
+        if not self.load_path(path):
+            self.close()
+
+    def load_path(self, path):
+        """读取并校验指定文件（单独拆出来：菜单选文件与测试走同一条路）。"""
         try:
             with open(path, "rb") as f:
                 data = f.read()
         except OSError as e:
             QMessageBox.critical(self, t('错误'), t('读取文件失败：{0}').format(e))
-            self.close()
-            return
+            return False
         self._path = path
         self._raw_bytes = data
         self._refresh(data)
+        return True
 
     def _refresh(self, data):
         """按 bytes 重新校验并刷新表格/结论。"""
         items = validate_script(data, self._path)   # bytes → 含解码检查
         concl = overall_conclusion(items)
         checks = {name: (st, desc) for name, st, desc in items}
-
-        lines_ = [concl]
-        for name, st, desc in items:
-            lines_.append(f"{_STATUS_ICON.get(st, '?')} {name}：{desc}")
-        self.label_summary.setText("\n".join(lines_))
+        # 基础检查（文件/编码/模型是否存在/端口…）与体检项合并显示在「合理性体检」页，
+        # 顶部只留一行整体结论，避免同一份结论在两个地方各写一遍。
+        self._base_checks = items
+        self.label_summary.setText(concl)
 
         text, enc = _decode_bytes(data) if isinstance(data, (bytes, bytearray)) else (data, "utf-8")
         if text is None:
@@ -570,6 +761,10 @@ class ValidateBatDialog(QDialog):
             self.table.setItem(0, 0, it_l)
             self.table.setItem(0, 1, it_r)
             self.btn_save_cfg.setEnabled(False)
+            self.table_checks.setRowCount(1)
+            self.table_checks.setItem(0, 0, QTableWidgetItem(t('合理性体检')))
+            self.table_checks.setItem(0, 1, QTableWidgetItem(t('二进制文件，无法解析参数，跳过体检')))
+            self.btn_ai.setEnabled(False)
             return
         self._encoding = enc or "gbk"
         self.btn_save_cfg.setEnabled(True)
@@ -591,11 +786,24 @@ class ValidateBatDialog(QDialog):
                 right = "；".join(descs) if descs else (t('未识别/普通语句') if left.strip() else "")
             rows.append((left, right))
 
-        self.table.setRowCount(len(rows))
-        for r, (left, right) in enumerate(rows):
+        self._line_rows = rows
+        self._render_lines()
+        self._run_advisor(text)
+
+    def _render_lines(self):
+        """按 `_line_rows` 重画逐行说明；体检出的未知参数在对应行就地标注。"""
+        unknown = [f for f in (self._adv_info.get("unknown") or []) if f]
+        self.table.setRowCount(len(self._line_rows))
+        for r, (left, right) in enumerate(self._line_rows):
+            hits = [f for f in unknown if f in left]
+            if hits:
+                # 未知参数以前会被白名单静默丢掉（用户根本看不到），现在逐行也点出来
+                right = (right + "；" if right else "") + t('本机不认识：{0}').format("、".join(hits))
             it_l = QTableWidgetItem(left)
             it_r = QTableWidgetItem(right)
             it_r.setFlags(it_r.flags() & ~Qt.ItemFlag.ItemIsEditable)  # 右列只读
+            if hits:
+                it_r.setForeground(QBrush(QColor("#ffcf7a")))
             self.table.setItem(r, 0, it_l)
             self.table.setItem(r, 1, it_r)
 
