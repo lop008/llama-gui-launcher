@@ -101,6 +101,8 @@ class MenuAboutMixin:
         menu_help.addAction(self.act_launcher_update)
 
     def _on_llama_version(self, ver):
+        if getattr(self, "_closing", False):
+            return
         base = t('LLama 启动器 v{0}').format(__version__)
         self.setWindowTitle(f"{base} · llama {ver}" if ver else base)
         if hasattr(self, "label_llama_ver"):
@@ -124,6 +126,8 @@ class MenuAboutMixin:
 
     def check_launcher_update_silent(self):
         """启动后静默检查一次；有新版本时只改标题/状态栏，不弹窗。"""
+        if getattr(self, "_closing", False):
+            return
         if not self.cfg.data.get("check_launcher_update", True):
             return
 

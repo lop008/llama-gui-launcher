@@ -14,7 +14,7 @@ import tempfile
 from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QDesktopServices, QTextCursor
 from PyQt6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QGridLayout, QHBoxLayout, QHeaderView, QLabel,
+    QAbstractItemView, QCheckBox, QGridLayout, QHBoxLayout, QLabel,
     QMessageBox, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem,
     QTextBrowser, QVBoxLayout, QWidget,
 )
@@ -25,7 +25,8 @@ from .llama_updater import (MODE_ALL, MODE_SERVER, UpdaterError, backup_launcher
 from .model_downloader import ModelDownloader
 from .model_scanner import human_size
 from .i18n import t
-from .ui.kit import Badge, Card, SectionHeader, SegmentedControl, StatCard
+from .ui.kit import (Badge, Card, ColumnResizer, SectionHeader, SegmentedControl,
+                     StatCard)
 
 PER_PAGE = 30
 
@@ -235,17 +236,14 @@ class UpdaterTab(QWidget):
         self.table = QTableWidget(0, 7)
         self.table.setHorizontalHeaderLabels(
             [t('选择'), t('文件名'), t('版本'), t('日期'), t('通道'), t('状态'), t('操作')])
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        self.table.horizontalHeader().setStretchLastSection(False)
-        self.table.setColumnWidth(0, 42)
-        self.table.setColumnWidth(1, 340)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table.setColumnWidth(2, 100)
-        self.table.setColumnWidth(3, 96)
-        self.table.setColumnWidth(4, 92)
-        self.table.setColumnWidth(5, 110)
-        self.table.setColumnWidth(6, 250)
+        # 列宽策略：全部可手动拖动（名称列吃掉了原来的 Stretch，导致那一列拖不动，
+        # 用户没法把「文件名」拉宽看全名）；多余宽度由 ColumnResizer 补给名称列。
+        self._col_resizer = ColumnResizer(
+            self.table, [42, 340, 100, 96, 92, 110, 300], fill_col=1, min_width=56)
         self.table.verticalHeader().setVisible(False)
+        # 行高要装得下「下载 / 进度条 / 安装」这一排控件（默认行高会把按钮文字裁掉）
+        self.table.verticalHeader().setDefaultSectionSize(40)
+        self.table.setMinimumHeight(260)
         self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -324,6 +322,7 @@ class UpdaterTab(QWidget):
             self._releases.append({"release": rel, "assets": assets})
             self._append_release_rows(rel, assets)
         self._apply_filter()
+        self._fit_op_column()
         self._refresh_version_cards()
         self._update_stats()
         self._set_loading(False)
@@ -408,6 +407,7 @@ class UpdaterTab(QWidget):
         btn.clicked.connect(lambda _=False, tag=rel["tag"]: QDesktopServices.openUrl(QUrl(release_web_url(tag))))
         lay.addWidget(btn)
         lay.addStretch(1)
+        self._note_op_width(w)
         self.table.setCellWidget(r, 6, w)
 
     def _make_op_widget(self, key, asset):
@@ -420,7 +420,7 @@ class UpdaterTab(QWidget):
         pb = QProgressBar()
         pb.setRange(0, 100)
         pb.setValue(0)
-        pb.setMinimumWidth(90)
+        pb.setMinimumWidth(84)
         inst = QPushButton(t('安装'))
         inst.setEnabled(False)
         lay.addWidget(dl)
@@ -428,7 +428,19 @@ class UpdaterTab(QWidget):
         lay.addWidget(inst)
         dl.clicked.connect(lambda *_: self._on_download(key))
         inst.clicked.connect(lambda *_: self._on_install(key))
+        self._note_op_width(w)
         return w, dl, pb, inst
+
+    def _note_op_width(self, widget):
+        """记下操作列实际需要多宽：固定列宽在大字号 / 其他语言下会把按钮文字裁掉。"""
+        need = widget.sizeHint().width() + 16        # 16px 单元格余量，避免贴边
+        self._op_need = max(getattr(self, "_op_need", 0), need)
+
+    def _fit_op_column(self):
+        """按实测按钮宽度定操作列（第 6 列），剩余空间仍归名称列。"""
+        need = getattr(self, "_op_need", 0)
+        if need:
+            self._col_resizer.set_column_width(6, need)
 
     # ------------------------------------------------------------- 筛选
     def _apply_filter(self):

@@ -25,6 +25,8 @@ class TrayPillMixin:
 
     def _update_pill(self, kind, *args):
         """缓存并转发悬浮窗数据（小窗未创建时先存起来，创建后回填）。"""
+        if getattr(self, "_closing", False):
+            return          # 监控线程的信号可能晚于关窗一瞬
         self._pill_cache[kind] = args
         if self._pill is not None:
             try:

@@ -22,7 +22,7 @@ from ..model_scanner import (
 )
 from ..spec_decode import (
     SPEC_CLI, SPEC_IDS, ST_NEED_DRAFT, ST_NO, ST_NO_ENGINE, ST_OK, draft_matches_model,
-    engine_spec_types, model_spec_support, pick_auto, spec_label,
+    engine_spec_types, model_spec_support, pick_auto, spec_label, spec_selectable,
 )
 from .draft_download import DraftDownloadDialog
 from .widgets import SpecOrderDialog
@@ -82,6 +82,8 @@ class ModelProbeMixin:
         return mm, dr, im
 
     def _on_model_scan_done(self):
+        if getattr(self, "_closing", False):
+            return          # 扫描线程结束时窗口可能已经关掉了
         keep_path = self.cfg.data.get("model", "") if self._pending_keep else None
         self._pending_keep = False
         err = getattr(self, "_scan_error", None)
@@ -228,6 +230,10 @@ class ModelProbeMixin:
 
     def _spec_status(self, text, color="#8fd0ff"):
         """投机解码状态提示：颜色 + 下划线（富文本），与对话模板那行同一套视觉。"""
+        note = getattr(self, "_spec_note", "")
+        if note:
+            self._spec_note = ""          # 一次性附注：说一次就够，不长期挂在界面上
+            text = text + "<br>" + note
         if hasattr(self, "label_spec_status"):
             self.label_spec_status.setText(
                 f'<span style="color:{color};"><u>{text}</u></span>')
@@ -259,6 +265,10 @@ class ModelProbeMixin:
         if not hasattr(self, "combo_spec"):
             return
         want = self.combo_spec.currentData() or self._spec_mode()
+        # 配置里存着的方式对当前模型可能已经不可用（本机 llama-server 不认 / 模型没那结构）：
+        # 直接落到「自动」，别让下拉停在一个灰掉的取值上。
+        if not spec_selectable({r["id"]: r for r in self._spec_rows()}.get(want)):
+            want = "auto"
         self.combo_spec.blockSignals(True)
         self.combo_spec.clear()
         self.combo_spec.addItem(t('不启用'), "off")
@@ -416,6 +426,9 @@ class ModelProbeMixin:
         """按「下拉选择 + 检测结果」刷新：每项置灰与说明、状态标签、草稿下拉、长度框。"""
         if not hasattr(self, "combo_spec"):
             return
+        if getattr(self, "_closing", False):
+            return
+        self._spec_note = ""
         rows = self._spec_rows()
         by_id = {r["id"]: r for r in rows}
         self.combo_spec.blockSignals(True)
@@ -427,9 +440,31 @@ class ModelProbeMixin:
             if it is None:
                 continue
             flags = it.flags()
-            # 本机 llama-server 不认这种方式 → 置灰（更新 llama.cpp 后即可用）
-            it.setFlags(flags & ~Qt.ItemFlag.ItemIsEnabled if r is not None
-                        and r["state"] == ST_NO_ENGINE else flags | Qt.ItemFlag.ItemIsEnabled)
+            # 置灰 = 选了也必然不生效：本机 llama-server 不认这个取值（✖ 更新后即可用），
+            # 或主模型没有对应结构、本机也找不到可用草稿（—）。
+            disabled = not spec_selectable(r)
+            it.setFlags(flags & ~Qt.ItemFlag.ItemIsEnabled if disabled
+                        else flags | Qt.ItemFlag.ItemIsEnabled)
+            # 「缺草稿」不置灰（点「下载草稿」补齐就能用，堵死反而挡路），但在名字上标出来。
+            # 注意：改文本必须用 model item 的 setText —— QComboBox.setItemText() 在
+            # 反复创建窗口（多语言重建）时会稳定 0xC0000005。
+            if sid not in ("off", "auto"):
+                label = spec_label(sid) or sid
+                if r is not None and (r["state"] == ST_NEED_DRAFT
+                                      or (r["state"] == ST_OK and not r.get("valid", True))):
+                    label += ' ⚠'
+                it.setText(label)
+        # 老配置遗留 / 切换模型后当前项已不可用 → 自动退回「自动」，
+        # 免得用户带着一个必然不生效的方式去启动，还在状态栏里看不懂原因。
+        cur = self.combo_spec.currentData()
+        rc = by_id.get(cur)
+        if not spec_selectable(rc):
+            idx = self.combo_spec.findData("auto")
+            if idx >= 0:
+                self._spec_note = t('原先选中的「{0}」不适用于该模型，已改回「自动」。').format(
+                    rc["label"] or spec_label(cur) or str(cur))
+                self.combo_spec.setCurrentIndex(idx)
+                self.cfg.data.setdefault("server", {})["spec_mode"] = "auto"
         self.combo_spec.blockSignals(False)
 
         mode = self.combo_spec.currentData() or "off"
@@ -483,6 +518,8 @@ class ModelProbeMixin:
 
     def _on_mtp_detected(self):
         try:
+            if getattr(self, "_closing", False):
+                return      # 检测结果从后台线程排队来，可能晚于关窗
             if self.combo_model.currentData() in self._spec_cache_map():
                 self._update_spec_ui()
         except Exception:
@@ -701,6 +738,14 @@ class ModelProbeMixin:
             return (me, pe)
         return None
 
+    def _same_dir_mmprojs(self, model_path):
+        """与当前主模型同目录的视觉投影文件（用来判断「这个模型能不能看图」）。"""
+        if not model_path:
+            return []
+        d = os.path.dirname(str(model_path))
+        return [m for m in getattr(self, "_aux", [])
+                if m.dir == d and m.role == ROLE_MMPROJ]
+
     def _update_mmproj_warn(self):
         if not hasattr(self, "label_mmproj_warn"):
             return
@@ -712,6 +757,14 @@ class ModelProbeMixin:
                 t('⚠ 主模型与视觉模型维度不匹配 ({0} vs {1})，可能无法加载，请更换视觉模型').format(mm[0], mm[1]))
             self.label_mmproj_warn.setToolTip(
                 t('llama.cpp 要求主模型与 mmproj 的嵌入维度（embedding_length）一致。'))
+        elif mmproj_path is None and self._same_dir_mmprojs(model_path):
+            # 例如 Inkling 2：文本主干里不含视觉塔，看图能力全在 mmproj-*.gguf 里，
+            # 用户不知道这一点就会一直留空，误以为模型不支持图片。
+            self.label_mmproj_warn.setText(
+                t('ℹ 该模型带视觉投影文件：选上才能看图（只做纯对话可以留空）'))
+            self.label_mmproj_warn.setToolTip(
+                t('同目录发现了 mmproj 视觉投影，说明这个模型支持看图。'
+                  '不选 = 只当纯文本模型用。'))
         else:
             self.label_mmproj_warn.setText("")
             self.label_mmproj_warn.setToolTip("")
@@ -933,6 +986,8 @@ class ModelProbeMixin:
 
     def _on_model_info(self, path, text):
         """本地 GGUF 信息就绪：先显示，若勾选了「联网查询」再自动补充 HF 信息。"""
+        if getattr(self, "_closing", False):
+            return
         if path and self.combo_model.currentData() and os.path.abspath(path) != os.path.abspath(self.combo_model.currentData()):
             return
         self._base_info_text = text

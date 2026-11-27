@@ -344,12 +344,18 @@ QHeaderView::section {
 QTableCornerButton::section { background-color: $head_bg; border: none; }
 
 QTabWidget::pane { border: 1px solid $tab_pane_border; border-radius: 8px; top: -1px; }
+/* 六个页签必须「看得出是个可按的标签」：未选中也描边，选中态再加粗描边 + 顶部高亮条 */
 QTabBar::tab {
-    background-color: transparent; color: $tab_fg; padding: 8px 16px;
-    font-size: 14px; font-weight: 600; border: none;
-    border-bottom: 2px solid transparent; margin-right: 2px; }
-QTabBar::tab:selected { color: $tab_sel_fg; border-bottom: 2px solid $focus_border; background-color: $tab_sel_bg; }
-QTabBar::tab:hover { color: $tab_hover_fg; background-color: $mb_sel_bg; }
+    background-color: $tab_bg; color: $tab_fg; padding: 8px 18px;
+    font-size: 14px; font-weight: 600;
+    border: 1px solid $tab_border; border-bottom: none;
+    border-top-left-radius: 7px; border-top-right-radius: 7px; margin-right: 4px; }
+QTabBar::tab:selected {
+    color: $tab_sel_fg; background-color: $tab_sel_bg; font-weight: 700;
+    border: 2px solid $focus_border; border-bottom: 2px solid $tab_pane_border; }
+QTabBar::tab:!selected { margin-top: 3px; }
+QTabBar::tab:hover:!selected { color: $tab_sel_fg; background-color: $mb_sel_bg; border-color: $focus_border; }
+QTabBar::tab:disabled { color: $tab_fg; opacity: 0.5; }
 
 QProgressBar {
     border: 1px solid $field_border; border-radius: 6px;

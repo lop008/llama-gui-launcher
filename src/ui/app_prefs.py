@@ -35,6 +35,8 @@ class AppPrefsMixin:
         return ""
 
     def _tick_usage(self):
+        if getattr(self, "_closing", False):
+            return
         if not (hasattr(self, "server") and self.server.running):
             return
         name = self._stats_model_name() or self._running_model_name
@@ -174,6 +176,8 @@ class AppPrefsMixin:
     def _apply_reflow(self, checked=None):
         if not hasattr(self, "params_panel"):
             return
+        if getattr(self, "_closing", False):
+            return          # 30ms 的延迟里窗口可能已经关掉（下面还要 processEvents）
         QApplication.processEvents()  # 让可见性变化先完成布局
         self.updateGeometry()
         self.params_panel.layout().activate()
@@ -243,10 +247,14 @@ class AppPrefsMixin:
     # ---------------------------------------------------------- 状态栏监控
 
     def _on_mem(self, percent, tip):
+        if getattr(self, "_closing", False):
+            return
         self.label_mem.setText(t('内存 {0:.0f}%').format(percent))
         self.label_mem.setToolTip(tip)
 
     def _on_vram(self, text):
+        if getattr(self, "_closing", False):
+            return
         if text:
             self.label_vram.setText(t('显存 {0}').format(text))
             self.label_vram.setVisible(True)

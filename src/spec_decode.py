@@ -72,6 +72,15 @@ ST_NEED_DRAFT = "need_draft"   # 引擎和模型都行，但缺草稿文件（�
 ST_NO_ENGINE = "no_engine"     # 本机 llama-server 不认这个值
 ST_NO = "no"                  # 主模型没有相应结构、也找不到草稿
 
+# 下拉里不许选中的状态：选了也必然不生效。
+# 「缺草稿」故意不在其中——点「下载草稿」补齐就能用，堵死反而挡住正常路径。
+UNSELECTABLE_STATES = (ST_NO_ENGINE, ST_NO)
+
+
+def spec_selectable(row):
+    """这个投机解码方式当前能不能被用户选中（row=None 表示还没检测完，先放行）。"""
+    return row is None or row.get("state") not in UNSELECTABLE_STATES
+
 
 def spec_label(spec_id):
     """下拉框显示名。"""

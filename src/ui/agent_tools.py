@@ -85,6 +85,8 @@ class AgentToolsMixin:
         self.statusBar().showMessage(t('正在检测工具…'), 2000)
 
     def _on_tool_scan_done(self):
+        if getattr(self, "_closing", False):
+            return
         self._fill_tool_table()
         self._status_tip(t('工具检测完成'), 3000)
 

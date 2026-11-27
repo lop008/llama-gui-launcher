@@ -4,10 +4,10 @@
 只依赖 PyQt6，不引入第三方主题框架。所有颜色都走 QSS 的 objectName / 动态属性，
 切换主题时无需重建控件。
 """
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
 from PyQt6.QtWidgets import (
-    QButtonGroup, QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
-    QVBoxLayout, QWidget,
+    QButtonGroup, QFrame, QHBoxLayout, QHeaderView, QLabel, QPushButton,
+    QSizePolicy, QTreeView, QVBoxLayout, QWidget,
 )
 
 from ..i18n import t
@@ -204,3 +204,80 @@ def hline():
     line.setFrameShape(QFrame.Shape.HLine)
     line.setObjectName("HLine")
     return line
+
+
+class ColumnResizer(QObject):
+    """让表格 / 文件树的每一列都能手动拖动，同时默认不留白。
+
+    Qt 原生两选一：`QHeaderView.Stretch` 会自动填满但那一列拖不动，
+    `Interactive` 能拖但列宽总和小于视口时右侧留白。这里取两者好处：
+    全部列用 Interactive，视口变化时把多余宽度补给指定列；
+    用户一旦真的拖过某一列就停止自动补宽，避免「刚拖宽就被弹回去」。
+
+    用法（QTableWidget / QTreeWidget 通用）：
+        ColumnResizer(self.table, [42, 320, 100, 96, 92, 110, 300], fill_col=1)
+    """
+
+    def __init__(self, view, widths, fill_col=0, min_width=60):
+        super().__init__(view)          # 随父控件销毁，无需手动清理
+        self.view = view
+        self.fill_col = fill_col
+        self.min_width = min_width
+        self._filling = False
+        self._touched = False
+        # QTableWidget 用 horizontalHeader()，QTreeWidget 只有 header()
+        self.hdr = view.header() if isinstance(view, QTreeView) else view.horizontalHeader()
+        hdr = self.hdr
+        hdr.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
+        hdr.setSectionsMovable(True)
+        hdr.setStretchLastSection(False)
+        hdr.setMinimumSectionSize(min_width)
+        for col, w in enumerate(widths):
+            view.setColumnWidth(col, w)
+        hdr.sectionResized.connect(self._on_resized)
+        view.installEventFilter(self)
+
+    # -- 内部 ---------------------------------------------------------
+    def _on_resized(self, _col, _old, new):
+        # 程序补宽期间的高度/宽度变化不算用户意图
+        if not self._filling and new > 0:
+            self._touched = True
+
+    def eventFilter(self, obj, event):
+        if (obj is self.view and event.type() == QEvent.Type.Resize
+                and not self._touched):
+            self.refill()
+        return False
+
+    def refill(self):
+        """把视口剩余宽度补给 fill_col（列数不够 / 已被用户拖动时什么都不做）。"""
+        if self._filling:          # 防重入：补宽过程中若再收到 Resize 事件直接忽略
+            return
+        hdr = self.hdr
+        cols = hdr.count()
+        if cols <= self.fill_col:
+            return
+        # viewport() 已排除滚动条，再减左右边框，避免补宽后反而冒出横向滚动条
+        avail = self.view.viewport().width() - 2 * self.view.frameWidth() - 1
+        used = sum(hdr.sectionSize(c) for c in range(cols) if c != self.fill_col)
+        want = avail - used
+        if want < self.min_width:      # 窗口太窄：让横向滚动条接手，不压缩其他列
+            return
+        if hdr.sectionSize(self.fill_col) == want:
+            return
+        self._filling = True
+        try:
+            hdr.resizeSection(self.fill_col, want)
+        finally:
+            self._filling = False
+
+    def set_column_width(self, col, width):
+        """程序调整某列宽度（例如按按钮 sizeHint 加宽操作列），补宽用当前 fill_col。"""
+        hdr = self.hdr
+        if 0 <= col < hdr.count():
+            self._filling = True
+            try:
+                hdr.resizeSection(col, max(self.min_width, width))
+            finally:
+                self._filling = False
+            self.refill()

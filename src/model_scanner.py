@@ -153,14 +153,32 @@ def scan_models(llama_dir, max_depth=MAX_SCAN_DEPTH, probe=True):
     return models, aux
 
 
+# 视觉投影精度偏好：F16 是 llama.cpp 官方默认、兼容性最好；BF16 体积相同但老卡支持差；
+# F32 体积翻倍通常没必要（unsloth 这类仓库会同时放 F32/F16/BF16 三份）。
+MMPROJ_PREF = ("f16", "bf16", "f32", "q8_0", "q8", "q4")
+
+
+def _mmproj_rank(name):
+    """文件名里的精度标记 → 排序权重（越小越优先，认不出排最后）。"""
+    low = str(name).lower()
+    for i, tag in enumerate(MMPROJ_PREF):
+        if re.search(r"(?<![a-z0-9])" + tag + r"(?![a-z0-9])", low):
+            return i
+    return len(MMPROJ_PREF)
+
+
 def find_mmproj_for(model, mmprojs):
-    """严格按目录配对：只使用与主模型同一目录下的视觉投影，保证主模型与视觉模型一致。"""
+    """严格按目录配对：只使用与主模型同一目录下的视觉投影，保证主模型与视觉模型一致。
+
+    同目录有多份精度时按 F16 → BF16 → F32 → 量化 顺序挑，别按文件名顺序撞上 F32。
+    """
     if not mmprojs:
         return None
-    for m in mmprojs:
-        if m.dir == model.dir and (m.is_mmproj or m.role == ROLE_MMPROJ):
-            return m
-    return None
+    cands = [m for m in mmprojs
+             if m.dir == model.dir and (m.is_mmproj or m.role == ROLE_MMPROJ)]
+    if not cands:
+        return None
+    return min(cands, key=lambda m: (_mmproj_rank(m.name), m.size))
 
 
 # 草稿头类型：越靠前越优先（同目录多个头时挑这个顺序）

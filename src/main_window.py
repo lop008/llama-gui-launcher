@@ -2,11 +2,11 @@ import os
 import sys
 
 from PyQt6.QtCore import QTimer, pyqtSignal
-from PyQt6.QtGui import QCloseEvent, QPixmap
+from PyQt6.QtGui import QCloseEvent, QFont, QPixmap
 from PyQt6.QtWidgets import (
     QApplication, QCheckBox, QGridLayout, QHBoxLayout, QHeaderView, QLabel, QMainWindow,
-    QMenu, QMessageBox, QPlainTextEdit, QPushButton, QSystemTrayIcon, QTabWidget,
-    QTableWidget, QTextBrowser, QVBoxLayout, QWidget,
+    QMenu, QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QSystemTrayIcon,
+    QTabWidget, QTableWidget, QTextBrowser, QTreeWidget, QVBoxLayout, QWidget,
 )
 
 from . import __version__
@@ -18,7 +18,7 @@ from .themes import THEMES
 from .updater_tab import UpdaterTab
 from .i18n import t
 from .ui.widgets import CollapsibleBox, _AspectImageLabel
-from .ui.kit import Badge, Card
+from .ui.kit import Badge, Card, ColumnResizer
 from .ui.workers import _LlamaVersionWorker
 from .ui.gpu_probe import GpuMixin
 from .ui.layout_basic import LayoutBasicMixin
@@ -72,6 +72,10 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.monitor.log_dir = os.path.join(self.cfg.data_dir(), "logs")
         self._loading = False
         self._quitting = False
+        # 关窗退出标记：后台线程（版本探测 / 监控 / 模型扫描 / 投机检测）的回调
+        # 是排队投递的，窗口销毁后仍可能到达；置位后这些槽函数一律直接返回。
+        # 没有它时实测反复开关窗口会概率性 0xC0000005 直接闪退。
+        self._closing = False
         self._models = []
         self._aux = []          # 视觉投影 / 投机草稿头 / 标定文件（不进主模型下拉框）
         self._scan_hint = ""    # 扫描后要提示的用户问题，优先于计数文案显示
@@ -121,8 +125,12 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self._llama_ver_worker.done.connect(self._on_llama_version)
         # 残留检测等版本探测结束后再做（探测进程本身也是 llama-server.exe，
         # 冷启动加载大 DLL 时可能 >1.5s，否则每次启动都会误报「残留进程」）。
-        self._llama_ver_worker.done.connect(
-            lambda _v: QTimer.singleShot(600, self._check_residual))
+        # 必须是挂在窗口下的 QTimer，不能用 QTimer.singleShot(600, ...)：后者没有父对象，
+        # 窗口销毁后照样会触发，回调里又要建 QMessageBox / 读控件 → 概率性访问违例。
+        self._residual_timer = QTimer(self)
+        self._residual_timer.setSingleShot(True)
+        self._residual_timer.timeout.connect(self._check_residual)
+        self._llama_ver_worker.done.connect(self._arm_residual_check)
         self._llama_ver_worker.start()
 
         # 使用时长累计：服务运行期间每 5 秒记一笔（功能 9）
@@ -206,6 +214,28 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.log_view.setReadOnly(True)
         self.preview_view = QPlainTextEdit()
         self.preview_view.setReadOnly(True)
+        # 命令预览拆成上下两栏：上半「逐条拆解」（左参数 / 右作用），下半完整命令行。
+        # preview_view 保持原对象不变：导出 .bat 等功能仍直接读它。
+        self.preview_tree = QTreeWidget()
+        self.preview_tree.setColumnCount(2)
+        self.preview_tree.setHeaderLabels([t('参数拆解'), t('目的与意义')])
+        self.preview_tree.setRootIsDecorated(False)
+        self.preview_tree.setAlternatingRowColors(True)
+        self._preview_resizer = ColumnResizer(
+            self.preview_tree, [430, 560], fill_col=1, min_width=200)
+        self.preview_tree.setToolTip(t('左边是实际下发的每个参数，右边是它的作用；'
+                                       '改任意设置这里都会跟着变'))
+        self._preview_mono = QFont("Consolas")
+        self._preview_mono.setStyleHint(QFont.StyleHint.Monospace)
+        preview_caption = QLabel(t('完整命令行（可复制，也可从菜单导出为 .bat）'))
+        preview_caption.setObjectName("Muted")
+        self.preview_box = QWidget()
+        pv = QVBoxLayout(self.preview_box)
+        pv.setContentsMargins(6, 6, 6, 6)
+        pv.setSpacing(4)
+        pv.addWidget(self.preview_tree, 3)
+        pv.addWidget(preview_caption)
+        pv.addWidget(self.preview_view, 2)
         self.info_view = QTextBrowser()
         self.info_view.setReadOnly(True)
         self.info_view.setOpenExternalLinks(True)
@@ -283,7 +313,7 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
             self._tab_widgets[key] = widget
 
         _add_tab(self.log_view, t('运行日志'), "log")
-        _add_tab(self.preview_view, t('命令预览'), "preview")
+        _add_tab(self.preview_box, t('命令预览'), "preview")
         _add_tab(tool_tab, t('Agent 工具'), "tools")
         _add_tab(info_tab, t('模型信息'), "info")
         _add_tab(self.download_tab, t('模型下载'), "download")
@@ -415,6 +445,26 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.resize(1280, 1280)
 
 
+    # ---------------------------------------------------- 监控槽（关窗后仍可能被投递）
+    def _on_cpu_text(self, v):
+        """状态栏 CPU：CPU 信号来自 1 秒节拍，关窗瞬间可能投递最后一次。"""
+        if self._closing:
+            return
+        self.label_cpu.setText(f"CPU {v:.0f}%")
+
+    def _on_api_text(self, text):
+        """状态栏 API 状态：该信号由后台探测线程 emit，必须挡住退出后的迟到调用。"""
+        if self._closing:
+            return
+        self.label_api.setText(text)
+
+    def _on_monitor_model(self, name):
+        """状态栏模型名 + 转发悬浮窗（model_changed 同样来自后台线程）。"""
+        if self._closing:
+            return
+        self.label_model.setText(t('模型 {0}').format(name))
+        self._update_pill("model", name)
+
     # ------------------------------------------------------------ helpers
     def _connect(self):
         self.server.log.connect(self._on_server_log)
@@ -426,16 +476,16 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.model_info.connect(self._on_model_info)
         self.hf_info_done.connect(self._on_hf_info)
 
-        self.monitor.cpu_changed.connect(lambda v: self.label_cpu.setText(f"CPU {v:.0f}%"))
+        # 状态栏 / 悬浮窗的监控槽一律走带 _closing 判断的方法：SystemMonitor 的
+        # vram / api / model / speed 等信号是从后台探测线程 emit 的，关窗后还会投递一次。
+        self.monitor.cpu_changed.connect(self._on_cpu_text)
         # 悬浮窗 CPU：系统整体负载（所有核心平均占用率）
         self.monitor.cpu_load_changed.connect(
             lambda v: self._update_pill("cpu", v))
         self.monitor.mem_changed.connect(self._on_mem)
         self.monitor.vram_changed.connect(self._on_vram)
-        self.monitor.model_changed.connect(
-            lambda n: (self.label_model.setText(t('模型 {0}').format(n)),
-                       self._update_pill("model", n)))
-        self.monitor.api_changed.connect(lambda t: self.label_api.setText(t))
+        self.monitor.model_changed.connect(self._on_monitor_model)
+        self.monitor.api_changed.connect(self._on_api_text)
 
         # 悬浮小窗：把监控信号缓存并转发到小窗（小窗尚未创建时先缓存，创建后回填）
         self.monitor.mem_raw_changed.connect(
@@ -568,4 +618,12 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
             if ret == QMessageBox.StandardButton.Yes:
                 self.server.stop()
                 self.monitor.set_server(None)
+        # 走到这里已经确定要退出（隐藏到托盘、以及对话框点「取消」都在上面 return 了）。
+        # 关掉所有周期性后台活动：监控 1 秒节拍会派生探测线程、用量统计每 5 秒写一次盘，
+        # 窗口销毁后它们若再跑一次，回调就打在正在析构的界面上（实测反复开关窗口会
+        # 概率性 0xC0000005 闪退）。_closing 同时挡住已在路上的排队信号。
+        self._closing = True
+        self.monitor.stop()
+        self._residual_timer.stop()
+        self._usage_timer.stop()
         super().closeEvent(event)

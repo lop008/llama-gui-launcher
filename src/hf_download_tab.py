@@ -13,7 +13,7 @@ from PyQt6.QtCore import Qt, QUrl, pyqtSignal
 from PyQt6.QtGui import QBrush, QColor, QDesktopServices
 from PyQt6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QGroupBox, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton,
+    QLabel, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton,
     QSplitter, QTableWidget, QTableWidgetItem, QTextBrowser, QTreeWidget,
     QTreeWidgetItem, QVBoxLayout, QWidget,
 )
@@ -22,7 +22,7 @@ from . import hf_browse
 from .model_downloader import ModelDownloader
 from .model_scanner import human_size, natural_key
 from .i18n import t
-from .ui.kit import Badge, Card, SectionHeader
+from .ui.kit import Badge, Card, ColumnResizer, SectionHeader
 
 # 常用的 GGUF 发布组织/作者（仍允许手动输入任意值）
 COMMON_AUTHORS = [
@@ -189,11 +189,10 @@ class HFDownloadTab(QWidget):
         self.tree_files.setAlternatingRowColors(True)
         self.tree_files.setRootIsDecorated(True)
         self.tree_files.setUniformRowHeights(True)
-        hh = self.tree_files.header()
-        hh.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.tree_files.setColumnWidth(1, 90)
-        self.tree_files.setColumnWidth(2, 90)
-        self.tree_files.setColumnWidth(3, 150)
+        # 名称列原先是 Stretch：Stretch 列 Qt 不允许拖动，四列里最需要的反而调不了。
+        # 改成全部可拖 + 由 ColumnResizer 把视口剩余宽度补给名称列。
+        self._tree_resizer = ColumnResizer(
+            self.tree_files, [420, 90, 96, 150], fill_col=0, min_width=70)
         self.tree_files.itemChanged.connect(self._on_tree_item_changed)
         self.tree_files.itemDoubleClicked.connect(self._on_file_double)
         right.add(self.tree_files, 1)
@@ -278,16 +277,13 @@ class HFDownloadTab(QWidget):
         self.sync_default_dir()
 
     @staticmethod
-    def _setup_table(tbl, widths):
+    def _setup_table(tbl, widths, fill_col=0):
+        """通用表格外观 + 列宽策略：每列都能手动拖动，fill_col 吸收视口剩余宽度。"""
         tbl.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         tbl.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         tbl.verticalHeader().setVisible(False)
         tbl.setAlternatingRowColors(True)
-        hh = tbl.horizontalHeader()
-        hh.setSectionResizeMode(QHeaderView.ResizeMode.Interactive)
-        hh.setMinimumSectionSize(40)
-        for i, w in enumerate(widths):
-            tbl.setColumnWidth(i, w)
+        ColumnResizer(tbl, widths, fill_col=fill_col, min_width=40)
 
     # ------------------------------------------------------------- 保存目录
     def sync_default_dir(self):

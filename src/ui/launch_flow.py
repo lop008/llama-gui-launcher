@@ -4,9 +4,10 @@
 import os
 import webbrowser
 
-from PyQt6.QtWidgets import QCheckBox, QMessageBox
+from PyQt6.QtWidgets import QCheckBox, QMessageBox, QTreeWidgetItem
 from ..bat_validator import ValidateBatDialog
 from ..cmd_builder import build_args, build_command
+from ..cmd_explainer import explain_command
 from ..i18n import t
 from ..net_utils import default_cert_paths, ensure_self_signed_cert, local_ipv4
 from ..server import find_llama_server_processes, kill_all_llama_server, port_in_use
@@ -24,15 +25,45 @@ class LaunchFlowMixin:
         model = self.combo_model.currentData()
         if not model:
             self.preview_view.setPlainText(t('请选择模型'))
+            self._fill_preview_tree("")
             return
         llama_dir = self.edit_dir.text().strip()
         s = self._gather_server_cfg()
         try:
             args = build_args(model, self.combo_mmproj.currentData(), s, llama_dir,
                               launcher_exe=self._launcher_exe())
-            self.preview_view.setPlainText(build_command(args))
+            cmd = build_command(args)
+            self.preview_view.setPlainText(cmd)
+            self._fill_preview_tree(cmd)
         except Exception as e:
             self.preview_view.setPlainText(t('生成命令失败: {0}').format(e))
+            self._fill_preview_tree("")
+
+    def _fill_preview_tree(self, cmd):
+        """「命令预览」上半部：左列原样参数、右列中文作用。
+
+        拆解只是解释，绝不影响下方完整命令：真出问题就把这一栏清空，
+        用户仍能看到并复制真实命令行。
+        """
+        tree = getattr(self, "preview_tree", None)
+        if tree is None:
+            return
+        tree.setUpdatesEnabled(False)        # 逐行插入时避免整棵树反复重绘
+        try:
+            tree.clear()
+            for flag, value, meaning in explain_command(cmd):
+                it = QTreeWidgetItem()
+                it.setText(0, (flag + "  " + value).strip())
+                it.setText(1, meaning)
+                if flag:
+                    it.setFont(0, self._preview_mono)
+                if value:
+                    it.setToolTip(0, value)  # 长路径在列宽不够时靠悬停看全
+                tree.addTopLevelItem(it)
+        except Exception:
+            tree.clear()
+        finally:
+            tree.setUpdatesEnabled(True)
     # ------------------------------------------------------------- 服务
 
     def start_server(self):
@@ -247,7 +278,19 @@ class LaunchFlowMixin:
             self._log_file(t('[端口] {0} 被占用，已改用 {1}').format(port, free))
             self.statusBar().showMessage(t('已改用端口 {0}').format(free), 5000)
 
+    def _arm_residual_check(self, _version=""):
+        """版本探测结束后延后 600ms 再查残留。
+
+        延后是因为探测进程本身就叫 llama-server.exe；用挂在窗口上的定时器
+        而不是 QTimer.singleShot：后者不受窗口生命周期约束，关窗后仍会触发。
+        """
+        if getattr(self, "_closing", False):
+            return
+        self._residual_timer.start(600)
+
     def _check_residual(self):
+        if getattr(self, "_closing", False):
+            return
         if self.server.running:
             return
         if not self.check_residual.isChecked():

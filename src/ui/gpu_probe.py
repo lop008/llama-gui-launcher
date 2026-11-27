@@ -97,6 +97,8 @@ class GpuMixin:
 
     def detect_gpus(self):
         """调用 llama-server --list-devices 检测本机 GPU（后台线程）。"""
+        if getattr(self, "_closing", False):
+            return          # 由无父对象的 QTimer.singleShot 触发，关窗后仍会到点
         import re as _re
         exe = self._launcher_exe()
 
