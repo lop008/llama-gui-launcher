@@ -49,6 +49,29 @@ launch-breaking upstream change (`--mlock` removed) that is now handled per buil
   `attention.head_count` as an array (24 identical entries), which was passed straight into
   arithmetic and raised `TypeError`. Array metadata now collapses to that value when every entry
   agrees, or to the largest entry — better to over-estimate VRAM needs than to under-estimate.
+- **A failed self-update could leave the launcher unopenable** — the swap script was three `move`
+  commands with no error checking: if the freshly downloaded unsigned exe got quarantined by
+  antivirus in the meantime (routine), the script had already renamed the working exe to `.bak`,
+  then moved a file that no longer existed and still tried to start it. Reproduced on this machine
+  with the real script over dummy files: the user's entry point was simply gone. Every step now
+  checks `errorlevel`, any failure restores the `.bak`, nothing is started that may not exist, and
+  the result code is written for the next launch to explain in the status bar (once). Rollback
+  keeps the *reason* code rather than overwriting it with a generic "restored".
+- **The download was never verified, and resume could splice two releases together** — the GitHub
+  asset size was available and unused, and a `.part` from a re-uploaded release of the same name
+  would be appended to, producing a corrupt exe that then hit the bug above. Downloads are now
+  checked against the reported size plus a file-header check (`MZ` / a readable zip), and `.part`
+  files record their source URL: a different URL, or more bytes than expected, forces a re-download.
+  Disk space is checked before starting (a portable package needs roughly 3×: zip + unpacked deps).
+- **Portable installs were replaced by the single-file build** — asset picking always preferred
+  `.exe`, so a folder-based install (exe + `_internal`) got the 47 MB single-file build dropped on
+  it: it runs, but leaves `_internal` as tens of MB of dead weight and starts slower. The launcher
+  now detects its own install type (`install_kind()`) and a portable folder upgrades via
+  `-portable.zip`, replacing the exe **and** `_internal` while leaving your `config.json`, `logs/`
+  and `stats.json` alone. If a release only ships one flavour, the dialog says so instead of
+  swapping silently. The zip's Chinese top-level folder name is not trusted — PyInstaller does not
+  set the UTF-8 flag, so `zipfile` returns mojibake; entries are mapped by "ends with .exe" and
+  "below `_internal/`" instead.
 
 ### New Features
 
@@ -144,9 +167,9 @@ launch-breaking upstream change (`--mlock` removed) that is now handled per buil
 - **Tabs are visibly tabs** — the v0.6.0 `brown` theme had `QTabBar::tab { border: none }`,
   leaving only a background tint. Unselected tabs have a 1 px border, 3 px offset and rounded
   corners again; the selected one gets a 2 px accent border and bold text.
-- 229 interface strings from the three batches translated into all 7 languages (zh-TW / en / ja /
-  ko / ru / es / fr); 15 strings obsoleted by the reworked pages were removed. All tables hold
-  1173 entries with 0 missing, 0 unused and identical placeholders.
+- 259 interface strings from the four batches translated into all 7 languages (zh-TW / en / ja /
+  ko / ru / es / fr); 19 strings obsoleted by the reworked pages were removed. All tables hold
+  1199 entries with 0 missing, 0 unused and identical placeholders.
 
 ## [0.6.0] - 2026-11-27
 

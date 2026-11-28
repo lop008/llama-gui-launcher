@@ -155,6 +155,8 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
             QTimer.singleShot(3000, self.prefetch_engine_flags)
         if not os.environ.get("LLAMA_LAUNCHER_NO_UPDATE_CHECK"):
             QTimer.singleShot(6000, self.check_launcher_update_silent)
+        # 上一次自升级的结局（成功 / 失败并已回滚）：替换脚本自己没法弹框，这里补上
+        QTimer.singleShot(1500, self.report_last_self_update)
 
 
     def _build_ui(self):

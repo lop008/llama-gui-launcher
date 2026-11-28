@@ -172,6 +172,26 @@ class MenuAboutMixin:
         import threading
         threading.Thread(target=work, daemon=True).start()
 
+    def report_last_self_update(self):
+        """上次自升级的收尾提示：替换脚本只能写标记文件，弹框得靠这里。
+
+        重点是失败场景——脚本会自动把 .bak 改回去，但如果没人告诉用户「刚才那次
+        升级失败了、现在跑的还是原版本」，用户只会觉得「点了升级没反应」。
+        """
+        try:
+            from .. import launcher_updater
+            code = launcher_updater.read_last_result()
+        except Exception:
+            return
+        if not code or code == launcher_updater.RESULT_OK:
+            return
+        msg = launcher_updater.result_text(code)
+        try:
+            self._status_tip(t('启动器升级：{0}').format(msg), 15000)
+            self._log_file(t('启动器升级结果：{0}（标记 {1}）').format(msg, code))
+        except Exception:
+            pass
+
     def _apply_launcher_update_hint(self, tag):
         base = t('LLama 启动器 v{0}').format(__version__)
         self.setWindowTitle(f"{base} · ⬆ {tag}")

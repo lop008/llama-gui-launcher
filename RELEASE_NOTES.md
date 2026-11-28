@@ -44,6 +44,18 @@ receiving expert flags at all.
   `attention.head_count` as a 24-element array; it went straight into arithmetic and raised
   `TypeError`. Array metadata now collapses to the common value, or to the largest entry, so VRAM
   is over-estimated rather than the check falling over.
+- **A failed self-update could leave the launcher unopenable** — the swap script was three `move`
+  commands with no error checking, so an antivirus quietly eating the freshly downloaded exe meant:
+  working exe renamed to `.bak`, second move fails, script still launches a file that isn't there.
+  Reproduced with the real script over dummy files. Every step now checks for failure, restores the
+  `.bak`, never starts something that may not exist, and explains itself in the status bar on the
+  next launch (once only).
+- **Self-update downloads were unverified, and portable installs got the wrong package** — the
+  download now has to match the size GitHub reports and pass a file-header check, `.part` resumes
+  refuse to splice two different releases together, and free disk space is checked first. The
+  launcher also detects whether it is a single-file or a folder (`_internal`) install: portable
+  upgrades now swap the exe **and** `_internal` from `-portable.zip` while leaving `config.json`,
+  logs and stats untouched, instead of dropping the 47 MB single-file build on top.
 
 ### New Features
 
@@ -111,8 +123,8 @@ receiving expert flags at all.
 - **Tool menu grouped** (model / service & web / launch file / config / logs & stats / font size /
   language); path columns elide in the middle so file names survive; tabs have visible borders
   again (the v0.6.0 theme had removed them).
-- 229 interface strings from the three batches translated into all 7 languages; 15 obsolete ones
-  removed — every table holds 1173 entries, 0 missing, 0 unused.
+- 259 interface strings from the four batches translated into all 7 languages; 19 obsolete ones
+  removed — every table holds 1199 entries, 0 missing, 0 unused.
 
 ### Downloads
 
@@ -152,6 +164,17 @@ llama.cpp 0.4.1 删掉了 `--mlock`，启动器现在按本机版本写出你这
   界面上整套设置同步置灰并说明原因；专家分布读不出时**不猜**，保留用户显式设置的值。
 - **体检不再被逐层数组元数据打崩**：Inkling 2 把 `attention.head_count` 写成 24 个元素的数组，
   原样取出参与运算直接抛 `TypeError`。现在数组元素全相同取该值、不全相同取最大值（宁可高估显存）。
+- **自升级替换失败不再弄丢程序**：原来那步替换脚本是三条 `move`、**一处失败判断都没有**。新版
+  exe 被安全软件隔离（未签名新程序被 Defender 吞掉是常事）时：旧 exe 已被改名成 `.bak`、第二条
+  搬的是不存在的文件、脚本还照样去启动它——现象就是「点了升级，软件打不开了」。本机拿真脚本对
+  假文件复现过。现在每一步都判 `errorlevel`，失败自动把 `.bak` 改回去、绝不启动不存在的文件，
+  下次启动在状态栏说明失败原因（只提醒一次，回滚成功时保留的是**失败原因**而不是笼统一句）。
+- **自升级先验货，便携版不再被换成单文件包**：下载要通过与 GitHub 报的大小比对 + 文件头检查
+  （exe 查 `MZ`、zip 要能解开），不合格直接删掉重来、根本不进替换流程；`.part` 断点续传会记住
+  来源 URL，Release 重传同名包时丢弃重下，不会拼出坏文件；升级前先看磁盘余量。另外启动器现在
+  认得自己是**单文件版**还是**便携目录版（exe + `_internal`）**：便携版走 `-portable.zip`，连
+  `_internal` 一起换，**你自己的 `config.json` / `logs/` / `stats.json` 一个都不动**，也不会再被
+  47 MB 的单文件包盖掉（能跑，但留一堆死文件、启动还更慢）。
 
 ### 🆕 新增功能
 
@@ -204,7 +227,7 @@ llama.cpp 0.4.1 删掉了 `--mlock`，启动器现在按本机版本写出你这
 - **更新页布局**：版本表 / 版本信息 / 操作日志放进一个竖向分栏；操作列宽度按按钮实测尺寸计算，任何语言、任何字号都不裁字。
 - **工具菜单收进二级**（模型 / 服务与网页 / 启动文件 / 配置 / 日志与统计 / 字号 / 语言）；路径列改中间省略，
   窗口变窄也看得见文件名；页签恢复可见描边（v0.6.0 主题误写 `border: none`）。
-- 三批共 229 条新增界面文案全部译入 7 张语言表，并清掉改版失效的 15 条：各表 1173 条，缺失 0、多余 0、占位符一致。
+- 四批共 259 条新增界面文案全部译入 7 张语言表，并清掉改版失效的 19 条：各表 1199 条，缺失 0、多余 0、占位符一致。
 
 ---
 

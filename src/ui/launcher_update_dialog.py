@@ -16,6 +16,12 @@ from .. import launcher_updater as up
 from ..i18n import t
 from .kit import Badge, Card, SectionHeader
 
+_KIND_LABEL = {
+    "single": t('单文件版'),
+    "portable": t('便携目录版（exe + _internal）'),
+    "source": t('源码运行'),
+}
+
 
 class _CheckWorker(QThread):
     ok = pyqtSignal(object)
@@ -33,10 +39,11 @@ class _DownloadWorker(QThread):
     done = pyqtSignal(str)
     err = pyqtSignal(str)
 
-    def __init__(self, url, dest):
+    def __init__(self, url, dest, expect_size=0):
         super().__init__()
         self._url = url
         self._dest = dest
+        self._expect = expect_size
         self._cancel = False
 
     def cancel(self):
@@ -46,7 +53,8 @@ class _DownloadWorker(QThread):
         try:
             path = up.download(self._url, self._dest,
                                progress_cb=lambda d, t2: self.progress.emit(d, t2),
-                               cancel=lambda: self._cancel)
+                               cancel=lambda: self._cancel,
+                               expect_size=self._expect)
             self.done.emit(path)
         except Exception as e:
             self.err.emit(str(e))
@@ -61,6 +69,7 @@ class LauncherUpdateDialog(QDialog):
         self._asset = None
         self._check_worker = None
         self._download_worker = None
+        self._kind = up.install_kind()
 
         root = QVBoxLayout(self)
         root.setSpacing(8)
@@ -74,9 +83,16 @@ class LauncherUpdateDialog(QDialog):
         info = QHBoxLayout()
         self.label_current = QLabel(t('当前版本: v{0}').format(__version__))
         self.label_latest = QLabel(t('最新版本: 检查中…'))
+        # 安装形态：决定挑哪个包、能不能自动替换（便携版要连 _internal 一起换）
+        self.label_kind = QLabel(t('安装形态: {0}').format(_KIND_LABEL.get(self._kind, self._kind)))
+        self.label_kind.setToolTip(
+            t('单文件版只换一个 exe；便携目录版旁边还有 _internal 依赖目录，\n'
+              '升级时会连依赖一起换，你自己的 config.json、日志、统计都不会动。'))
         info.addWidget(self.label_current)
         info.addSpacing(16)
         info.addWidget(self.label_latest)
+        info.addSpacing(16)
+        info.addWidget(self.label_kind)
         info.addStretch(1)
         hero.add_layout(info)
 
@@ -119,28 +135,33 @@ class LauncherUpdateDialog(QDialog):
         self.btn_install.setEnabled(False)
         self.btn_check.setEnabled(False)
         self._check_worker = _CheckWorker()
-        self._check_worker.ok.connect(self._on_check_ok)
+        self._check_worker.ok.connect(self._apply_release)
         self._check_worker.err.connect(self._on_check_err)
         self._check_worker.start()
 
-    def _on_check_ok(self, rel):
+    def _apply_release(self, rel):
+        """把检查结果落到界面上：能不能升级、会拿到哪个包，都写明白。"""
         self.btn_check.setEnabled(True)
         self._release = rel
         tag = rel.get("tag") or ""
         self.label_latest.setText(t('最新版本: {0}（{1}）').format(tag, rel.get("published_at") or "—"))
-        if up.is_newer(__version__, tag):
-            self.badge.set_status(t('发现新版本'), "ok")
-        else:
+        if not up.is_newer(__version__, tag):
             self.badge.set_status(t('已是最新'), "info")
-        self._asset = up.pick_asset(rel)
-        if up.is_newer(__version__, tag):
-            if self._asset:
-                self.badge.set_status(
-                    t('发现新版本 · {0}').format(self._asset.get("name")), "ok")
-            else:
+            self.btn_install.setEnabled(False)
+        else:
+            self._asset = up.pick_asset(rel, kind=self._kind)
+            if not self._asset:
                 self.badge.set_status(t('新版本没有可用安装包'), "warn")
-        else:
-            self.badge.set_status(t('已是最新'), "info")
+                self.btn_install.setEnabled(False)
+            else:
+                note = ""
+                # 便携版没打到 zip 时会被换成单文件包：能跑，但要说清楚
+                if self._kind == "portable" and str(self._asset.get("name", "")
+                                                    ).lower().endswith(".exe"):
+                    note = t(' · ') + t('便携包缺失，将改用单文件版')
+                self.badge.set_status(
+                    t('发现新版本 · {0}').format(self._asset.get("name")) + note, "ok")
+                self.btn_install.setEnabled(True)
         body = (rel.get("body") or "")[:6000]
         html = ("<h3>" + tag + "　" + (rel.get("name") or "") + "</h3>"
                 "<pre style='white-space:pre-wrap;font-family:Consolas,monospace;'>"
@@ -149,10 +170,6 @@ class LauncherUpdateDialog(QDialog):
             html += "<p><a href='{0}'>{1}</a></p>".format(
                 _esc(rel["html_url"], quote=True), t('打开发布页面'))
         self.notes.setHtml(html)
-        can = up.is_newer(__version__, tag) and self._asset is not None
-        self.btn_install.setEnabled(bool(can))
-        if up.is_newer(__version__, tag) and not self._asset:
-            self.badge.set_status(t('新版本没有可用安装包'), "warn")
 
     def _on_check_err(self, msg):
         self.btn_check.setEnabled(True)
@@ -162,6 +179,14 @@ class LauncherUpdateDialog(QDialog):
     def _open_page(self):
         url = (self._release or {}).get("html_url") or "https://github.com/lop008/llama-gui-launcher/releases"
         QDesktopServices.openUrl(QUrl(url))
+
+    def _fail(self, msg, retry=True):
+        """失败时统一收尾：状态栏/徽标说清楚，按钮恢复。"""
+        self.progress.setVisible(False)
+        self.badge.set_status(t('升级失败'), "err")
+        self.btn_check.setEnabled(True)
+        self.btn_install.setEnabled(bool(retry))
+        QMessageBox.critical(self, t('升级失败'), msg)
 
     def _install(self):
         if not self._release or not self._asset:
@@ -174,19 +199,22 @@ class LauncherUpdateDialog(QDialog):
             return
         url = self._asset.get("url") or ""
         name = self._asset.get("name") or "launcher.exe"
-        if not name.lower().endswith(".exe"):
-            QMessageBox.information(
-                self, t('需要手动解压'),
-                t('最新版只提供了 portable zip，无法自动替换。\n已为你打开 Release 页面。'))
-            self._open_page()
+        size = int(self._asset.get("size") or 0)
+        # 磁盘不够就别开始了：便携包要同时容下 zip + 解压后的 _internal（约两倍）
+        need = size * (3 if name.lower().endswith(".zip") else 2)
+        enough, avail = up.disk_space_ok(sys.executable, need)
+        if not enough:
+            self._fail(t('磁盘余量不足：本次升级约需 {0:.1f} GiB，当前只剩 {1:.1f} GiB。'
+                         '清理后重试。').format(need / 1024 ** 3, avail), retry=True)
             return
         tag = str(self._release.get("tag") or "latest").replace("/", "_")
-        dest = os.path.join(tempfile.gettempdir(), f"LLama-Launcher-{tag}-new.exe")
+        dest = os.path.join(tempfile.gettempdir(), f"LLama-Launcher-{tag}-new"
+                            + (".zip" if name.lower().endswith(".zip") else ".exe"))
         self.progress.setVisible(True)
         self.progress.setValue(0)
         self.btn_install.setEnabled(False)
         self.btn_check.setEnabled(False)
-        self._download_worker = _DownloadWorker(url, dest)
+        self._download_worker = _DownloadWorker(url, dest, expect_size=size)
         self._download_worker.progress.connect(self._on_progress)
         self._download_worker.done.connect(self._on_download_done)
         self._download_worker.err.connect(self._on_download_err)
@@ -200,17 +228,35 @@ class LauncherUpdateDialog(QDialog):
             self.progress.setFormat(f"{done / 1024 / 1024:.1f} MB")
 
     def _on_download_done(self, path):
+        """下载完成 → 先验货，再准备替换；**验不过绝不碰用户现有的程序**。"""
         self.progress.setValue(100)
+        ok, why = up.verify_download(path, self._asset)
+        if not ok:
+            try:
+                os.remove(path)      # 坏文件留在临时目录只会被下次续传坑回来
+            except OSError:
+                pass
+            self._fail(t('下载的文件没有通过校验：{0}。\n'
+                         '可能是网络中断、代理改写或安全软件拦截，已删除该文件，请重试。').format(why))
+            return
+        internal_dir = None
         try:
-            up.schedule_replace(path, sys.executable, pid=os.getpid(), restart=True)
+            if path.lower().endswith(".zip"):
+                # 便携版：先在临时目录解压备齐，替换脚本只做搬运，失败也能整段回滚
+                stage = os.path.join(tempfile.gettempdir(), "llama_launcher_stage")
+                got = up.extract_package(path, stage)
+                new_exe, internal_dir = got["exe"], got["internal"]
+            else:
+                new_exe = path
+            up.schedule_replace(new_exe, sys.executable, pid=os.getpid(), restart=True,
+                                internal_dir=internal_dir)
         except Exception as e:
-            QMessageBox.critical(self, t('安装失败'), str(e))
-            self.btn_install.setEnabled(True)
-            self.btn_check.setEnabled(True)
+            self._fail(str(e))
             return
         QMessageBox.information(
             self, t('准备重启'),
-            t('新版本已下载。点击「确定」后本程序会退出，替换文件并自动重启。'))
+            t('新版本已准备就绪。点击「确定」后本程序会退出，替换文件并自动重启。\n'
+              '替换过程若有任何一步失败，会自动恢复当前版本，不会让程序打不开。'))
         QApplication.instance().quit()
 
     def _on_download_err(self, msg):

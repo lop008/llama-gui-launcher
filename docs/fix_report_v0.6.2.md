@@ -1,9 +1,9 @@
 # LLama 万能启动器 v0.6.2 修复报告
 
-本轮处理用户提的 **12 条 + 第二批 6 条 + 第三批 1 项（微批/显存预算）**，外加顺手查出并修掉的 4 个真实 bug。
+本轮处理用户提的 **12 条 + 第二批 6 条 + 第三批 1 项（微批/显存预算）+ 第四批 1 项（自升级加固）**，外加顺手查出并修掉的 5 个真实 bug。
 当前状态：**改动已提交本地仓库，版本号已提到 `0.6.2`（`src/__init__.py`），但未打包、未推送 GitHub、未发 Release**；v0.6.1 从未单独发布，其 7 条修复与本报告内容合并为 v0.6.2（发布物料见 `CHANGELOG.md` / `RELEASE_NOTES.md` / `README*.md` / `参数说明.md`）。
 
-验证口径：`_test_all.py` 全 19 套件通过（新增 `moe` 71 项、`membudget` 37 项断言）+ 专项脚本（`_check_advisor.py`、`_check_validate_dialog.py`、`_check_updater.py`、`_check_assets.py`、`_check_cmd_flags.py`、`_v062_cases.py`、`_check_ai_live.py` 真机 AI）+ 七张语言表「缺失 0 · 多余 0 · 校验 PASS」。
+验证口径：`_test_all.py` 全 20 套件通过（新增 `moe` 71 项、`membudget` 37 项、`selfupdate` 62 项断言）+ 专项脚本（`_check_advisor.py`、`_check_validate_dialog.py`、`_check_updater.py`、`_check_assets.py`、`_check_cmd_flags.py`、`_v062_cases.py`、`_check_ai_live.py` 真机 AI）+ 七张语言表「缺失 0 · 多余 0 · 校验 PASS」。
 
 ---
 
@@ -217,13 +217,90 @@
 
 ---
 
+## 第四批（续修）：启动器自升级——从「能用」到「失败也不闯祸」
+
+### ㉕ 先回答「自升级做了没有」：做了，而且是完整链路
+
+不是空壳，代码在 `src/launcher_updater.py` + `src/ui/launcher_update_dialog.py`：
+
+| 环节 | 已有能力 |
+| --- | --- |
+| 入口 | 菜单「关于 → 检查启动器更新…」 |
+| 静默检查 | 启动后 6 秒后台查一次（`main_window.py`），**不弹窗**：只把窗口标题加上 `· ⬆ vX.Y.Z`，状态栏提示 12 秒 |
+| 开关 | 基础页「启动时检查启动器更新」，存 `config.json` 的 `check_launcher_update`，默认开 |
+| 比版本 | `parse_version` 处理 `v` 前缀、缺省 patch、`beta/rc` 排在正式版之前（实测 9 组边界正确） |
+| 挑包 | `host_arch()` 认 ARM64（连 32 位进程跑在 ARM 上的 `PROCESSOR_ARCHITEW6432` 也探），x64/arm64 分别匹配 |
+| 下载 | 后台线程 + 进度条 + 可取消；`.part` 断点续传（带 `Range`，处理 416） |
+| 替换 | 生成独立 `.bat`：等本进程退出 → 旧 exe 备份 `.bak` → 覆盖 → 重启 → 自删脚本 |
+| 兜底 | 源码运行（`python main.py`）不换自己，改为打开 Release 页；只有 zip 时提示手动下载 |
+
+事实补充：截至本轮，GitHub 上最新发布仍是 **v0.6.0（2026-11-27）**，本地 0.6.2 未推送未发布——所以「已装用户能升到 0.6.2」要等发布之后才成立。
+
+### ㉖ 实测复现出一个能弄丢用户程序的缺陷
+
+老版 `schedule_replace` 生成的 bat 只有三条 `move`，**一处 errorlevel 判断都没有**。我把脚本拿临时假文件真跑了一遍（模拟「下载完的新 exe 被安全软件隔离」——未签名新 exe 被 Defender 实时保护吞掉是日常）：
+
+```
+=== 结果 ===
+  LLama-Launcher-win-x64.exe.bak     9 字节  内容='OLD-BUILD'
+用户的「双击 exe」入口还在吗: False
+```
+
+旧 exe 已经被改名成 `.bak`，第二条 `move` 搬的是不存在的文件（照样失败），第三条 `start` 也照样执行。用户视角就是「点了升级，软件打不开了」，而数据其实在 `.bak` 里，只是没人会知道。`schedule_replace` 里那句 `if not os.path.isfile(new_exe)` 只在**生成脚本那一刻**查一次，防不住这种情况。
+
+### ㉗ 修法：每步判错、自动回滚、结果留痕
+
+新 bat 的成功路径与失败路径都各自真跑验证：
+
+- 每一步 `move` / `xcopy` 后立刻 `if errorlevel 1`，按失败种类写不同标记码。
+- **回滚**：任何一步失败都把 `.bak` 改回去；回滚成功时**保留失败原因**标记（只有回滚也失败才升级为 `fail_rollback`，那时才提示用户手动改文件名）。
+- 失败时**绝不 `start`** 一个可能不存在的 exe。
+- 等 PID 退出那段加了次数上限（约 60 秒），不会因为误判永久卡住。
+- 结果只写 **ASCII 标记码**（`ok` / `fail_locked` / `fail_copy_internal` / `fail_move_exe` / `fail_internal_locked` / `fail_rollback` / `pending`）到临时目录的 `llama_launcher_update_result.txt`，避免 bat 写中文的编码坑；界面 `report_last_self_update()` 下次启动读一次并翻成当前语言（状态栏 + 运行日志），**读一次即清**，不会天天提醒。
+
+单文件版的回滚**不复用**便携版那段（后者会清 `_internal`）——测试里专门有一条：单文件 exe 的目录里如果本来就放着别人的 `_internal`，回滚后必须完好。
+
+### ㉘ 下载完要验货，坏文件不许进替换流程
+
+`verify_download()`：大小与 GitHub 报的 asset size 比对（API 一直有给，以前没用）+ 文件头检查（exe 查 `MZ`，zip 查 `PK` 且 `is_zipfile`）。不过就直接删掉、报原因，**根本不生成替换脚本**。
+
+断点续传也补了防串：`.part` 旁边记一个 `.meta.json`（存 URL）。URL 变了（Release 被重新上传过同名文件）或者已有部分**比预期大小还大**，就丢弃重下——否则旧半截拼新半截正好产出 ㉖ 那种坏 exe。
+
+另外 `disk_space_ok()`：便携包要同时容下 zip + 解压后的 `_internal`（约需 3 倍体积），不够就在点下载之前说清楚，而不是下到一半失败。
+
+### ㉙ 便携版不再被换成单文件包
+
+`install_kind()` 按「exe 旁边有没有 `_internal`」区分 `single` / `portable` / `source`（PyInstaller onedir 必然带 `_internal`）。老逻辑一律优先 `.exe`，于是**便携目录用户会被推单文件包**：覆盖后能跑，但 `_internal` 变成几十 MB 垃圾，启动还慢一截（实测本机 `dist/` 里便携 exe 只有 5.95 MB，单文件包 47 MB）。
+
+现在 `pick_asset(release, arch, kind)` 按形态分流：便携优先 `-portable.zip`，单文件优先 `.exe`；目标形态没打包时退而求其次，并在徽标上写明「便携包缺失，将改用单文件版」。
+
+便携包的替换走「先解压备齐，再只搬运」：`extract_package()` 把 zip 解到临时 stage，**不照搬 zip 里的顶层目录名**——那层名字是中文（`LLama启动器-win-x64-portable/`），而 PyInstaller 写 zip 没置 UTF-8 标志位，`zipfile` 按 cp437 解出来是乱码，路径根本没法用；改成按「`.exe` 结尾」与「`_internal/` 之下」两类逐条落盘。bat 只负责：挪旧 exe → 旧 `_internal` 改名 `.old` → `xcopy` 新 `_internal` → 放新 exe → 清理 `.old`/`.bak` → 启动；**用户自己的 `config.json`、`logs/`、`stats.json` 一个都不碰**（测试逐条断言）。
+
+对话框新增「安装形态: 单文件版 / 便携目录版（exe + _internal）/ 源码运行」，tooltip 说明升级会不会动依赖、用户数据动不动。
+
+### 验证
+
+- 新增 `_test_selfupdate.py` **62 项**，注册为 `_test_all.py` 的 `selfupdate` 套件（现 20 套件）。关键项都是**真跑**：成功替换 / 新文件消失后回滚 / 旧 exe 被占用（用不带 `FILE_SHARE_DELETE` 的文件句柄锁住，rename 必然失败）/ 便携版整包替换并核对用户数据未动 / 单文件回滚不误删 `_internal`。
+- 解压用合成 zip（中文顶层目录）+ **真实发布包** `dist/LLama启动器-win-x64-portable.zip` 各跑一遍。
+- `pick_asset` 兼容旧调用形式（只传 arch），既有 `_test_v06.py` 4 条断言不破。
+- i18n：30 条新增界面文案译入 7 张表并清掉 4 条失效；各表 **1199 条，缺失 0、多余 0、`_i18n_validate.py` PASS**。
+
+### 明确没做的（避免误导）
+
+- **没做代码签名**：那是发布层面的事，且自升级路径下未签名 exe 被杀软拦是真实风险，所以现在只能「失败可回滚 + 报得清楚」，不能假装不存在。
+- **没做哈希来源**：GitHub asset 本身不提供官方 sha256，要更强校验得在 Release 里附带校验文件并信任链，这轮先用「大小 + 文件头 + 解压可完成」兜住明显损坏。
+- **没有静默自动安装**：仍是用户点一次「下载并安装」，退出前再确认一次。自动替换别人的程序风险大于收益。
+- **没动 llama.cpp 的更新页**：`updater_tab.py` 那套（含 `schedule_self_update`，用于 llama.cpp 自身二进制）是另一条链路，本轮只改启动器自身的升级。
+
+---
+
 ## 多语言
 
-第二批新增界面文案 **46 条**（MoE 卸载预设与计算理由、稠密模型置灰说明、清屏按钮、数值档位 tooltip），第三批 **24 条**（微批 -ub、批处理峰值、启动前显存预算弹窗）；三批合计 **229 条新增 / 15 条失效清除**。
+第二批新增界面文案 **46 条**（MoE 卸载预设与计算理由、稠密模型置灰说明、清屏按钮、数值档位 tooltip），第三批 **24 条**（微批 -ub、批处理峰值、启动前显存预算弹窗），第四批 **30 条**（自升级形态分流、下载校验、替换失败回滚提示）；四批合计 **259 条新增 / 19 条失效清除**。
 
-- 现状：七张表各 **1173 条**，缺失 **0**、多余 **0**、`_i18n_validate.py` 全部 **PASS**（占位符一致、无空值、助记符未丢）。
+- 现状：七张表各 **1199 条**，缺失 **0**、多余 **0**、`_i18n_validate.py` 全部 **PASS**（占位符一致、无空值、助记符未丢）。
 - 后端名（CUDA/Vulkan/SYCL…）按既有约定七语统一显示原文，不入库翻译。
-- 一次性工具：`_i18n_data*.py`（翻译表）、`_i18n_gen4.py` / `_i18n_gen5.py`（键取自 `_i18n_missing.json`，避免手抄源串抄错；`_i18n_align.py` 校验七语占位符一致）、`_i18n_apply2.py`（注入 + 清失效 key）、`_i18n_keys_gen.py`（重新生成期望键）、`_i18n_spot.py`（抽查译文不是照抄简体）。
+- 一次性工具：`_i18n_data*.py`（翻译表）、`_i18n_gen4.py` / `_i18n_gen5.py` / `_i18n_gen6.py`（键取自 `_i18n_missing.json`，避免手抄源串抄错；`_i18n_align.py` 校验七语占位符一致）、`_i18n_apply2.py`（注入 + 清失效 key）、`_i18n_keys_gen.py`（重新生成期望键）、`_i18n_spot.py`（抽查译文不是照抄简体）。
 
 ## 已知边界（如实说明，不当成已实现）
 
