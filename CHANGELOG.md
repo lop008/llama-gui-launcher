@@ -94,6 +94,19 @@ launch-breaking upstream change (`--mlock` removed) that is now handled per buil
   instead of a buried menu item. Clearing affects only what is displayed; the per-day log files on
   disk are untouched, and the status bar says so. The widget also keeps at most 5000 lines, so a
   long-running service no longer grows memory by holding every line in the view.
+- **Micro-batch (`-ub`) exposed, plus a pre-launch VRAM budget** — the launcher never sent `-ub`
+  before (only an imported `.bat` could bring it in), yet it is the knob that decides how many
+  tokens actually enter the GPU at once. It now has its own field next to the batch size. Pressing
+  *Start* first estimates `weights + KV + batch activation buffer` against the VRAM that is
+  **actually free**: when the estimate doesn't fit, a dialog shows the three numbers and offers
+  "apply suggested micro-batch and start", "start anyway" or "cancel" — it never silently rewrites
+  your settings, and it is skipped entirely when the VRAM size cannot be read.
+- **The batch activation buffer is modelled from measurements** — a **Batch peak** item in the
+  sanity check built on `launch_advisor.attn_scratch_gib()`, whose coefficients come from 15 points
+  measured on this machine by reading llama-server's own `CUDA0 compute buffer size`: the same
+  0.6 GiB model spends 58 MiB at `-c 32768 -ub 512 -fa on` but **4.4 GiB** at
+  `-c 32768 -ub 2048 -fa off`. Max deviation 3.7%, deliberately biased to over-estimate, and the
+  text names the knob to turn: lower `-ub`, turn `-fa on`, lower `-c`, or quantise the KV cache.
 
 ### Improvements
 
@@ -131,9 +144,9 @@ launch-breaking upstream change (`--mlock` removed) that is now handled per buil
 - **Tabs are visibly tabs** — the v0.6.0 `brown` theme had `QTabBar::tab { border: none }`,
   leaving only a background tint. Unselected tabs have a 1 px border, 3 px offset and rounded
   corners again; the selected one gets a 2 px accent border and bold text.
-- 205 interface strings from the three batches translated into all 7 languages (zh-TW / en / ja /
-  ko / ru / es / fr); 11 strings obsoleted by the reworked pages were removed. All tables hold
-  1153 entries with 0 missing, 0 unused and identical placeholders.
+- 229 interface strings from the three batches translated into all 7 languages (zh-TW / en / ja /
+  ko / ru / es / fr); 15 strings obsoleted by the reworked pages were removed. All tables hold
+  1173 entries with 0 missing, 0 unused and identical placeholders.
 
 ## [0.6.0] - 2026-11-27
 

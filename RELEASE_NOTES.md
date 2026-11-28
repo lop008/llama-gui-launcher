@@ -81,6 +81,14 @@ receiving expert flags at all.
 - **Clear screen on the run-log tab** — "Clear" and "Open log folder" at the top of the tab.
   Clearing only empties what is displayed; the per-day log files on disk are untouched. The view
   now also holds at most 5000 lines so a long-running service stops eating memory.
+- **Micro-batch (`-ub`) + a pre-launch VRAM budget** — `-ub` was never sent by the launcher, yet
+  it decides how many tokens actually enter the GPU at once. It has its own field now. *Start* first
+  estimates `weights + KV + batch activation buffer` against the VRAM that is really free; when it
+  does not fit you get the three numbers plus "apply suggested micro-batch and start" / "start
+  anyway" / "cancel" — never a silent rewrite of your settings, and no dialog at all when the VRAM
+  size can't be read. The batch term is a measured model (15 points from llama-server's own
+  `CUDA0 compute buffer size`, max deviation 3.7%, biased to over-estimate): the same 0.6 GiB
+  model needs 58 MiB at `-c 32768 -ub 512 -fa on` and 4.4 GiB at `-c 32768 -ub 2048 -fa off`.
 
 ### Improvements
 
@@ -103,8 +111,8 @@ receiving expert flags at all.
 - **Tool menu grouped** (model / service & web / launch file / config / logs & stats / font size /
   language); path columns elide in the middle so file names survive; tabs have visible borders
   again (the v0.6.0 theme had removed them).
-- 205 interface strings from the three batches translated into all 7 languages; 11 obsolete ones
-  removed — every table holds 1153 entries, 0 missing, 0 unused.
+- 229 interface strings from the three batches translated into all 7 languages; 15 obsolete ones
+  removed — every table holds 1173 entries, 0 missing, 0 unused.
 
 ### Downloads
 
@@ -173,6 +181,12 @@ llama.cpp 0.4.1 删掉了 `--mlock`，启动器现在按本机版本写出你这
   256～8192）一点就填，也能直接敲任意数字，超范围自动钳到边界。
 - **运行日志页顶部「清屏 / 打开日志目录」**：清屏**只清界面显示**，磁盘上按天存放的日志文件不动，
   状态栏也会说明；界面另外只保留最近 5000 行，长时间跑服务不再把几十万行日志全吃进内存。
+- **微批 `-ub` 进界面 + 启动前显存预算**：启动器以前**根本不下发** `-ub`（只有导入的 bat 才带得上），
+  而它才是「一次真正进 GPU 算多少 token」的旋钮。现在它有独立一档；点启动时先按
+  `权重 + KV + 批处理激活缓冲` 与**当前可用显存**核算，超了就把三项数字摆出来，并给
+  「按建议改微批并启动 / 仍然启动 / 取消」——**绝不静默改你的设置**，取不到显存时不弹窗。
+  批处理那项是按本机 15 个实测点建的模式（llama-server 自报的 `CUDA0 compute buffer size`，最大偏差 3.7%，偏保守）：
+  同一个 0.6 GiB 模型，`-c 32768 -ub 512 -fa on` 只要 58 MiB，`-c 32768 -ub 2048 -fa off` 要 **4.4 GiB**。
 
 ### 🔧 改进
 
@@ -190,7 +204,7 @@ llama.cpp 0.4.1 删掉了 `--mlock`，启动器现在按本机版本写出你这
 - **更新页布局**：版本表 / 版本信息 / 操作日志放进一个竖向分栏；操作列宽度按按钮实测尺寸计算，任何语言、任何字号都不裁字。
 - **工具菜单收进二级**（模型 / 服务与网页 / 启动文件 / 配置 / 日志与统计 / 字号 / 语言）；路径列改中间省略，
   窗口变窄也看得见文件名；页签恢复可见描边（v0.6.0 主题误写 `border: none`）。
-- 三批共 205 条新增界面文案全部译入 7 张语言表，并清掉改版失效的 11 条：各表 1153 条，缺失 0、多余 0、占位符一致。
+- 三批共 229 条新增界面文案全部译入 7 张语言表，并清掉改版失效的 15 条：各表 1173 条，缺失 0、多余 0、占位符一致。
 
 ---
 

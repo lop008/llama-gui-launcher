@@ -9,6 +9,8 @@ from ..bat_validator import ValidateBatDialog
 from ..cmd_builder import build_args, build_command
 from ..cmd_explainer import explain_command
 from ..i18n import t
+from ..launch_advisor import (memory_budget, model_profile, probe_vram_free_mb,
+                              suggest_ubatch)
 from ..net_utils import default_cert_paths, ensure_self_signed_cert, local_ipv4
 from ..server import find_llama_server_processes, kill_all_llama_server, port_in_use
 
@@ -113,6 +115,11 @@ class LaunchFlowMixin:
                 QMessageBox.StandardButton.No)
             if ret != QMessageBox.StandardButton.Yes:
                 return
+        # 启动前显存预算（v0.6.2）：超了就摆数字 + 给一键下调，绝不静默改设置。
+        # 必须排在 build_args 之前：用户选「按建议改微批」时要让新值进命令行。
+        if not self._prelaunch_vram_check(model, s):
+            return
+        s = self._gather_server_cfg()
         try:
             args = build_args(model, mmproj_path, s, llama_dir, launcher_exe=self._launcher_exe())
         except Exception as e:
@@ -135,6 +142,82 @@ class LaunchFlowMixin:
             except Exception:
                 pass
             self.statusBar().showMessage(t('服务启动中…'), 0)
+
+    def _prelaunch_vram_check(self, model, s):
+        """启动前显存预算：估算超了就摆数字并给一键下调，**不静默改**用户设置。
+
+        「批处理激活缓冲」这一项按 llama-server 实测公式算（`launch_advisor.attn_scratch_gib`：
+        微批 × 上下文 × KV 头，与权重无关），因为这才是「小模型 + 大微批 + 长上下文」
+        启动即 `buffer allocation failed` 的原因；驱动、显存碎片、别的程序仍会影响结果，
+        所以文案一律写「估算」，并保留「仍然启动」。
+        """
+        try:
+            prof = model_profile(model)
+        except Exception:
+            return True
+        if not prof.get("exists"):
+            return True
+        if os.environ.get("LLAMA_LAUNCHER_NO_VRAM_CHECK"):
+            return True                 # 自动化测试用：测试机显存被别的进程占着，弹窗会卡住
+        free_mb = probe_vram_free_mb()
+        if free_mb <= 0:
+            return True                     # 取不到显存就不吓人，交给体检页
+        ctx = int(s.get("ctx") or 0)
+        batch = int(s.get("batch") or 0)
+        ub = int(s.get("ubatch") or 512)
+        slots = max(1, int(s.get("slots") or 1))
+        kv_type = str(s.get("kv_cache_k") or "f16")
+        fa = str(s.get("flash_attn") or "auto")
+        try:
+            budget = memory_budget(prof, ctx, batch=batch, ubatch=ub, slots=slots,
+                                   kv_type=kv_type, fa=fa)
+        except Exception:
+            return True
+        free_gib = free_mb / 1024.0
+        limit = free_gib * 0.97             # 留 3% 给驱动与碎片
+        if budget["total"] <= limit:
+            return True
+        try:
+            good_ub, fit = suggest_ubatch(prof, ctx, batch=batch, slots=slots,
+                                          kv_type=kv_type, fa=fa, vram_gib=limit)
+        except Exception:
+            good_ub, fit = None, budget
+
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(t('显存预算不足'))
+        body = t('按当前设置估算需要 {0:.1f} GiB（权重 {1:.1f} + KV {2:.1f} + 批处理 {3:.1f}），'
+                 '当前可用显存 {4:.1f} GiB。\n\n'
+                 '「批处理」那块由「微批 -ub {5} × 上下文 {6}」决定，与模型大小无关；'
+                 '关掉闪存注意力（-fa off）时它要整个物化，几千 token 就够上 GB。').format(
+                     budget["total"], budget["weights"], budget["kv"], budget["compute"],
+                     free_gib, budget["ubatch"], ctx)
+        if good_ub:
+            body += t('\n\n建议把微批 -ub 从 {0} 降到 {1}（估算降到 {2:.1f} GiB）。').format(
+                ub, good_ub, fit["total"])
+        else:
+            body += t('\n\n把微批降到 64 仍装不下（估算 {0:.1f} GiB）：'
+                      '还要降低上下文 -c、打开 -fa on，或把 -ngl 调小。').format(fit["total"])
+        box.setText(body)
+        box.setInformativeText(t('这是估算，不是保证：驱动、显存碎片、其它程序都会影响实际结果。'))
+        b_fix = None
+        if good_ub and int(good_ub) != int(ub):
+            b_fix = box.addButton(t('按建议改微批并启动'),
+                                  QMessageBox.ButtonRole.AcceptRole)
+        b_go = box.addButton(t('仍然启动'), QMessageBox.ButtonRole.DestructiveRole)
+        b_cancel = box.addButton(t('取消'), QMessageBox.ButtonRole.RejectRole)
+        box.setDefaultButton(b_cancel)
+        box.exec()
+        clicked = box.clickedButton()
+        if b_fix is not None and clicked == b_fix:
+            self.spin_ub.setValue(int(good_ub))
+            self.save_config()
+            self._status_tip(t('已把微批 -ub 调为 {0}').format(good_ub), 5000)
+            return True
+        if clicked == b_go:
+            self._status_tip(t('显存估算超出可用显存，按原设置启动'), 6000)
+            return True
+        return False
 
     def stop_server(self):
         self.server.stop()

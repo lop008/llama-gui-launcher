@@ -200,6 +200,14 @@ def build_args(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
     if batch > 0:
         args += ["-b", str(batch)]
 
+    # 物理微批（-ub）：一次真正进 GPU 计算的 token 数上限，llama.cpp 默认 512。
+    # 它是硬约束——不能大于 -b，否则启动期直接报参数错误，所以这里按下发值取 min。
+    # 关掉 Flash Attention 时，「微批 × 上下文」决定注意力分数矩阵有多大，
+    # 长上下文下把 -ub 设大是「小模型也显存分配失败」的典型原因（体检里会算这一项）。
+    ubatch = int(s.get("ubatch", 512) or 0)
+    if ubatch > 0:
+        args += ["-ub", str(min(ubatch, batch) if batch > 0 else ubatch)]
+
     slots = int(s.get("slots", -1) or -1)
     if slots > 0:
         args += ["-np", str(slots)]

@@ -38,6 +38,10 @@ DEFAULTS = {
         "n_predict": 8192,
         "threads": -1,
         "batch": 2048,
+        # 物理微批（-ub）：一次真正进 GPU 计算的 token 数上限。llama.cpp 默认 512。
+        # 关掉 Flash Attention 时，注意力分数矩阵按「微批 × 上下文」分配显存，
+        # 长上下文下把它设大是启动即显存分配失败的常见原因。
+        "ubatch": 512,
         "flash_attn": "on",
         "cont_batching": True,
         # KV 缓存 K / V 独立类型（-ctk / -ctv）

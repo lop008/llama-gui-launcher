@@ -254,7 +254,7 @@ class LayoutBasicMixin:
         self.combo_preset = QComboBox()
         for name, _ctx in PRESETS:
             self.combo_preset.addItem(name)
-        self.combo_preset.setToolTip(t('根据显卡显存大小，一键应用推荐的「上下文长度」（只修改「上下文长度」参数）。\n点选后「上下文长度」会同步更新为该档位；手动修改「上下文长度」后此下拉会自动回显对应档位或「自定义」。\n例：24GB 显存推荐 512K 上下文。'))
+        self.combo_preset.setToolTip(t('根据显卡显存大小，一键应用推荐的「上下文长度」（只修改「上下文长度」参数）。\n点选后「上下文长度」会同步更新为该档位；手动修改「上下文长度」后此下拉会自动回显对应档位或「自定义」。\n例：24GB 显存推荐 512K 上下文。\n\n注意：这只按显存档位给上下文，**不代表一定能跑起来**——权重 + KV + 批处理峰值（微批 × 上下文）合计仍可能超显存，\n尤其关掉 Flash Attention 或把「微批(-ub)」设大时。要下结论请用「工具 → 启动文件 → 校验启动文件 → 合理性体检」。'))
         self._gen_grid.addWidget(self.combo_preset, 0, 1)
 
         self._gen_grid.addWidget(QLabel(t('上下文长度:')), 0, 2)
@@ -510,6 +510,25 @@ class LayoutBasicMixin:
         self.combo_ngl.setToolTip(
             t('卸载到 GPU 显存中的层数（-ngl）。\nall = 尽可能全部放入显存；auto = 自动判断；0 = 纯 CPU 运行；也可填具体层数。\n与多显卡部署不冲突：ngl 决定总共卸载多少层，\n-ts/-sm（多显卡区）再决定这些层如何在多张卡之间分配。'))
         self._gen_grid.addWidget(self.combo_ngl, 2, 5)
+
+        # 第 2 行末尾：微批（-ub）。它和「批大小」不是一回事：
+        #   -b   是逻辑批（一次处理多少个 token 组成一批）
+        #   -ub  是**物理微批**：一次真正进 GPU 计算的 token 数上限
+        # 关掉 Flash Attention 时，注意力分数矩阵按 ub × 上下文 物化，
+        # 这是「小模型 + 大 batch 也炸显存」的主要来源（见显存预估里的「批处理峰值」）。
+        self._gen_grid.addWidget(QLabel(t('微批(-ub):')), 3, 0)
+        self.spin_ub = NumberCombo(1, 8192, [
+            ("64", 64), ("128", 128), ("256", 256), ("512", 512),
+            ("1024", 1024), ("2048", 2048),
+        ])
+        self.spin_ub.setValue(512)
+        self.spin_ub.setToolTip(
+            t('物理微批大小（-ub），llama.cpp 默认 512，一般不用改。\n'
+              '它是「一次真正进 GPU 计算的 token 数」上限：关掉 Flash Attention（-fa off）时，\n'
+              '注意力分数矩阵按 微批 × 上下文长度 分配显存，微批越大、上下文越长，峰值越高。\n'
+              '长上下文（≥32K）建议保持 256~512；调成 2048 这类值容易在启动时报显存分配失败。\n'
+              '不会超过「批大小(-b)」：超过时按批大小下发。'))
+        self._gen_grid.addWidget(self.spin_ub, 3, 1)
 
         # ---- KV 缓存 K/V：从「高级参数」移入「生成参数」----
         self.combo_kvc_k = QComboBox()

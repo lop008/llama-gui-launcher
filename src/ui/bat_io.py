@@ -145,6 +145,10 @@ class BatIOMixin:
                 v = _int(kv["batch"], t('批大小'), 1, 16384)
                 if v is not None:
                     self.spin_batch.setValue(v)
+            if "ubatch" in kv:
+                v = _int(kv["ubatch"], t('微批(-ub)'), 1, 8192)
+                if v is not None:
+                    self.spin_ub.setValue(v)
             if "threads" in kv:
                 v = _int(kv["threads"], t('CPU线程'), -1, 256)
                 if v is not None:

@@ -34,7 +34,7 @@ _PARAM_FLAGS = {
     "--host": "host",
     "-ngl": "ngl", "--n-gpu-layers": "ngl", "--gpu-layers": "ngl",
     "-b": "batch", "--batch-size": "batch",
-    "-ub": "ubatch",
+    "-ub": "ubatch", "--ubatch-size": "ubatch",
     "-t": "threads", "--threads": "threads",
     "-n": "predict", "--predict": "predict", "--n-predict": "predict",
     "--api-key": "api_key",

@@ -56,8 +56,19 @@ _NUM_FLAGS = ("-c", "--ctx-size", "-ngl", "--n-gpu-layers", "--gpu-layers",
 #: KV 缓存每元素字节数（q8_0 / q4_0 是含 super-block 缩放开销的近似值，文案里如实说明）
 _KV_BYTES = {"f16": 2.0, "bf16": 2.0, "q8_0": 1.06, "q4_0": 0.56, "q4_1": 0.56,
              "iq4_nl": 0.55, "f32": 4.0}
-#: 计算缓存（激活值、CUDA 上下文等）相对权重体积的经验占比
+#: 计算缓存（激活值、CUDA 上下文等）相对权重体积的经验占比（仅在拿不到 KV 头数时兜底）
 _COMPUTE_BUFFER_RATIO = 0.12
+#: 非 FA 路径物化两份：KQ 分数 + softmax 结果，每元素 4 字节（fp32）
+_ATTN_BYTES_PER_TOKEN_CTX = 8.0
+#: 实测倍率（Qwen3-0.6B Q8_0；ctx 8192 -ub 128…4096、ctx 2048…32768 共 13 个点，
+#: 理论式与实测的比值稳定在 1.06）
+_ATTN_OVERHEAD = 1.06
+#: 每个「微批 token」的固定开销（MiB）：实测 ctx→0 时 0.5703 MiB/ub 的截距
+_ATTN_PER_TOKEN_MIB = 0.04
+#: Flash Attention 下 ctx 相关项只剩约 3%（实测 32K/ub512：1108→58.5 MiB），
+#: 但每 token 的固定开销还在（约 0.05 MiB/ub），因为 FA 仍按块处理整批 token
+_FA_CTX_RATIO = 0.031
+_FA_PER_TOKEN_MIB = 0.053
 
 
 # ------------------------------------------------------------------ 脚本侧扫描
@@ -422,6 +433,62 @@ def kv_cache_gib(model, ctx, cache_type="f16", slots=1):
     return total / 2 ** 30
 
 
+def attn_scratch_gib(model, ctx, ubatch, fa_on=True, slots=1):
+    """批处理激活缓冲（GiB）——「大微批 × 长上下文」顶爆显存的真正来源。
+
+    关掉 Flash Attention 时，llama.cpp 会把 KQ 分数矩阵和 softmax 结果按
+    [KV 头数, 微批, 上下文] 物化成 fp32，所以大小 ∝ **KV 头 × 微批 × 上下文**：
+
+        MiB ≈ 微批 × (8 × KV头 × 上下文 / 2²⁰ × 1.06 + 0.04)
+
+    开 FA 时按块计算，上下文相关项只剩约 3%，但每个 token 的固定开销仍在：
+
+        MiB ≈ 微批 × (8 × KV头 × 上下文 / 2²⁰ × 0.03 + 0.05)
+
+    系数全部来自本机实测（Qwen3-0.6B Q8_0，读的是 llama-server 自己打印的
+    `CUDA0 compute buffer size`，与外机进程无关）：
+    ctx 8192 时 -ub 128/256/512/1024/2048/4096 → 73/146/292/584/1168/2336 MiB；
+    ctx 2048/4096/8192/16384/32768（-ub 512）→ 88/156/292/564/1108 MiB；
+    -fa on 时 32K/ub512 → 58.5 MiB、32K/ub2048 → 232.6 MiB。
+    公式对 13 个点全部落在 ±4% 内。
+
+    注意它**与权重体积无关**：小模型照样能耗掉几个 GB。
+    `-np`（并行 slot）会把微批再按 slot 切分，实测 np=2/4 时降到约 53% / 30%，
+    这里不折算（按最坏情况算，宁可提示偏保守）。
+    """
+    hkv = int(model.get("head_kv") or 0)
+    ub = int(ubatch or 512)
+    ctx = int(ctx or 0)
+    if not (hkv and ub and ctx):
+        return 0.0
+    base = _ATTN_BYTES_PER_TOKEN_CTX * hkv * ctx / float(2 ** 20)   # MiB / 微批token
+    if fa_on:
+        per_token = base * _FA_CTX_RATIO + _FA_PER_TOKEN_MIB
+    else:
+        per_token = base * _ATTN_OVERHEAD + _ATTN_PER_TOKEN_MIB
+    return ub * per_token / 1024.0
+
+
+def memory_budget(model, ctx, batch=2048, ubatch=512, slots=1, kv_type="f16", fa="auto"):
+    """权重 + KV + 批处理激活缓冲 → 一份可核对的显存预算（GiB）。
+
+    不拿「权重 × 12%」顶替激活缓冲：实测同一个 0.6B 模型，-ub 从 128 调到 2048，
+    计算缓冲从 73 MiB 涨到 1168 MiB（16 倍），权重一点没变。旧口径对
+    「小模型 + 大微批 + 长上下文」必然低估，而这种组合恰恰是最常见的翻车场景。
+    """
+    size = float(model.get("size_bytes") or 0) / 2 ** 30
+    fa_on = str(fa or "auto").strip().lower() != "off"
+    ub = int(ubatch or 512)
+    b = int(batch or 0)
+    if b > 0:
+        ub = min(ub, b)                      # 引擎侧硬约束：微批不得大于批大小
+    kv = kv_cache_gib(model, ctx, kv_type, slots)
+    attn = attn_scratch_gib(model, ctx, ub, fa_on)
+    compute = max(attn, size * _COMPUTE_BUFFER_RATIO)
+    return {"weights": size, "kv": kv, "attn": attn, "compute": compute,
+            "total": size + kv + compute, "ubatch": ub, "fa_on": fa_on}
+
+
 def assess(machine, model, params, nums, spec_on=False):
     """把「模型要多大 + 本机有多少」摆在一起，给出可执行的调整建议。"""
     items = []
@@ -429,8 +496,14 @@ def assess(machine, model, params, nums, spec_on=False):
     ctx = nums.get("ctx") or int(params.get("ctx") or params.get("-c") or 0)
     slots = nums.get("slots") or 1
     kv = kv_cache_gib(model, ctx, params.get("kv_k") or "f16", slots)
-    compute = size_gib * _COMPUTE_BUFFER_RATIO
-    need = size_gib + kv + compute
+    ubatch = int(nums.get("ubatch") or params.get("ubatch") or 512)
+    batch = int(nums.get("batch") or params.get("batch") or 2048)
+    fa_mode = str(params.get("flash_attn") or params.get("-fa") or "auto")
+    budget = memory_budget(model, ctx, batch=batch, ubatch=ubatch, slots=slots,
+                           kv_type=params.get("kv_k") or "f16", fa=fa_mode)
+    compute = budget["compute"]
+    attn = budget["attn"]
+    need = budget["total"]
 
     # 1) 上下文是否超过模型训练上限
     train = int(model.get("ctx_train") or 0)
@@ -446,27 +519,47 @@ def assess(machine, model, params, nums, spec_on=False):
 
     # 2) 显存吃不吃得住
     vram = float(machine.get("vram_total_gb") or 0)
+    ub = budget["ubatch"]
     if not model.get("exists"):
         items.append((t('显存需求'), "fail", t('模型文件不存在，无法估算')))
     elif vram <= 0:
         items.append((t('显存需求'), "warn",
                       t('未取到显存总量（点基础页的「检测 GPU」或先启动一次服务）；'
-                        '估算：权重 {0:.1f} GiB + KV {1:.1f} GiB + 计算缓存约 {2:.1f} GiB '
+                        '估算：权重 {0:.1f} GiB + KV {1:.1f} GiB + 批处理/计算 {2:.1f} GiB '
                         '≈ {3:.1f} GiB').format(size_gib, kv, compute, need)))
     elif need > vram:
         over = need - vram
-        tips = [t('把 -ngl 调小（部分层放内存）'), t('换更小的量化'),
-                t('减小 -c 或 -np')]
+        # 顺序按「见效快、代价小」排：先动微批/FA，再动上下文，最后才是 ngl/量化
+        tips = []
+        if attn >= 0.2:
+            tips.append(t('把微批 -ub 降到 256~512（现在 {0}，这是批处理峰值的主要来源）').format(ub))
+        if not budget["fa_on"]:
+            tips.append(t('把闪存注意力 -fa 设为 on（关掉时注意力分数矩阵要整个物化）'))
+        tips += [t('减小 -c 或 -np'), t('把 -ngl 调小（部分层放内存）'), t('换更小的量化')]
         if int(model.get("experts") or 0) > 0:
             tips.insert(0, t('MoE 模型：用「高级参数 → MoE 专家」的 --n-cpu-moe N 把部分专家放 CPU'))
         items.append((t('显存需求'), "warn",
-                      t('估算需要 {0:.1f} GiB（权重 {1:.1f} + KV {2:.1f} + 计算缓存约 {3:.1f}），'
+                      t('估算需要 {0:.1f} GiB（权重 {1:.1f} + KV {2:.1f} + 批处理/计算 {3:.1f}），'
                         '超过显存 {4:.1f} GiB 约 {5:.1f} GiB。建议：{6}').format(
                           need, size_gib, kv, compute, vram, over, t('、').join(tips))))
     else:
         items.append((t('显存需求'), "ok",
-                      t('估算需要 {0:.1f} GiB（权重 {1:.1f} + KV {2:.1f} + 计算缓存约 {3:.1f}），'
+                      t('估算需要 {0:.1f} GiB（权重 {1:.1f} + KV {2:.1f} + 批处理/计算 {3:.1f}），'
                         '显存 {4:.1f} GiB 够用').format(need, size_gib, kv, compute, vram)))
+
+    # 2b) 批处理峰值：与权重无关，只由「微批 × 上下文」决定，单独指出来才看得懂
+    if model.get("exists") and ctx and attn >= 0.2:
+        head_kv = int(model.get("head_kv") or 0)
+        detail = t('批处理激活约 {0:.2f} GiB：微批 -ub {1} × 上下文 {2}（KV 头 {3}，'
+                   '闪存注意力 {4}）。').format(
+                       attn, ub, ctx, head_kv or t('未知'),
+                       t('开') if budget["fa_on"] else t('关'))
+        if not budget["fa_on"] and ctx >= 8192:
+            detail += t('关掉 -fa 时这份矩阵要整个物化；改 -fa on 通常能把它压到零头，'
+                        '否则把 -ub 降到 256~512。')
+        elif attn >= 1.0:
+            detail += t('若启动时报显存分配失败（CUDA graph / buffer alloc），先降 -ub。')
+        items.append((t('批处理峰值'), "warn" if attn >= 1.0 else "ok", detail))
 
     # 3) 内存：--mlock 会强制把权重钉在物理内存里
     ram = float(machine.get("ram_avail_gb") or 0)
@@ -517,7 +610,44 @@ def assess(machine, model, params, nums, spec_on=False):
     return items
 
 
-# ------------------------------------------------------------------ 界面接线
+def probe_vram_free_mb(timeout=4):
+    """当前**可用**显存（MB，多卡求和）。取不到返回 0，调用方如实说明未取到。"""
+    try:
+        proc = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.total,memory.used",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, timeout=timeout,
+            encoding="utf-8", errors="replace", creationflags=CREATE_NO_WINDOW)
+    except (OSError, subprocess.SubprocessError):
+        return 0.0
+    if proc.returncode != 0:
+        return 0.0
+    free = 0.0
+    for line in (proc.stdout or "").strip().splitlines():
+        parts = [x.strip() for x in line.split(",")]
+        if len(parts) < 2:
+            continue
+        try:
+            free += max(0.0, float(parts[0]) - float(parts[1]))
+        except ValueError:
+            continue
+    return free
+
+
+def suggest_ubatch(model, ctx, batch=2048, slots=1, kv_type="f16", fa="auto", vram_gib=0.0):
+    """在给定显存下能装下的最大微批（从 2048 往下试），返回 (ub, budget)。
+
+    只降到 64 仍装不下就返回 (None, budget)，由界面如实说「光调微批救不回来」。
+    """
+    for ub in (2048, 1024, 512, 256, 128, 64):
+        b = memory_budget(model, ctx, batch=batch, ubatch=ub, slots=slots,
+                          kv_type=kv_type, fa=fa)
+        if b["total"] <= vram_gib or ub == 64:
+            return (ub if b["total"] <= vram_gib else None), b
+    return None, memory_budget(model, ctx, batch=batch, ubatch=512, slots=slots,
+                               kv_type=kv_type, fa=fa)
+
+
 def probe_vram_mb(timeout=4):
     """nvidia-smi 求显存总量（MB，多卡求和）；拿不到返回 0（调用方如实说明未取到）。"""
     try:

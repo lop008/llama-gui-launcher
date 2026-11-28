@@ -17,7 +17,7 @@ class ConfigIOMixin:
     def _param_widgets(self):
         return [
             self.combo_ngl, self.spin_ctx, self.spin_np, self.spin_threads,
-            self.spin_batch, self.spin_slots, self.combo_fa,
+            self.spin_batch, self.spin_ub, self.spin_slots, self.combo_fa,
             self.combo_kvc_k, self.combo_kvc_v,
             self.check_cont, self.spin_temp, self.spin_topp, self.spin_topk,
             self.spin_rp, self.edit_apikey, self.check_mlock, self.check_mmap,
@@ -62,6 +62,7 @@ class ConfigIOMixin:
             "n_predict": self.spin_np.value(),
             "threads": self.spin_threads.value(),
             "batch": self.spin_batch.value(),
+            "ubatch": self.spin_ub.value(),
             "flash_attn": self.combo_fa.currentText(),
             "cont_batching": self.check_cont.isChecked(),
             # KV 缓存 K / V 独立类型（功能 2）
@@ -129,6 +130,7 @@ class ConfigIOMixin:
         self.spin_np.setValue(int(s.get("n_predict", 8192)))
         self.spin_threads.setValue(int(s.get("threads", -1)))
         self.spin_batch.setValue(int(s.get("batch", 2048)))
+        self.spin_ub.setValue(int(s.get("ubatch", 512) or 512))
         self.spin_slots.setValue(int(s.get("slots", -1)))
         self.combo_fa.setCurrentText(s.get("flash_attn", "on"))
         # KV K/V 独立类型（兼容旧配置 kv_cache_type）
