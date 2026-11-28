@@ -307,7 +307,7 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.tool_table.currentCellChanged.connect(self._on_tool_cell_changed)
         tt.addWidget(self.tool_table)
 
-        # ---- 运行日志 Tab（v0.6.2：页内直接给「清屏」，以前只能去菜单深处找）----
+        # ---- 运行日志 Tab（v0.6.5：页内直接给「清屏」，以前只能去菜单深处找）----
         log_tab = QWidget()
         lt = QVBoxLayout(log_tab)
         lt.setContentsMargins(0, 4, 0, 0)
@@ -567,7 +567,7 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.act_api.triggered.connect(self.open_api)
         self.act_open_agent.triggered.connect(self.open_selected_agent_tool)
         self.act_clear_log.triggered.connect(self.clear_run_log)
-        # 日志页顶部按钮（v0.6.2）：清屏 + 打开日志目录
+        # 日志页顶部按钮（v0.6.5）：清屏 + 打开日志目录
         self.btn_log_clear.clicked.connect(self.clear_run_log)
         self.btn_log_open.clicked.connect(self.open_log_dir)
         self.act_open_log.triggered.connect(self.open_log_dir)
@@ -589,7 +589,7 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.chat_detected.connect(self._on_chat_detected)
         self.check_jinja.toggled.connect(self._update_chat_controls)
         self.combo_moe.currentIndexChanged.connect(self._on_moe_changed)
-        # MoE 卸载预设（v0.6.2）：选档位就按本机资源算 N / 缓存；手动改任何一项退回「不套用」
+        # MoE 卸载预设（v0.6.5）：选档位就按本机资源算 N / 缓存；手动改任何一项退回「不套用」
         self.combo_moe_preset.currentIndexChanged.connect(self.on_moe_preset_changed)
         self.combo_moe.currentIndexChanged.connect(self.on_moe_manual)
         self.spin_moe_layers.valueChanged.connect(self.on_moe_manual)

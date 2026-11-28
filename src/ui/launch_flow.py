@@ -115,7 +115,7 @@ class LaunchFlowMixin:
                 QMessageBox.StandardButton.No)
             if ret != QMessageBox.StandardButton.Yes:
                 return
-        # 启动前显存预算（v0.6.2）：超了就摆数字 + 给一键下调，绝不静默改设置。
+        # 启动前显存预算（v0.6.5）：超了就摆数字 + 给一键下调，绝不静默改设置。
         # 必须排在 build_args 之前：用户选「按建议改微批」时要让新值进命令行。
         if not self._prelaunch_vram_check(model, s):
             return

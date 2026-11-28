@@ -1,7 +1,7 @@
-# LLama 万能启动器 v0.6.2 修复报告
+# LLama 万能启动器 v0.6.5 修复报告
 
 本轮处理用户提的 **12 条 + 第二批 6 条 + 第三批 1 项（微批/显存预算）+ 第四批 1 项（自升级加固）**，外加顺手查出并修掉的 5 个真实 bug。
-当前状态：**改动已提交本地仓库，版本号已提到 `0.6.2`（`src/__init__.py`），但未打包、未推送 GitHub、未发 Release**；v0.6.1 从未单独发布，其 7 条修复与本报告内容合并为 v0.6.2（发布物料见 `CHANGELOG.md` / `RELEASE_NOTES.md` / `README*.md` / `参数说明.md`）。
+当前状态：**已定版为 `0.6.5`（`src/__init__.py`）并作为正式发布版本推送 GitHub / 发布 Release**；v0.6.1–v0.6.4 均未单独发布，它们的改动与本报告内容全部并入 v0.6.5（发布物料见 `CHANGELOG.md` / `RELEASE_NOTES.md` / `README*.md` / `参数说明.md`）。
 
 验证口径：`_test_all.py` 全 20 套件通过（新增 `moe` 71 项、`membudget` 37 项、`selfupdate` 62 项断言）+ 专项脚本（`_check_advisor.py`、`_check_validate_dialog.py`、`_check_updater.py`、`_check_assets.py`、`_check_cmd_flags.py`、`_v062_cases.py`、`_check_ai_live.py` 真机 AI）+ 七张语言表「缺失 0 · 多余 0 · 校验 PASS」。
 
@@ -234,7 +234,7 @@
 | 替换 | 生成独立 `.bat`：等本进程退出 → 旧 exe 备份 `.bak` → 覆盖 → 重启 → 自删脚本 |
 | 兜底 | 源码运行（`python main.py`）不换自己，改为打开 Release 页；只有 zip 时提示手动下载 |
 
-事实补充：截至本轮，GitHub 上最新发布仍是 **v0.6.0（2026-11-27）**，本地 0.6.2 未推送未发布——所以「已装用户能升到 0.6.2」要等发布之后才成立。
+事实补充：截至本轮，GitHub 上最新发布仍是 **v0.6.0（2026-11-27）**，本地 0.6.5 未推送未发布——所以「已装用户能升到 0.6.5」要等发布之后才成立。
 
 ### ㉖ 实测复现出一个能弄丢用户程序的缺陷
 

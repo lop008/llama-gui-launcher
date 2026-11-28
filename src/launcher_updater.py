@@ -3,7 +3,7 @@
 只依赖 requests + 标准库；GUI 在 ui/launcher_update_dialog.py。
 源码运行（python main.py）不做替换，只提示打开 Release 页面。
 
-三种安装形态要分开处理（v0.6.2）：
+三种安装形态要分开处理（v0.6.5）：
   single   单文件 exe（PyInstaller onefile）→ 直接换 exe
   portable 便携目录（exe + `_internal/`）→ 换 exe **并且**换 `_internal`，用户数据不动
   source   源码运行 → 不换自己，只打开 Release 页面
@@ -143,7 +143,7 @@ def _asset_kind(asset):
 def pick_asset(release, arch=None, kind=None):
     """挑适合当前安装形态与架构的资产。
 
-    单文件/源码 → 优先 `.exe`；**便携目录 → 优先 `-portable.zip`**（v0.6.2 修：
+    单文件/源码 → 优先 `.exe`；**便携目录 → 优先 `-portable.zip`**（v0.6.5 修：
     原来一律优先 exe，便携版用户会被换成单文件包，`_internal/` 变成几十 MB 垃圾，
     启动还慢一截）。目标形态没有对应包时退而求其次，由界面如实说明。
     """

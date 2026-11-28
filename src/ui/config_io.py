@@ -32,7 +32,7 @@ class ConfigIOMixin:
         ]
 
     def _on_moe_changed(self):
-        """MoE 模式联动：只有「前 N 层」才需要 N；稠密模型整套置灰（v0.6.2）。
+        """MoE 模式联动：只有「前 N 层」才需要 N；稠密模型整套置灰（v0.6.5）。
 
         `_moe_dense` 由 `ui/moe_flow.py` 后台扫描专家权重后写回（None = 还没判出来，
         先按可用处理，不因为探测慢就把控件锁死）。

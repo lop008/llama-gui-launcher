@@ -9,9 +9,9 @@
 **[English / English](README.md)**
 
 基于 llama.cpp 的本地大模型图形化启动器。让「选模型 → 配参数 → 后台启动 → 实时监控 → 连接 Agent 工具」整条链路一键搞定，不再需要手敲命令行。
-> **最新版本：v0.6.2** —— llama.cpp 0.4.1 删掉了 `--mlock`，启动器改成**按本机版本写出你这份 llama.cpp 真正认识的写法**，服务不再因此起不来；新增启动文件「合理性体检」（AI 分析必须手动点）、界面整体字号缩放、更新页按平台与后端筛选、**MoE「卸载预设」**（按本机显存 + 你选的这个模型每层专家的实际大小算该卸几层，稠密模型不再误收专家参数）。详见 [发布说明](RELEASE_NOTES.md) 与 [更新日志](CHANGELOG.md)。
+> **最新版本：v0.6.5** —— llama.cpp 0.4.1 删掉了 `--mlock`，启动器改成**按本机版本写出你这份 llama.cpp 真正认识的写法**，服务不再因此起不来；新增启动文件「合理性体检」（AI 分析必须手动点）、界面整体字号缩放、更新页按平台与后端筛选、**MoE「卸载预设」**（按本机显存 + 你选的这个模型每层专家的实际大小算该卸几层，稠密模型不再误收专家参数）。详见 [发布说明](RELEASE_NOTES.md) 与 [更新日志](CHANGELOG.md)。
 
-## 最新版本 v0.6.2 更新
+## 最新版本 v0.6.5 更新
 
 1. **新版 llama.cpp 不再把服务搞崩**：llama.cpp 0.4.1 把 `--mlock` / `--no-mmap` 合并成 `-lm/--load-mode`，旧写法直接 `error: invalid argument`。启动器读本机 `llama-server --help`（按 exe 缓存、启动后后台预热），**写你这份认识的**：新版给 `-lm mmap+mlock` / `-lm none` / `-lm mlock`，旧版仍用 `--mlock` / `--no-mmap`；导入 `.bat` 时同样认识 `-lm`。
 2. **启动文件体检**：「工具 → 启动文件 → 校验启动文件」新增**合理性体检**页签，完全离线、按**本机实况**评估——被废弃或不认识的参数、重复设置、取值越界（线程数 vs 逻辑核心、`-ub` vs `-b`、端口）、上下文长度是否超出模型训练上限，以及显存（权重 + KV 缓存 + 计算缓存）、内存、磁盘余量估算。元数据取不到就如实说取不到，不编数字。
@@ -123,10 +123,10 @@ python main.py
 
 | 文件 | 说明 |
 |------|------|
-| `LLama-Launcher-v0.6.2-win-x64.exe` | **单文件版**（x64，约 47 MB），双击即运行。首次启动较慢（需解压到临时目录，约几秒）；个别杀毒软件可能误报，加入白名单即可。 |
-| `LLama-Launcher-v0.6.2-win-x64-portable.zip` | **便携版**（x64），解压后运行 `LLama启动器-win-x64-portable.exe`，启动更快、无需自解压。 |
-| `LLama-Launcher-v0.6.2-win-arm64.exe` | **单文件版**（ARM64），适用于骁龙笔记本 / Windows on ARM 设备。 |
-| `LLama-Launcher-v0.6.2-win-arm64-portable.zip` | **便携版**（ARM64），解压即用。 |
+| `LLama-Launcher-v0.6.5-win-x64.exe` | **单文件版**（x64，约 47 MB），双击即运行。首次启动较慢（需解压到临时目录，约几秒）；个别杀毒软件可能误报，加入白名单即可。 |
+| `LLama-Launcher-v0.6.5-win-x64-portable.zip` | **便携版**（x64），解压后运行 `LLama启动器-win-x64-portable.exe`，启动更快、无需自解压。 |
+| `LLama-Launcher-v0.6.5-win-arm64.exe` | **单文件版**（ARM64），适用于骁龙笔记本 / Windows on ARM 设备。 |
+| `LLama-Launcher-v0.6.5-win-arm64-portable.zip` | **便携版**（ARM64），解压即用。 |
 | `Arm64.bat` | **ARM64 一键启动脚本**：与 exe 放同一目录后双击，永远优先挑 arm64 包（同目录混放了 x64 也不会拿错；仓库自带的 `一键启动.bat` 对应 x64，优先 x64）。 |
 
 将 `llama-server.exe` 及配套 DLL 放到同一目录（或在界面中指定启动器路径）。
@@ -275,20 +275,18 @@ LLama启动器/
 
 ## 界面截图
 
+只放两张：一张看主界面，一张看本版主打的「合理性体检」。
+
 | | |
 |---|---|
-| ![托盘悬浮小窗](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/pill.png) | |
-| 托盘悬浮小窗（收起 + 悬停展开） | |
-| ![主界面](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/main.png) | ![高级参数](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/advanced.png) |
-| 主界面 | 高级参数 + 多显卡 |
-| ![模型下载](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/download.png) | ![llama.cpp 更新器](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/updater.png) |
-| 模型下载（双列、断点续传） | 更新 llama.cpp |
-| ![Agent 工具](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/agent.png) | ![命令预览](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/preview.png) |
-| Agent 工具 | 命令预览 |
+| ![主界面](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/main.png) | ![启动文件合理性体检](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/health.png) |
+| 主界面：模型列表 / 参数 / 服务状态 | 工具 → 启动文件 → **合理性体检**：显存预算（权重 + KV + 批处理激活缓冲）与一键下调 |
+
+其余界面图（`advanced.png`、`download.png`、`updater.png`、`agent.png`、`preview.png` 等）仍留在 `docs/screenshots/`，供历史版本发布说明引用。
 
 ## 开发者信息
 
-- 开发者：AI创客师
+- 开发者：**AI创客师**（英文名 AIMakerLab）
 - 哔哩哔哩入口见「关于 → 开发者信息」（链接可点击直达）
 - 如需更换：编辑 `src/about_dialog.py` 顶部常量
 

@@ -32,7 +32,7 @@ A GUI launcher for llama.cpp local LLMs. Auto-scan models, visual parameter tuni
 2. **草稿与主模型放同一目录**（草稿必须同目录才会配对）：
 
    ```
-   H:\llama-cpp\Inkling-2\
+   D:\models\Inkling-2\
    ├─ Inkling-2-Mini-UD-IQ3_XXS.gguf        ← 主模型
    └─ dspark-Inkling-2-Mini-Q8_0.gguf       ← DSpark 草稿（优先 Q8_0）
    ```

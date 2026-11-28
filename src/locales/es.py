@@ -28,7 +28,7 @@ STRINGS = {
 "== 联网查询结果 ==": "== Resultados de consulta en línea ==",
 "A/B/C 三个条件的组合方式：并=全部满足；或=任一满足。": "Forma de combinar las condiciones A/B/C: Y = se cumplen todas; O = se cumple alguna.",
 "AI 编程 Agent，终端界面（自动连接本服务）": "Agente de programación IA, interfaz de terminal (se conecta automáticamente a este servicio)",
-"AI创客师": "Creador de IA",
+"AI创客师": "AIMakerLab",
 "API Key：出于安全考虑不导入（文件中为打码值）": "API Key: no se importa por seguridad (en el archivo está enmascarada)",
 "API 使用中({0})": "API en uso ({0})",
 "API 密钥（--api-key）。\n设置后客户端调用接口必须携带此 Key，否则会被拒绝。\n留空 = 不设密钥，任何人都能访问。": "Clave de API (--api-key).\nSi se define, los clientes deberán incluirla al llamar la interfaz; de lo contrario serán rechazados.\nVacío = sin clave; cualquiera puede acceder.",
@@ -1002,7 +1002,7 @@ STRINGS = {
     "ℹ 该模型带视觉投影文件：选上才能看图（只做纯对话可以留空）": "ℹ Este modelo incluye un archivo de proyección visual: selecciónalo para ver imágenes (puedes dejarlo vacío si solo chateas por texto)",
     "同目录发现了 mmproj 视觉投影，说明这个模型支持看图。不选 = 只当纯文本模型用。": "Se encontró una proyección visual mmproj en la misma carpeta: el modelo puede leer imágenes. Si no lo eliges, se usará solo como modelo de texto.",
 
-    # ── v0.6.2 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
+    # ── v0.6.5 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
     "(无值)": "(sin valor)",
     "--port 超出 1-65535：{0}": "--port fuera de 1-65535: {0}",
     "-c {0} 超过模型训练上限 {1}：长度外质量会下降，需要外推请配 RoPE 缩放": "-c {0} supera el límite entrenado del modelo {1}: más allá baja la calidad; usa escalado RoPE para extrapolar",
@@ -1105,7 +1105,7 @@ STRINGS = {
     "；当前估算不需要把专家卸载到 CPU": "; según la estimación actual no hace falta descargar expertos a CPU",
     "；显存紧张，建议 --n-cpu-moe 从 1/4 层起逐步加大": "; la VRAM está justa: sube --n-cpu-moe empezando por 1/4 de las capas",
 
-    # ── v0.6.2 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
+    # ── v0.6.5 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
     "--cpu-moe（专家全部放 CPU）": "--cpu-moe (todos los expertos en CPU)",
     "--cpu-moe：专家全部留在内存，显存只放注意力等权重": "--cpu-moe: todos los expertos se quedan en RAM; la VRAM solo guarda atención y otros pesos",
     "--n-cpu-moe {0}（前 {0} 层专家放 CPU）": "--n-cpu-moe {0} (los expertos de los {0} primeros bloques en CPU)",
@@ -1153,7 +1153,7 @@ STRINGS = {
     "；专家全在显存里，不需要 --moe-cache-mib": "; todos los expertos ya están en VRAM, no hace falta --moe-cache-mib",
     "；专家缓存 --moe-cache-mib {0}（用掉剩余显存约 {1:.2f} GiB）": "; caché de expertos --moe-cache-mib {0} (usa ~{1:.2f} GiB de la VRAM restante)",
 
-    # ── v0.6.2 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
+    # ── v0.6.5 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
     "\n\n建议把微批 -ub 从 {0} 降到 {1}（估算降到 {2:.1f} GiB）。": "\n\nSe sugiere bajar el micro-lote -ub de {0} a {1} (la estimación baja a {2:.1f} GiB).",
     "\n\n把微批降到 64 仍装不下（估算 {0:.1f} GiB）：还要降低上下文 -c、打开 -fa on，或把 -ngl 调小。": "\n\nNi con un micro-lote de 64 cabe (estimación {0:.1f} GiB): baja el contexto -c, activa -fa on o reduce -ngl.",
     "仍然启动": "Iniciar de todos modos",
@@ -1179,7 +1179,7 @@ STRINGS = {
     "若启动时报显存分配失败（CUDA graph / buffer alloc），先降 -ub。": "Si al arrancar falla la reserva de VRAM (CUDA graph / buffer alloc), baja -ub primero.",
     "这是估算，不是保证：驱动、显存碎片、其它程序都会影响实际结果。": "Es una estimación, no una garantía: los drivers, la fragmentación de VRAM y otros programas influyen.",
 
-    # ── v0.6.2 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
+    # ── v0.6.5 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
     "zip 包结构不完整": "El zip está incompleto",
     "下载到的包不是有效 zip：{0}": "Lo descargado no es un zip válido: {0}",
     "下载的文件没有通过校验：{0}。\n可能是网络中断、代理改写或安全软件拦截，已删除该文件，请重试。": "El archivo descargado no pasó la verificación: {0}.\nPuede ser un corte de red, un proxy que lo reescribe o el antivirus. Se borró el archivo; reinténtalo.",

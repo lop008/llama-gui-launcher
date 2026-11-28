@@ -1,14 +1,14 @@
 # LLama 启动器 发布说明 / Release Notes
 
-> 最新版本 / Latest release: **v0.6.2** · 发布日期 / Released: 2026-11-28
+> 最新版本 / Latest release: **v0.6.5** · 发布日期 / Released: 2026-11-28
 
 ---
 
-# LLama 启动器 v0.6.2 发布说明 / Release Notes
+# LLama 启动器 v0.6.5 发布说明 / Release Notes
 
 ## English
 
-Three rounds of user feedback folded into one release (v0.6.1 was never published). The headline is a
+Four rounds of user feedback folded into one release (v0.6.1 - v0.6.4 were never published individually). The headline is a
 launch-breaking upstream change handled transparently: llama.cpp 0.4.1 removed `--mlock`, so the
 launcher now writes the load-mode flag your build actually understands. Alongside it: an offline
 sanity check for your launch scripts with an **opt-in** local-model report, whole-UI font scaling,
@@ -130,15 +130,15 @@ receiving expert flags at all.
 
 | File | Description |
 |------|-------------|
-| `LLama-Launcher-v0.6.2-win-x64.exe` | Single-file build (x64) — no Python required |
-| `LLama-Launcher-v0.6.2-win-x64-portable.zip` | Portable build (x64) — extract and run |
-| `LLama-Launcher-v0.6.2-win-arm64.exe` | Single-file build (ARM64, Snapdragon / Windows on ARM) |
-| `LLama-Launcher-v0.6.2-win-arm64-portable.zip` | Portable build (ARM64) — extract and run |
+| `LLama-Launcher-v0.6.5-win-x64.exe` | Single-file build (x64) — no Python required |
+| `LLama-Launcher-v0.6.5-win-x64-portable.zip` | Portable build (x64) — extract and run |
+| `LLama-Launcher-v0.6.5-win-arm64.exe` | Single-file build (ARM64, Snapdragon / Windows on ARM) |
+| `LLama-Launcher-v0.6.5-win-arm64-portable.zip` | Portable build (ARM64) — extract and run |
 | `Arm64.bat` | One-click launcher for ARM64 — put it next to the exe, it always starts the arm64 build |
 
 ## 中文
 
-三批用户反馈合并成一个版本发布（v0.6.1 从未单独发布）。重点是**上游一处会让服务起不来的改动被自动兼容**：
+四批用户反馈合并成一个版本发布（v0.6.1–v0.6.4 均未单独发布）。重点是**上游一处会让服务起不来的改动被自动兼容**：
 llama.cpp 0.4.1 删掉了 `--mlock`，启动器现在按本机版本写出你这份 llama.cpp 真正认识的加载模式参数。
 另外新增：启动文件「合理性体检」（AI 分析必须手点）、界面整体字号缩放、更新页平台与后端筛选、
 **MoE「卸载预设」**（按本机显存 + 这个模型每层专家的实际大小算该卸几层，稠密模型不再误收专家参数）。
@@ -330,7 +330,7 @@ A release about llama.cpp's newest switches: speculative decoding can no longer 
 **2. 放文件**：主模型与草稿放**同一个目录**（草稿只有和主模型同目录才会被配对），例如：
 
 ```
-H:\llama-cpp\Inkling-2\
+D:\models\Inkling-2\
 ├─ Inkling-2-Mini-UD-IQ3_XXS.gguf          ← 主模型
 └─ dspark-Inkling-2-Mini-Q8_0.gguf         ← DSpark 草稿（优先 Q8_0）
 ```

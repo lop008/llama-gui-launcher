@@ -1,9 +1,9 @@
 # Changelog
 
 All notable changes to LLama 启动器 / LLama Launcher.
-## [0.6.2] - 2026-11-28
+## [0.6.5] - 2026-11-28
 
-Three feedback rounds folded into one release (v0.6.1 was never published): a launch-script sanity
+Four rounds of user feedback folded into one release (v0.6.1 - v0.6.4 were never published individually): a launch-script sanity
 check with an opt-in local-model report, UI font scaling, platform/backend filters on the updater
 page, MoE offload presets that size `--n-cpu-moe` from this machine and this model, plus a
 launch-breaking upstream change (`--mlock` removed) that is now handled per build.

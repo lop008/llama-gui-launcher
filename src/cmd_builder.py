@@ -97,7 +97,7 @@ def _moe_args(s, model_path=""):
     - moe_mode = "n"    ：--n-cpu-moe N，前 N 层专家放 CPU（MoE 最常用）；
     - moe_cache_mib > 0 ：--moe-cache-mib N，CPU 专家缓存（llama.cpp 新参数）。
 
-    **只对真的有专家权重的模型下发**（v0.6.2 修的 bug）：这三个参数过去只看配置，
+    **只对真的有专家权重的模型下发**（v0.6.5 修的 bug）：这三个参数过去只看配置，
     而配置是跨模型留存的——跑完 Inkling-2（MoE）选了「前 N 层放 CPU」，切到
     Qwen3.8-27B（`expert_count=0`，稠密）照样带着 `--n-cpu-moe` 下去。
     稠密模型上没有专家可卸载，参数虽不报错但纯属误导，让人以为显存省下来了。

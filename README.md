@@ -9,9 +9,9 @@
 A GUI launcher for llama.cpp local large language models. It turns the whole workflow — **pick a model → configure parameters → start the server in the background → monitor resources in real time → connect to Agent tools** — into a one-click experience. No more memorizing long command lines.
 
 **[中文文档 / Chinese](README.zh-CN.md)**
-> **Latest release: v0.6.2** — the launcher now adapts to llama.cpp's removal of `--mlock` instead of failing to launch, sanity-checks your launch scripts against the real machine (with an **opt-in** local-model report), scales the whole UI font, filters the llama.cpp updater by platform and backend, and turns MoE expert offloading into a **preset that is computed from your GPU and the model you picked**. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
+> **Latest release: v0.6.5** — the launcher now adapts to llama.cpp's removal of `--mlock` instead of failing to launch, sanity-checks your launch scripts against the real machine (with an **opt-in** local-model report), scales the whole UI font, filters the llama.cpp updater by platform and backend, and turns MoE expert offloading into a **preset that is computed from your GPU and the model you picked**. See [Release Notes](RELEASE_NOTES.md) and [CHANGELOG](CHANGELOG.md).
 
-## What's New in v0.6.2
+## What's New in v0.6.5
 
 1. **New llama.cpp builds keep launching** — llama.cpp 0.4.1 removed `--mlock` / `--no-mmap` in favour of `-lm/--load-mode`, so scripts that set those flags died with `error: invalid argument`. The launcher reads your `llama-server --help` (cached per executable, pre-warmed in the background) and writes the spelling **your build understands**: `-lm mmap+mlock` / `-lm none` / `-lm mlock` on new builds, legacy flags on old ones. `.bat` import understands `-lm` too.
 2. **Launch-script sanity check** — *Tools → Launch file → Validate launch script* gained a **Sanity check** tab that works fully offline against this machine: removed/unknown flags, duplicates, out-of-range values (threads vs logical cores, `-ub` vs `-b`, port), context length vs the model's trained limit, and estimates for VRAM (weights + KV cache + compute cache), RAM and free disk. Missing metadata is reported as missing rather than guessed.
@@ -122,10 +122,10 @@ Download from the [Releases](https://github.com/lop008/llama-gui-launcher/releas
 
 | File | Description |
 |------|-------------|
-| `LLama-Launcher-v0.6.2-win-x64.exe` | **Single-file** build (x64, ~47 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
-| `LLama-Launcher-v0.6.2-win-x64-portable.zip` | **Portable** build (x64) — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
-| `LLama-Launcher-v0.6.2-win-arm64.exe` | **Single-file** build (ARM64) — for Snapdragon laptops / Windows on ARM. |
-| `LLama-Launcher-v0.6.2-win-arm64-portable.zip` | **Portable** build (ARM64) — extract and run. |
+| `LLama-Launcher-v0.6.5-win-x64.exe` | **Single-file** build (x64, ~47 MB) — just double-click. First launch is slower (it unpacks to a temp dir, a few seconds); some antivirus may flag single-file executables — add an exception if needed. |
+| `LLama-Launcher-v0.6.5-win-x64-portable.zip` | **Portable** build (x64) — extract and run `LLama启动器-win-x64-portable.exe`; starts faster, no self-extraction. |
+| `LLama-Launcher-v0.6.5-win-arm64.exe` | **Single-file** build (ARM64) — for Snapdragon laptops / Windows on ARM. |
+| `LLama-Launcher-v0.6.5-win-arm64-portable.zip` | **Portable** build (ARM64) — extract and run. |
 | `Arm64.bat` | **One-click launcher for ARM64** — put it next to the exe and double-click; it always picks the arm64 build even if an x64 exe sits in the same folder (`一键启动.bat` is the x64 counterpart and prefers x64). |
 
 Put `llama-server.exe` and its DLLs in the same directory (or set the launcher path in the UI).
@@ -274,20 +274,18 @@ LLama启动器/
 
 ## Screenshots
 
+Two screenshots, one per main idea — the launcher itself and the v0.6.5 launch sanity check:
+
 | | |
 |---|---|
-| ![Tray hover pill](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/pill.png) | |
-| Tray hover pill (collapsed + expanded) | |
-| ![Main window](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/main.png) | ![Advanced parameters](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/advanced.png) |
-| Main window | Advanced parameters + Multi-GPU |
-| ![Model download](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/download.png) | ![llama.cpp updater](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/updater.png) |
-| Model download (two-column, resumable) | Update llama.cpp |
-| ![Agent tools](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/agent.png) | ![Command preview](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/preview.png) |
-| Agent tools | Command preview |
+| ![Main window](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/main.png) | ![Launch sanity check](https://raw.githubusercontent.com/lop008/llama-gui-launcher/main/docs/screenshots/health.png) |
+| Main window: model list, parameters, service status | Tools → Launch file → **Sanity check**: VRAM budget (weights + KV + batch activation buffer) with a one-click tune-down |
+
+Older screens (`advanced.png`, `download.png`, `updater.png`, `agent.png`, `preview.png`, …) stay in `docs/screenshots/` as the archive referenced by earlier release notes.
 
 ## Developer Info
 
-- Developer: AI创客师
+- Developer: AI创客师 / AIMakerLab
 - Bilibili link in "About → Developer Info" (clickable)
 - To change: edit the constants at the top of `src/about_dialog.py`
 

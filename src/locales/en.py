@@ -28,7 +28,7 @@ STRINGS = {
 "== 联网查询结果 ==": "== Online lookup results ==",
 "A/B/C 三个条件的组合方式：并=全部满足；或=任一满足。": "How the three conditions A/B/C are combined: AND = all must match; OR = any one matches.",
 "AI 编程 Agent，终端界面（自动连接本服务）": "AI coding agent, terminal UI (connects to this service automatically)",
-"AI创客师": "AI Maker",
+"AI创客师": "AIMakerLab",
 "API Key：出于安全考虑不导入（文件中为打码值）": "API Key: not imported for security reasons (the file holds a masked value)",
 "API 使用中({0})": "API in use ({0})",
 "API 密钥（--api-key）。\n设置后客户端调用接口必须携带此 Key，否则会被拒绝。\n留空 = 不设密钥，任何人都能访问。": "API key (--api-key).\nWhen set, clients must send this key with every request or they are rejected.\nEmpty = no key; anyone can access the service.",
@@ -1002,7 +1002,7 @@ STRINGS = {
     "ℹ 该模型带视觉投影文件：选上才能看图（只做纯对话可以留空）": "ℹ This model ships a vision projection file: select it to see images (leave empty for text-only chat)",
     "同目录发现了 mmproj 视觉投影，说明这个模型支持看图。不选 = 只当纯文本模型用。": "A mmproj vision projection was found in the same folder, so this model can read images. Leaving it unselected = text-only model.",
 
-    # ── v0.6.2 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
+    # ── v0.6.5 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
     "(无值)": "(no value)",
     "--port 超出 1-65535：{0}": "--port outside 1-65535: {0}",
     "-c {0} 超过模型训练上限 {1}：长度外质量会下降，需要外推请配 RoPE 缩放": "-c {0} exceeds the model's trained limit {1}: quality drops beyond it; set RoPE scaling to extrapolate",
@@ -1105,7 +1105,7 @@ STRINGS = {
     "；当前估算不需要把专家卸载到 CPU": "; current estimates do not require offloading experts to CPU",
     "；显存紧张，建议 --n-cpu-moe 从 1/4 层起逐步加大": "; VRAM is tight, so raise --n-cpu-moe gradually starting from 1/4 of the layers",
 
-    # ── v0.6.2 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
+    # ── v0.6.5 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
     "--cpu-moe（专家全部放 CPU）": "--cpu-moe (all experts on CPU)",
     "--cpu-moe：专家全部留在内存，显存只放注意力等权重": "--cpu-moe: all experts stay in RAM, VRAM only holds attention and other weights",
     "--n-cpu-moe {0}（前 {0} 层专家放 CPU）": "--n-cpu-moe {0} (first {0} layers' experts on CPU)",
@@ -1153,7 +1153,7 @@ STRINGS = {
     "；专家全在显存里，不需要 --moe-cache-mib": "; all experts are already in VRAM, no --moe-cache-mib needed",
     "；专家缓存 --moe-cache-mib {0}（用掉剩余显存约 {1:.2f} GiB）": "; expert cache --moe-cache-mib {0} (uses about {1:.2f} GiB of the remaining VRAM)",
 
-    # ── v0.6.2 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
+    # ── v0.6.5 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
     "\n\n建议把微批 -ub 从 {0} 降到 {1}（估算降到 {2:.1f} GiB）。": "\n\nSuggested: lower the micro-batch -ub from {0} to {1} (estimate drops to {2:.1f} GiB).",
     "\n\n把微批降到 64 仍装不下（估算 {0:.1f} GiB）：还要降低上下文 -c、打开 -fa on，或把 -ngl 调小。": "\n\nEven a micro-batch of 64 does not fit (estimate {0:.1f} GiB): lower the context -c, turn -fa on, or reduce -ngl.",
     "仍然启动": "Start anyway",
@@ -1179,7 +1179,7 @@ STRINGS = {
     "若启动时报显存分配失败（CUDA graph / buffer alloc），先降 -ub。": "If startup fails with a VRAM allocation error (CUDA graph / buffer alloc), lower -ub first.",
     "这是估算，不是保证：驱动、显存碎片、其它程序都会影响实际结果。": "This is an estimate, not a promise: drivers, VRAM fragmentation and other applications all affect the result.",
 
-    # ── v0.6.2 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
+    # ── v0.6.5 补充（启动文件体检 / 更新页筛选 / 界面字号缩放）──
     "zip 包结构不完整": "The zip archive is incomplete",
     "下载到的包不是有效 zip：{0}": "What was downloaded is not a valid zip: {0}",
     "下载的文件没有通过校验：{0}。\n可能是网络中断、代理改写或安全软件拦截，已删除该文件，请重试。": "The downloaded file failed verification: {0}.\nThis can be a broken connection, a proxy rewriting it or security software interfering. The file has been deleted; please retry.",
