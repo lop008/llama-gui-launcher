@@ -154,6 +154,7 @@ jobs:
           }
           Stop-Process -Id $p.Id -Force
           Remove-Item (Join-Path $dir 'config.json'), (Join-Path $dir 'smoke.log') -Force -ErrorAction SilentlyContinue
+          Remove-Item (Join-Path $dir 'logs') -Recurse -Force -ErrorAction SilentlyContinue
           "Smoke OK: process alive for 15s"
 
       - name: Stage artifacts with ASCII release names
@@ -165,6 +166,14 @@ jobs:
           $one = Get-ChildItem -Path dist -Filter '*-win-arm64.exe' | Select-Object -First 1
           Copy-Item $one.FullName "out/LLama-Launcher-v$v-win-arm64.exe" -Force
           $dir = (Get-ChildItem -Path dist -Directory -Filter '*-win-arm64-portable' | Select-Object -First 1).FullName
+          # The app creates logs/ on first start, so the smoke test above leaves one behind;
+          # shipping it would put a build-dated run-log into every user's folder. Same for
+          # any leftover config.json.
+          Remove-Item (Join-Path $dir 'logs') -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item (Join-Path $dir 'config.json') -Force -ErrorAction SilentlyContinue
+          foreach ($junk in @('logs', 'config.json')) {
+            if (Test-Path (Join-Path $dir $junk)) { throw "portable build still contains $junk" }
+          }
           Compress-Archive -Path (Join-Path $dir '*') -DestinationPath "out/LLama-Launcher-v$v-win-arm64-portable.zip" -Force
           Get-ChildItem out | ForEach-Object { "{0}  {1:N1} MB" -f $_.Name, ($_.Length / 1MB) }
 
