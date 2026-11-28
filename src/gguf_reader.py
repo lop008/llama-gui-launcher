@@ -82,6 +82,27 @@ _SUFFIX_MAP = (
 )
 
 
+def _scalarize(value):
+    """把 KV 值收成标量；收不出来返回 None。
+
+    有的架构把**逐层参数**写成数组（实测 Inkling-2：
+    `inkling2_loop.attention.head_count = [24]×24`、`head_count_kv = [8]×24`），
+    原样塞进 info 会让每个 `int(info[...])` 的调用方当场 `TypeError`
+    ——「合理性体检」在 Inkling-2 上就是这么崩的。归约规则：
+      - 元素全相同 → 就是那个值；
+      - 不全相同 → 取最大值（KV / 显存估算宁可高估，不要装作不需要）。
+    """
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, (int, float, str)):
+        return value
+    if isinstance(value, (list, tuple)):
+        nums = [v for v in value
+                if isinstance(v, (int, float)) and not isinstance(v, bool)]
+        return max(nums) if nums else None
+    return None
+
+
 def _capture(info, key, value):
     """把解析到的 KV 归入 info 的短名键（只取首个匹配，架构前缀不敏感）。"""
     if key in _SIMPLE_KEYS:
@@ -90,7 +111,9 @@ def _capture(info, key, value):
     lk = key.lower()
     for suffix, name in _SUFFIX_MAP:
         if lk.endswith(suffix) and name not in info:
-            info[name] = value
+            val = _scalarize(value)
+            if val is not None:
+                info[name] = val
             return
 
 
@@ -234,6 +257,106 @@ def _shard_group_files(path):
     pattern = os.path.join(os.path.dirname(path), f"{m.group(1)}-*-*.gguf")
     files = sorted(_glob.glob(pattern))
     return files or [path]
+
+
+# ------------------------------------------------------------ 专家权重按层统计
+def _read_tensor_table(path):
+    """读单个 GGUF 文件的张量表，返回 (对齐值, [(名字, 维度, 类型, 偏移)], 数据区起点)。
+
+    偏移是**相对本文件数据区起点**的。多分片模型每个分片各有一份表，且每份表只列
+    自己实际装的那些张量（实测 Qwen3.8-Flash-Next 四分片：第 1 片 72 条、第 2 片 768 条，
+    互不重名），所以统计权重规模必须逐分片读——只看第 1 片会得出完全错误的结论。
+
+    文件无效返回 (0, None, 0)。
+    """
+    try:
+        with open(path, "rb") as f:
+            if f.read(4) != GGUF_MAGIC:
+                return 0, None, 0
+            _u32(f)                      # version
+            tensor_count = _u64(f)
+            kv_count = _u64(f)
+            alignment = 32               # GGUF 规范默认值
+            for _ in range(kv_count):
+                key = _read_string(f)
+                vtype = _u32(f)
+                if vtype == ARRAY:
+                    _skip_array(f)       # 词表这类大数组直接跳过，不读进内存
+                    continue
+                value = _read_value(f, vtype)
+                if key == "general.alignment" and isinstance(value, int) and value > 0:
+                    alignment = value
+            infos = []
+            for _ in range(tensor_count):
+                name = _read_string(f)
+                n_dims = _u32(f)
+                dims = [_u64(f) for _ in range(n_dims)]
+                dtype = _u32(f)
+                offset = _u64(f)
+                infos.append((name, dims, dtype, offset))
+            # 张量表之后先按 alignment 补齐，才是数据区起点
+            align = max(1, alignment)
+            data_start = -(-f.tell() // align) * align
+            return alignment, infos, data_start
+    except Exception:
+        return 0, None, 0
+
+
+# llama.cpp 的 MoE 专家权重张名都带 exps / experts（实测 Inkling-2 是
+# ffn_gate_up_exps / ffn_down_exps，gpt-oss、qwen3moe 一族是 ffn_gate_exps /
+# ffn_up_exps / ffn_down_exps，各自再带 .weight 与 .scale）。
+_EXPERT_TENSOR_RX = re.compile(r"(?i)(?:ffn_[a-z0-9_]*exps\b|\.experts?\b|_experts?\b)")
+# 名字里带 exp 但**不参与** --n-cpu-moe 卸载的东西：路由器与偏置，都很小
+_NON_EXPERT_RX = re.compile(r"(?i)(gate_inp|exp_probs|router)")
+
+
+def expert_weight_map(path):
+    """按层统计「专家权重」字节数：MoE 该卸载几层、缓存给多大，全靠这个算。
+
+    返回 dict：
+      per_layer  {层号: 该层专家权重字节}，**只包含真的有专家张量的层**——混合 MoE
+                 是稀疏的（实测 Inkling-2-Mini 24 层里只有 22 层带专家）；
+      expert     专家权重合计字节；
+      weights    全部权重合计字节（专家 + 注意力 / norm / 词表等非专家）；
+      layers     张量表里出现过的最大层号 + 1；
+      shards     实际读到的分片文件数。
+    读不出返回 None。
+
+    大小算法：同文件内按偏移排序，张量大小 = 后一个的偏移 − 自己的偏移；最后一个用
+    「文件大小 − 数据区起点 − 偏移」收尾。偏移差含对齐填充，每个张量最多算多
+    alignment−1 字节（默认 32 B），对 GB 级统计可忽略。
+    **不能**用「文件总大小 ÷ 层数」代替：UD 动态量化每层专家大小差一倍以上
+    （实测 Inkling-2-Mini：中位 547 MiB、最大 1033 MiB），那样算出来的 N 是错的。
+    """
+    files = _shard_group_files(str(path))
+    per_layer, expert, weights, max_layer, shards = {}, 0, 0, 0, 0
+    for fp in files:
+        _align, infos, data_start = _read_tensor_table(fp)
+        if not infos:
+            continue
+        shards += 1
+        try:
+            file_size = os.path.getsize(fp)
+        except OSError:
+            continue
+        ordered = sorted(infos, key=lambda x: x[3])
+        for i, item in enumerate(ordered):
+            name, off = item[0], item[3]
+            nxt = ordered[i + 1][3] if i + 1 < len(ordered) else max(0, file_size - data_start)
+            size = max(0, nxt - off)
+            weights += size
+            if _EXPERT_TENSOR_RX.search(name) and not _NON_EXPERT_RX.search(name):
+                m = re.match(r"blk\.(\d+)\.", name)
+                if m:
+                    li = int(m.group(1))
+                    per_layer[li] = per_layer.get(li, 0) + size
+                    if li + 1 > max_layer:
+                        max_layer = li + 1
+                expert += size
+    if not weights:
+        return None
+    return {"per_layer": per_layer, "expert": expert, "weights": weights,
+            "layers": max_layer, "shards": shards}
 
 
 # MTP 张量名常见模式：不同模型架构命名不同

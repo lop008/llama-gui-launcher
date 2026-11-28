@@ -8,11 +8,13 @@
 
 ## English
 
-Two rounds of user feedback folded into one release (v0.6.1 was never published). The headline is a
+Three rounds of user feedback folded into one release (v0.6.1 was never published). The headline is a
 launch-breaking upstream change handled transparently: llama.cpp 0.4.1 removed `--mlock`, so the
 launcher now writes the load-mode flag your build actually understands. Alongside it: an offline
 sanity check for your launch scripts with an **opt-in** local-model report, whole-UI font scaling,
-and real platform/backend filters on the llama.cpp updater page.
+real platform/backend filters on the llama.cpp updater page, and **MoE offload presets** that size
+`--n-cpu-moe` from your machine *and* the model you actually selected — with dense models no longer
+receiving expert flags at all.
 
 ### Fixes
 
@@ -32,6 +34,16 @@ and real platform/backend filters on the llama.cpp updater page.
   ever saw them.
 - **CPU packages are matched by the CPU filter** — version segments and variant suffixes in names
   like `bin-ubuntu-26.04-s390x` or `bin-android-arm64-snapdragon` were mistaken for backends.
+- **Dense models no longer receive MoE expert flags** — configuration survives a model switch, so
+  after running a MoE model with "first N layers on CPU", launching the dense Qwen3.8-27B still
+  carried `--n-cpu-moe`. The three expert flags are now emitted only when the model really has
+  expert weights, measured layer by layer from the GGUF tensor table (multi-shard models summed
+  shard by shard); the matching UI controls are greyed out with the reason. If the layout can't be
+  read, the explicit user settings are kept rather than dropped.
+- **The sanity check crashed on models that store per-layer arrays** — Inkling 2 writes
+  `attention.head_count` as a 24-element array; it went straight into arithmetic and raised
+  `TypeError`. Array metadata now collapses to the common value, or to the largest entry, so VRAM
+  is over-estimated rather than the check falling over.
 
 ### New Features
 
@@ -54,6 +66,21 @@ and real platform/backend filters on the llama.cpp updater page.
   backends that actually appear in the loaded list. Within one dimension selections are OR-ed;
   across dimensions they are AND-ed; nothing selected means no limit. Packages for other
   platforms can be downloaded for a second machine, with install disabled and the reason on hover.
+- **MoE offload presets** — pick a goal (Auto / All in VRAM / Balanced / Save VRAM / Extreme /
+  Long context) and the launcher works out `--n-cpu-moe N` and `--moe-cache-mib` from your actual
+  VRAM and RAM **plus the real per-layer expert size of the model you selected**, then prints the
+  arithmetic underneath so you can check it. Hardware tiers are inputs to that calculation rather
+  than a static option table: the same 24 GiB card wants N=0 for Inkling 2 (14.7 GiB of experts)
+  and `--cpu-moe` for Flash-Next (71.7 GiB). Since `--n-cpu-moe` offloads the *first* N layers
+  while dynamic quantisation makes upper layers up to twice as heavy per layer, the fit is
+  searched from the top down instead of dividing the total by a layer count. Editing mode, N or
+  cache by hand returns the chooser to "manual"; changing model or context length recomputes.
+  Missing information is reported as missing — never an invented N.
+- **Preset dropdowns you can also type into** for predict tokens (`-n`) and batch size (`-b`):
+  common steps listed, any number accepted, clamped to the legal range.
+- **Clear screen on the run-log tab** — "Clear" and "Open log folder" at the top of the tab.
+  Clearing only empties what is displayed; the per-day log files on disk are untouched. The view
+  now also holds at most 5000 lines so a long-running service stops eating memory.
 
 ### Improvements
 
@@ -68,14 +95,16 @@ and real platform/backend filters on the llama.cpp updater page.
   above the raw command line, parsed from the final command text so the explanation always
   matches what runs; unknown flags are labelled unknown rather than invented.
 - **All table columns draggable** — auto-filling of leftover width now stops only when you resize
-  the fill column itself, not after dragging any column.
+  the fill column itself, not after dragging any column. The fill also happens one event after the
+  resize instead of inside the event filter (which ran before `resizeEvent` and measured the
+  previous viewport), so a maximized window no longer keeps a blank strip on the right.
 - **Updater page** — version table / details / log in one vertical splitter; the action column is
   measured from the buttons so nothing is clipped in any language or zoom level.
 - **Tool menu grouped** (model / service & web / launch file / config / logs & stats / font size /
   language); path columns elide in the middle so file names survive; tabs have visible borders
   again (the v0.6.0 theme had removed them).
-- 159 interface strings from both batches translated into all 7 languages; 8 obsolete ones removed —
-  every table holds 1110 entries, 0 missing, 0 unused.
+- 205 interface strings from the three batches translated into all 7 languages; 11 obsolete ones
+  removed — every table holds 1153 entries, 0 missing, 0 unused.
 
 ### Downloads
 
@@ -89,9 +118,10 @@ and real platform/backend filters on the llama.cpp updater page.
 
 ## 中文
 
-两批用户反馈合并成一个版本发布（v0.6.1 从未单独发布）。重点是**上游一处会让服务起不来的改动被自动兼容**：
+三批用户反馈合并成一个版本发布（v0.6.1 从未单独发布）。重点是**上游一处会让服务起不来的改动被自动兼容**：
 llama.cpp 0.4.1 删掉了 `--mlock`，启动器现在按本机版本写出你这份 llama.cpp 真正认识的加载模式参数。
-另外新增：启动文件「合理性体检」（AI 分析必须手点）、界面整体字号缩放、更新页平台与后端筛选。
+另外新增：启动文件「合理性体检」（AI 分析必须手点）、界面整体字号缩放、更新页平台与后端筛选、
+**MoE「卸载预设」**（按本机显存 + 这个模型每层专家的实际大小算该卸几层，稠密模型不再误收专家参数）。
 
 ### 🐛 修复
 
@@ -108,6 +138,12 @@ llama.cpp 0.4.1 删掉了 `--mlock`，启动器现在按本机版本写出你这
 - **非 Windows 包重新可见**：更新页过去在**取数据阶段**就把非 Windows 包过滤掉了，界面再怎么筛也没用。
 - **纯 CPU 包能被「CPU」筛到了**：`bin-ubuntu-26.04-s390x`、`bin-android-arm64-snapdragon`
   这类包名里的版本号段与变体后缀不再被误认成后端名。
+- **稠密模型不再收到 MoE 专家参数**：配置是跨模型留存的，跑完 Inkling 2 选了「前 N 层放 CPU」，
+  切到稠密的 Qwen3.8-27B 命令行还带着 `--n-cpu-moe`。现在 `--cpu-moe` / `--n-cpu-moe` /
+  `--moe-cache-mib` 只在**实测到专家权重**时下发（按 GGUF 张量表逐层累加，多分片逐片求和），
+  界面上整套设置同步置灰并说明原因；专家分布读不出时**不猜**，保留用户显式设置的值。
+- **体检不再被逐层数组元数据打崩**：Inkling 2 把 `attention.head_count` 写成 24 个元素的数组，
+  原样取出参与运算直接抛 `TypeError`。现在数组元素全相同取该值、不全相同取最大值（宁可高估显存）。
 
 ### 🆕 新增功能
 
@@ -125,6 +161,18 @@ llama.cpp 0.4.1 删掉了 `--mlock`，启动器现在按本机版本写出你这
   SYCL / OpenVINO / OpenCL / zDNN），选项只从**当前列表里真实出现过的**后端生成。语义：**同一维度内多选是
   「或」，维度之间是「且」**，后端一个都不勾 = 不限后端。其他平台的包可以为第二台机器下载备用，
   但安装按钮禁用并在悬停时说明原因。
+- **MoE「卸载预设」**（高级参数 → MoE 专家行）：选一个目标（自动 / 全放显存 / 平衡 / 省显存 / 极限省显存 /
+  长上下文优先），启动器按**本机显存内存 + 这个模型每层专家的实际字节数**算出 `--n-cpu-moe N` 与
+  `--moe-cache-mib`，并在下一行把计算过程写出来供复核（显存 × 水位、扣掉非专家权重 / KV / 计算缓存、
+  模型专家总量、于是留几层卸几层）。**没有做成「显存档位 × 内存档位」的死表**：同样 24 GiB 显存跑
+  Inkling 2（专家 14.7 GiB）该 N=0，跑 Flash-Next（专家 71.7 GiB）只能 `--cpu-moe`，硬件是算法输入。
+  又因为 `--n-cpu-moe` 卸的是**前 N 层**而动态量化上层更重（Inkling 2 前 21 层 547 MiB、后 3 层 1033 MiB），
+  装载顺序必须从最上层往下连续算，不能拿总量除层数。手动改任一项退回「不套用」，换模型或改上下文后
+  同一档自动重算；显存或模型信息取不到就直说取不到，绝不编一个 N。
+- **预测 Token / 批大小改成「预设 + 可自定义」下拉**：常用档位（`-1 = 无限输出`、1024～65536 /
+  256～8192）一点就填，也能直接敲任意数字，超范围自动钳到边界。
+- **运行日志页顶部「清屏 / 打开日志目录」**：清屏**只清界面显示**，磁盘上按天存放的日志文件不动，
+  状态栏也会说明；界面另外只保留最近 5000 行，长时间跑服务不再把几十万行日志全吃进内存。
 
 ### 🔧 改进
 
@@ -137,10 +185,12 @@ llama.cpp 0.4.1 删掉了 `--mlock`，启动器现在按本机版本写出你这
 - **命令预览改成可拖两栏**：上半「参数拆解 / 目的与意义」逐条解释，下半完整命令行；拆解只解析**最终命令行文本**，
   解释与实际下发永远同源；未收录的参数如实标注而不编造。
 - **所有表格列都能拖**：剩余宽度补给「主列」的逻辑改成**只有拖过主列本身才停止补宽**（以前拖任意一列就永久不再铺满）。
+  补宽时机也挪到 resize **之后延一帧**：事件过滤器比 `QAbstractScrollArea` 自己的 `resizeEvent` 先跑，
+  量到的是上一次的视口宽度，导致窗口最大化后右侧总留一条空白（还多减了一次边框）。
 - **更新页布局**：版本表 / 版本信息 / 操作日志放进一个竖向分栏；操作列宽度按按钮实测尺寸计算，任何语言、任何字号都不裁字。
 - **工具菜单收进二级**（模型 / 服务与网页 / 启动文件 / 配置 / 日志与统计 / 字号 / 语言）；路径列改中间省略，
   窗口变窄也看得见文件名；页签恢复可见描边（v0.6.0 主题误写 `border: none`）。
-- 两批共 159 条新增界面文案全部译入 7 张语言表，并清掉改版失效的 8 条：各表 1110 条，缺失 0、多余 0、占位符一致。
+- 三批共 205 条新增界面文案全部译入 7 张语言表，并清掉改版失效的 11 条：各表 1153 条，缺失 0、多余 0、占位符一致。
 
 ---
 

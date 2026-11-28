@@ -4,7 +4,8 @@
 只依赖 PyQt6，不引入第三方主题框架。所有颜色都走 QSS 的 objectName / 动态属性，
 切换主题时无需重建控件。
 """
-from PyQt6.QtCore import QEvent, QObject, Qt, pyqtSignal
+from PyQt6.QtCore import QEvent, QObject, QTimer, Qt, pyqtSignal
+from PyQt6.QtGui import QIntValidator
 from PyQt6.QtWidgets import (
     QButtonGroup, QComboBox, QFrame, QHBoxLayout, QHeaderView, QLabel, QPushButton,
     QSizePolicy, QTreeView, QVBoxLayout, QWidget,
@@ -224,6 +225,7 @@ class ColumnResizer(QObject):
         self.fill_col = fill_col
         self.min_width = min_width
         self._filling = False
+        self._pending = False
         self._touched_cols = set()
         # QTableWidget 用 horizontalHeader()，QTreeWidget 只有 header()
         self.hdr = view.header() if isinstance(view, QTreeView) else view.horizontalHeader()
@@ -242,14 +244,34 @@ class ColumnResizer(QObject):
         # 只有用户拖了「补宽那一列」才锁定自动补宽。
         # 之前是拖任意一列就永久停止补宽：那样窗口最大化 / 拉宽后右侧会留一大块空白，
         # 用户以为表格不能铺满（把文件名拉宽 ≠ 不想要表格铺满）。
-        if not self._filling and new > 0 and col == self.fill_col:
+        if self._filling:
+            return
+        if new > 0 and col == self.fill_col:
             self._touched_cols.add(col)
+        else:
+            # 拖别的列 → 剩余宽度重新由补宽列吸收，否则右侧又空出一块
+            self.schedule_refill()
 
     def eventFilter(self, obj, event):
-        if (obj is self.view and event.type() == QEvent.Type.Resize
-                and self.fill_col not in self._touched_cols):
-            self.refill()
+        if obj is self.view and event.type() == QEvent.Type.Resize:
+            # 事件过滤器跑在控件自己的 resizeEvent **之前**，此刻 viewport() 还是上一次
+            # 的值：直接补宽永远慢一步（窗口最大化后右侧仍留一大块空白，缩小窗口反而
+            # 挤出横向滚动条）。延后一帧，等视口尺寸定下来再补。
+            self.schedule_refill()
         return False
+
+    def schedule_refill(self):
+        """延后一帧补宽；连续的 Resize 合并成一次。"""
+        if self._pending or self.fill_col in self._touched_cols:
+            return
+        self._pending = True
+        QTimer.singleShot(0, self._refill_soon)
+
+    def _refill_soon(self):
+        self._pending = False
+        if self.fill_col in self._touched_cols:
+            return
+        self.refill()
 
     def refill(self):
         """把视口剩余宽度补给 fill_col（列数不够 / 已被用户拖动时什么都不做）。"""
@@ -259,8 +281,10 @@ class ColumnResizer(QObject):
         cols = hdr.count()
         if cols <= self.fill_col:
             return
-        # viewport() 已排除滚动条，再减左右边框，避免补宽后反而冒出横向滚动条
-        avail = self.view.viewport().width() - 2 * self.view.frameWidth() - 1
+        # viewport() 已经把边框与滚动条都排除在外了，只要不超过它就不会冒横向滚动条。
+        # 以前这里又减了一次 2×frameWidth，等于凭空在右侧留出一条死边
+        # （窗口最大化时那道白就是它）。留 1 px 余量足够防抖。
+        avail = self.view.viewport().width() - 1
         used = sum(hdr.sectionSize(c) for c in range(cols) if c != self.fill_col)
         want = avail - used
         if want < self.min_width:      # 窗口太窄：让横向滚动条接手，不压缩其他列
@@ -283,6 +307,98 @@ class ColumnResizer(QObject):
             finally:
                 self._filling = False
             self.refill()
+
+
+class NumberCombo(QComboBox):
+    """「下拉常用档位 + 可以直接敲数字」的整数输入框（用来替掉光秃秃的 QSpinBox）。
+
+    QSpinBox 只能一格一格拧，常用档位（预测 Token 的 4096 / 8192 / -1 不限）没法一眼选；
+    纯下拉又填不进自定义值。这里两头都要：
+
+    - 下拉里是预置档位，名字可以比数字更明白（例：`-1 = 无限输出`），真实数值在 itemData；
+    - 直接敲数字也认：QIntValidator 挡住非法输入，超出范围钳到边界；
+    - 对外接口与 QSpinBox 对齐（`value()` / `setValue()` / `valueChanged(int)` /
+      `minimum()` / `maximum()`），配置读写和命令预览刷新那套代码一行都不用改写法。
+    """
+
+    valueChanged = pyqtSignal(int)
+
+    def __init__(self, lo, hi, items=(), parent=None):
+        super().__init__(parent)
+        self._lo, self._hi = int(lo), int(hi)
+        self._value = self._lo
+        self.setEditable(True)
+        self.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToContents)
+        self.setValidator(QIntValidator(self._lo, self._hi, self))
+        for label, val in items:
+            self.addItem(label, int(val))
+        # currentTextChanged 认「敲完即生效」，activated 认「从下拉里点选」：
+        # 两条路都汇到 _set_value，靠值相等去重，不会重复刷新预览。
+        self.currentTextChanged.connect(self._on_text)
+        self.activated.connect(self._on_activated)
+        self._sync_text()
+
+    # -- 与 QSpinBox 对齐的接口 ---------------------------------------
+    def minimum(self):
+        return self._lo
+
+    def maximum(self):
+        return self._hi
+
+    def setRange(self, lo, hi):
+        self._lo, self._hi = int(lo), int(hi)
+        self.setValidator(QIntValidator(self._lo, self._hi, self))
+        self.setValue(self._value)
+
+    def value(self):
+        return self._value
+
+    def setValue(self, val):
+        try:
+            val = int(val)
+        except (TypeError, ValueError):
+            return
+        self._set_value(max(self._lo, min(self._hi, val)))
+
+    # -- 内部 ---------------------------------------------------------
+    def _text_for(self, val):
+        for i in range(self.count()):
+            if self.itemData(i) == val:
+                return self.itemText(i)
+        return str(val)
+
+    def _index_for(self, val):
+        for i in range(self.count()):
+            if self.itemData(i) == val:
+                return i
+        return -1
+
+    def _sync_text(self):
+        idx = self._index_for(self._value)
+        if idx >= 0 and self.currentIndex() != idx:
+            self.setCurrentIndex(idx)
+        elif self.lineEdit() is not None and self.lineEdit().text() != self._text_for(self._value):
+            self.setEditText(self._text_for(self._value))
+
+    def _set_value(self, val):
+        changed = val != self._value
+        self._value = val
+        self._sync_text()
+        if changed:
+            self.valueChanged.emit(val)
+
+    def _on_text(self, text):
+        try:
+            val = int(str(text).strip())
+        except ValueError:
+            return                      # 输入到一半（空、单独的 "-"）先不动，别抢用户的字
+        self._set_value(max(self._lo, min(self._hi, val)))
+
+    def _on_activated(self, index):
+        val = self.itemData(index)
+        if isinstance(val, int):
+            self._set_value(max(self._lo, min(self._hi, val)))
 
 
 class CheckComboBox(QComboBox):

@@ -307,6 +307,15 @@ class AppPrefsMixin:
             os.startfile(logdir)  # noqa: S606
         except Exception as e:
             QMessageBox.information(self, t('提示'), t('无法打开日志目录: {0}').format(e))
+
+    def clear_run_log(self):
+        """「清屏」：只清界面上显示的日志，磁盘上按天存放的日志文件一个字都不动。
+
+        以前只有菜单里一条「清空日志」，日志页本身什么都没有，
+        想清屏得先去菜单里翻；现在页顶上就有按钮，并且说清楚清了会怎样。
+        """
+        self.log_view.clear()
+        self._status_tip(t('已清屏：界面上的日志清空了，磁盘上的日志文件仍然保留'), 4000)
     # ---------------------------------------------------------- 状态栏监控
 
     def _on_mem(self, percent, tip):

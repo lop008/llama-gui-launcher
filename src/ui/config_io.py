@@ -24,19 +24,27 @@ class ConfigIOMixin:
             self.check_browser, self.spin_timeout, self.edit_host, self.spin_port,
             self.check_lan, self.check_ssl, self.check_launcher_update,
             self.combo_split_mode, self.edit_tensor_split, self.spin_main_gpu,
-            self.combo_moe, self.spin_moe_layers, self.spin_moe_cache,
+            self.combo_moe, self.combo_moe_preset,
+            self.spin_moe_layers, self.spin_moe_cache,
             self.combo_spec, self.combo_draft, self.spin_spec_n,
             self.check_jinja, self.combo_thinking, self.combo_reasoning,
             self.spin_reasoning_budget,
         ]
 
     def _on_moe_changed(self):
-        """MoE 模式联动：只有「前 N 层」才需要 N。"""
+        """MoE 模式联动：只有「前 N 层」才需要 N；稠密模型整套置灰（v0.6.2）。
+
+        `_moe_dense` 由 `ui/moe_flow.py` 后台扫描专家权重后写回（None = 还没判出来，
+        先按可用处理，不因为探测慢就把控件锁死）。
+        """
         if not hasattr(self, "combo_moe"):
             return
+        dense = bool(getattr(self, "_moe_dense", False))
         mode = self.combo_moe.currentData() or "off"
-        self.spin_moe_layers.setEnabled(mode == "n")
-        self.spin_moe_cache.setEnabled(mode != "off")
+        self.combo_moe.setEnabled(not dense)
+        self.combo_moe_preset.setEnabled(not dense)
+        self.spin_moe_layers.setEnabled((not dense) and mode == "n")
+        self.spin_moe_cache.setEnabled((not dense) and mode != "off")
 
     def _gather_server_cfg(self):
         ssl_on = self.check_ssl.isChecked()
@@ -63,6 +71,7 @@ class ConfigIOMixin:
             "moe_mode": self.combo_moe.currentData() or "off",
             "moe_layers": self.spin_moe_layers.value(),
             "moe_cache_mib": self.spin_moe_cache.value(),
+            "moe_preset": str(self.combo_moe_preset.currentData() or ""),
             # 多显卡（功能 3）
             "devices": [c.property("dev_name") for c in getattr(self, "gpu_checks", [])
                         if c.isChecked() and c.property("dev_name")],
@@ -156,6 +165,8 @@ class ConfigIOMixin:
             self.spin_moe_cache.setValue(int(s.get("moe_cache_mib", 0) or 0))
         except (TypeError, ValueError):
             pass
+        pi = self.combo_moe_preset.findData(str(s.get("moe_preset") or ""))
+        self.combo_moe_preset.setCurrentIndex(pi if pi >= 0 else 0)
         self._on_moe_changed()
         # 投机解码：老配置的「启用 MTP」已由 config._migrate 迁成 spec_mode，
         # 这里只负责把下拉/数字框回显成配置里的样子

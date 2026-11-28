@@ -8,7 +8,9 @@ from PyQt6.QtWidgets import (
 )
 from ..cmd_builder import KV_CACHE_TYPES, SPLIT_MODES
 from ..i18n import t
+from ..moe_advisor import PRESETS as MOE_PRESETS
 from ..presets import PRESETS, SAMPLING_PRESETS
+from .kit import NumberCombo
 
 
 class LayoutBasicMixin:
@@ -264,11 +266,13 @@ class LayoutBasicMixin:
         self._gen_grid.addWidget(self.spin_ctx, 0, 3)
 
         self._gen_grid.addWidget(QLabel(t('预测Token:')), 0, 4)
-        self.spin_np = QSpinBox()
-        self.spin_np.setRange(-1, 1000000)
+        # 下拉是常用档位，也能直接敲数字（NumberCombo：value()/setValue() 与 QSpinBox 同形）
+        self.spin_np = NumberCombo(-1, 1000000, [
+            (t('-1 = 无限输出'), -1), ("1024", 1024), ("2048", 2048), ("4096", 4096),
+            ("8192", 8192), ("16384", 16384), ("32768", 32768), ("65536", 65536),
+        ])
         self.spin_np.setValue(8192)
-        self.spin_np.setSpecialValueText(t('-1 = 无限'))
-        self.spin_np.setToolTip(t('每次回答最多生成的 token 数（-n）。\n-1 = 不限制，直到模型输出结束符为止；\n若模型「停不下来/无限复读」，可调小此值限制回答长度。'))
+        self.spin_np.setToolTip(t('每次回答最多生成的 token 数（-n）。\n-1 = 不限制，直到模型输出结束符为止；\n若模型「停不下来/无限复读」，可调小此值限制回答长度。\n下拉里是常用档位，也可以直接敲任意数字。'))
         self._gen_grid.addWidget(self.spin_np, 0, 5)
 
         lay.addWidget(self.group_gen)
@@ -420,17 +424,32 @@ class LayoutBasicMixin:
             t('--moe-cache-mib N：CPU 专家权重的 GPU 缓存大小。\n'
               '0 = 不传该参数；显存有富余时可设 256~2048 提升 MoE 速度。'))
         grid.addWidget(self.spin_moe_cache, 5, 5)
+        grid.addWidget(QLabel(t('卸载预设:')), 5, 6)
+        # 档位是「目标」，不是显存×内存的静态组合表：同一档在不同模型、不同显存下算出的
+        # N 完全不同，所以交给 moe_advisor 按每层专家的真实字节数现算，下一行把过程摆出来。
+        self.combo_moe_preset = QComboBox()
+        self.combo_moe_preset.addItem(t('（手动设置，不套用）'), "")
+        for _p in MOE_PRESETS:
+            self.combo_moe_preset.addItem(_p["label"], _p["key"])
+        self.combo_moe_preset.setToolTip(
+            t('选一个目标，启动器按本机显存/内存 + 这个模型每层专家的实际大小，\n'
+              '算出该卸载几层（--n-cpu-moe N）与专家缓存（--moe-cache-mib）。\n'
+              '换模型或改上下文长度后再选一次即可重算；下一行写明计算过程。'))
+        grid.addWidget(self.combo_moe_preset, 5, 7)
         self.label_moe_hint = QLabel(t('MoE 模型显存不足时优先用「前 N 层放 CPU」'))
         self.label_moe_hint.setStyleSheet("color: #8a8a8a;")
-        grid.addWidget(self.label_moe_hint, 5, 6, 1, 2)
+        self.label_moe_hint.setWordWrap(True)
+        grid.addWidget(self.label_moe_hint, 6, 0, 1, 8)
 
         # ---- 「生成参数」分组：每行 4 组 ----
         # 第 0 行末尾：批大小（前三组 上下文预设/上下文长度/预测Token 在 _build_basic）
         self._gen_grid.addWidget(QLabel(t('批大小:')), 0, 6)
-        self.spin_batch = QSpinBox()
-        self.spin_batch.setRange(1, 16384)
+        self.spin_batch = NumberCombo(1, 16384, [
+            ("256", 256), ("512", 512), ("1024", 1024), ("2048", 2048),
+            ("4096", 4096), ("8192", 8192),
+        ])
         self.spin_batch.setValue(2048)
-        self.spin_batch.setToolTip(t('逻辑批大小（-b），影响 prompt 处理速度。默认 2048 即可。'))
+        self.spin_batch.setToolTip(t('逻辑批大小（-b），影响 prompt 处理速度。默认 2048 即可。\n下拉里是常用档位，也可以直接敲任意数字；\n调大可加快长提示词的预处理，但更占显存/内存。'))
         self._gen_grid.addWidget(self.spin_batch, 0, 7)
 
         # 第 1 行：并行slots / 采样预设 / 温度 / Top-P

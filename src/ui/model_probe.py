@@ -188,6 +188,7 @@ class ModelProbeMixin:
         if not path:
             self._clear_info()
             self._update_mmproj_warn()
+            self.refresh_moe_for_model("")
             return
         # 切换模型先清掉上一张能力卡，检测结果回来后再补
         self._chat_caps = {}
@@ -222,6 +223,8 @@ class ModelProbeMixin:
         self._update_mmproj_warn()
         self.update_preview()
         self._load_model_info(path)
+        # MoE 卸载是否适用（稠密模型要整套置灰）+ 按当前预设重算，放后台判
+        self.refresh_moe_for_model(path)
         # 功能 4：后台检测该模型是否含 MTP 张量
         self._detect_mtp_async(path)
         # 功能 8：后台检测该模型的对话模板能力（Jinja / 思考强度）

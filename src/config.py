@@ -31,6 +31,9 @@ DEFAULTS = {
         "moe_mode": "off",
         "moe_layers": 0,
         "moe_cache_mib": 0,
+        # 卸载预设档位（v0.6.2）："" = 手动设置；否则是 moe_advisor.PRESETS 的 key，
+        # 换模型后按这一档重算 N / 缓存
+        "moe_preset": "",
         "ctx": 32768,
         "n_predict": 8192,
         "threads": -1,

@@ -3,9 +3,10 @@
 All notable changes to LLama 启动器 / LLama Launcher.
 ## [0.6.2] - 2026-11-28
 
-Two feedback rounds folded into one release (v0.6.1 was never published): a launch-script sanity
+Three feedback rounds folded into one release (v0.6.1 was never published): a launch-script sanity
 check with an opt-in local-model report, UI font scaling, platform/backend filters on the updater
-page, plus a launch-breaking upstream change (`--mlock` removed) that is now handled per build.
+page, MoE offload presets that size `--n-cpu-moe` from this machine and this model, plus a
+launch-breaking upstream change (`--mlock` removed) that is now handled per build.
 
 ### Fixes
 
@@ -36,6 +37,18 @@ page, plus a launch-breaking upstream change (`--mlock` removed) that is now han
 - **`ubuntu-26.04-s390x` / `android-arm64-snapdragon` were classified as an unknown backend** —
   distro version segments and variant suffixes are no longer mistaken for a backend name, so
   plain CPU packages are matched by the "CPU" filter instead of falling into "other".
+- **Dense models no longer receive MoE expert flags** — `--cpu-moe` / `--n-cpu-moe` /
+  `--moe-cache-mib` only looked at the saved configuration, and configuration survives a model
+  switch: after running Inkling 2 with "first N layers on CPU", launching the dense
+  Qwen3.8-27B (`expert_count=0`) still carried `--n-cpu-moe`. The three flags are now emitted only
+  when the model really has expert weights, measured layer by layer from the GGUF tensor table
+  (multi-shard models read shard by shard, since each shard's table lists only its own tensors).
+  When the layout cannot be read at all, the user's explicit settings are kept rather than
+  silently dropped.
+- **The sanity check crashed on models that store per-layer arrays** — Inkling 2 writes
+  `attention.head_count` as an array (24 identical entries), which was passed straight into
+  arithmetic and raised `TypeError`. Array metadata now collapses to that value when every entry
+  agrees, or to the largest entry — better to over-estimate VRAM needs than to under-estimate.
 
 ### New Features
 
@@ -60,6 +73,27 @@ page, plus a launch-breaking upstream change (`--mlock` removed) that is now han
   selections within one dimension are OR-ed, different dimensions are AND-ed, and selecting no
   backend means no backend limit. Non-Windows packages can still be downloaded for a second
   machine but the install control is disabled with a tooltip explaining why.
+- **MoE offload presets** — the MoE row gained a goal chooser (Auto / All in VRAM / Balanced /
+  Save VRAM / Extreme / Long context). Choosing one computes `--n-cpu-moe N` and
+  `--moe-cache-mib` from this machine's VRAM and RAM **plus the real per-layer expert size of the
+  selected model**, and the line underneath spells out the arithmetic: VRAM × watermark, minus
+  non-expert weights, KV cache and compute cache, versus the model's expert total. Hardware tiers
+  are deliberately inputs to the algorithm rather than a static matrix of options — the same
+  24 GiB card wants N=0 for Inkling 2 (14.7 GiB of experts) and `--cpu-moe` for Flash-Next
+  (71.7 GiB). Because `--n-cpu-moe` offloads the *first* N layers while dynamic quantisation makes
+  the upper layers up to twice as heavy per layer (Inkling 2: 547 MiB for 21 layers, 1033 MiB for
+  the last 3), the fit is searched greedily from the top down instead of dividing by layer count.
+  Editing any of the three controls returns the chooser to "manual, nothing applied"; switching
+  model or context length recomputes the selected preset. Dense models grey the whole group out
+  with the reason. If VRAM or the model layout can't be read, it says so instead of inventing an N.
+- **Editable preset dropdowns for predict tokens and batch size** — `-n` and `-b` became
+  type-or-choose controls (`src/ui/kit.py:NumberCombo`, same shape as `-ngl`): common steps in the
+  list (`-1 = unlimited output`, 1024 … 65536; 256 … 8192), any number typed directly, clamped to
+  the valid range, and half-typed input never fires a change.
+- **Clear screen on the run-log tab** — "Clear" and "Open log folder" buttons at the top of the tab
+  instead of a buried menu item. Clearing affects only what is displayed; the per-day log files on
+  disk are untouched, and the status bar says so. The widget also keeps at most 5000 lines, so a
+  long-running service no longer grows memory by holding every line in the view.
 
 ### Improvements
 
@@ -82,7 +116,11 @@ page, plus a launch-breaking upstream change (`--mlock` removed) that is now han
   boolean flags and negative values are tokenised correctly.
 - **Every table column is draggable** (`src/ui/kit.py:ColumnResizer`) — leftover viewport width
   is still given to the main column, but the auto-fill now stops only when you drag *that*
-  column; previously dragging any column permanently disabled it and left the table short.
+  column; previously dragging any column permanently disabled it and left the table short. The
+  fill itself also moved to one event *after* the resize: the event filter used to run before
+  `QAbstractScrollArea`'s own `resizeEvent`, so it measured the previous viewport and a maximized
+  window kept a blank strip on the right (it also subtracted a frame border that `viewport()` had
+  already excluded).
 - **Updater page layout** — version table, details and log live in one vertical splitter you can
   rebalance; the action column is measured from the buttons' own `sizeHint` (+28 px, floor
   330 px) so "Download / Install" is never clipped in any language or zoom level.
@@ -93,9 +131,9 @@ page, plus a launch-breaking upstream change (`--mlock` removed) that is now han
 - **Tabs are visibly tabs** — the v0.6.0 `brown` theme had `QTabBar::tab { border: none }`,
   leaving only a background tint. Unselected tabs have a 1 px border, 3 px offset and rounded
   corners again; the selected one gets a 2 px accent border and bold text.
-- 159 interface strings from both batches translated into all 7 languages (zh-TW / en / ja / ko /
-  ru / es / fr); 8 strings obsoleted by the reworked pages were removed. All tables hold 1110
-  entries with 0 missing, 0 unused and identical placeholders.
+- 205 interface strings from the three batches translated into all 7 languages (zh-TW / en / ja /
+  ko / ru / es / fr); 11 strings obsoleted by the reworked pages were removed. All tables hold
+  1153 entries with 0 missing, 0 unused and identical placeholders.
 
 ## [0.6.0] - 2026-11-27
 

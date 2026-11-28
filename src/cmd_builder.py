@@ -74,15 +74,40 @@ def _kv_types(s):
     return k, v
 
 
-def _moe_args(s):
+def model_has_experts(model_path):
+    """当前模型有没有专家权重。
+
+    返回 `True`（有）**或读不出**、`False`（确定是稠密）。读不出当成 True 是故意的：
+    不能因为探测失败就把用户显式设置的卸载参数悄悄吞掉。
+    """
+    if not model_path:
+        return True
+    try:
+        from .moe_advisor import is_moe
+        state = is_moe(str(model_path))
+    except Exception:
+        return True
+    return True if state is None else bool(state)
+
+
+def _moe_args(s, model_path=""):
     """MoE 专家卸载参数。
 
     - moe_mode = "cpu"  ：--cpu-moe，全部专家权重放 CPU（最省显存）；
     - moe_mode = "n"    ：--n-cpu-moe N，前 N 层专家放 CPU（MoE 最常用）；
     - moe_cache_mib > 0 ：--moe-cache-mib N，CPU 专家缓存（llama.cpp 新参数）。
+
+    **只对真的有专家权重的模型下发**（v0.6.2 修的 bug）：这三个参数过去只看配置，
+    而配置是跨模型留存的——跑完 Inkling-2（MoE）选了「前 N 层放 CPU」，切到
+    Qwen3.8-27B（`expert_count=0`，稠密）照样带着 `--n-cpu-moe` 下去。
+    稠密模型上没有专家可卸载，参数虽不报错但纯属误导，让人以为显存省下来了。
+    判据取不到（模型文件读不出）时**宁可不猜**：保留用户设的值，不吞掉他显式要的参数。
     """
     args = []
     mode = str(s.get("moe_mode") or "off").strip().lower()
+    if mode in ("cpu", "n"):
+        if not model_has_experts(model_path):
+            return []                     # 稠密模型 / 明确没有专家权重 → 一个都不下发
     if mode == "cpu":
         args.append("--cpu-moe")
     elif mode == "n":
@@ -125,7 +150,7 @@ def build_args(model_path, mmproj_path, s, llama_dir, launcher_exe=None):
         args += ["-ngl", "all" if ngl.lower() == "all" else ngl]
 
     # ---- MoE 专家卸载（-cmoe / -ncmoe / --moe-cache-mib）----
-    args += _moe_args(s)
+    args += _moe_args(s, model_path)
 
     ctx = int(s.get("ctx", 0) or 0)
     if ctx > 0:

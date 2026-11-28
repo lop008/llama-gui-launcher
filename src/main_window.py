@@ -30,6 +30,7 @@ from .ui.tray_pill import TrayPillMixin
 from .ui.app_prefs import AppPrefsMixin
 from .ui.config_io import ConfigIOMixin
 from .ui.menu_about import MenuAboutMixin
+from .ui.moe_flow import MoeFlowMixin
 
 try:
     from . import tools as tools_mod
@@ -46,7 +47,7 @@ CREATE_NO_WINDOW = 0x08000000
 
 
 class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, AgentToolsMixin, BatIOMixin, LaunchFlowMixin,
-                 ModelProbeMixin, LayoutBasicMixin, GpuMixin, QMainWindow):
+                 ModelProbeMixin, MoeFlowMixin, LayoutBasicMixin, GpuMixin, QMainWindow):
     tool_scan_done = pyqtSignal()
     model_scan_done = pyqtSignal()
     model_info = pyqtSignal(str, str)
@@ -112,6 +113,8 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
 
         self._build_menu()
         self._build_ui()
+        # MoE 卸载的状态字段与信号要先就位：_connect / _apply_config 里就会用到
+        self.init_moe_flow()
         self.setWindowIcon(self._load_icon())
         self._connect()
         self._apply_config()
@@ -216,6 +219,9 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.tabs = tabs
         self.log_view = QPlainTextEdit()
         self.log_view.setReadOnly(True)
+        # 界面里只留最近 5000 行：服务长时间跑下去日志能刷到几十万行，
+        # 全塞进控件会把内存吃掉一大块（磁盘上的按天日志文件不受影响）。
+        self.log_view.setMaximumBlockCount(5000)
         self.preview_view = QPlainTextEdit()
         self.preview_view.setReadOnly(True)
         # 命令预览拆成上下两栏：上半「逐条拆解」（左参数 / 右作用），下半完整命令行。
@@ -299,6 +305,23 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.tool_table.currentCellChanged.connect(self._on_tool_cell_changed)
         tt.addWidget(self.tool_table)
 
+        # ---- 运行日志 Tab（v0.6.2：页内直接给「清屏」，以前只能去菜单深处找）----
+        log_tab = QWidget()
+        lt = QVBoxLayout(log_tab)
+        lt.setContentsMargins(0, 4, 0, 0)
+        log_bar = QHBoxLayout()
+        self.btn_log_clear = QPushButton(t('清屏'))
+        self.btn_log_clear.setToolTip(
+            t('清掉界面上显示的日志。磁盘上按天存放的日志文件不动，'
+              '要翻历史用旁边的「打开日志目录」。'))
+        log_bar.addWidget(self.btn_log_clear)
+        self.btn_log_open = QPushButton(t('打开日志目录'))
+        self.btn_log_open.setToolTip(t('打开 数据目录\\logs\\，里面是按天存放的完整运行日志。'))
+        log_bar.addWidget(self.btn_log_open)
+        log_bar.addStretch(1)
+        lt.addLayout(log_bar)
+        lt.addWidget(self.log_view)
+
         # ---- 模型信息 Tab（带联网查询按钮）----
         info_tab = QWidget()
         it = QVBoxLayout(info_tab)
@@ -327,7 +350,7 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
             tabs.addTab(widget, title)
             self._tab_widgets[key] = widget
 
-        _add_tab(self.log_view, t('运行日志'), "log")
+        _add_tab(log_tab, t('运行日志'), "log")
         _add_tab(self.preview_box, t('命令预览'), "preview")
         _add_tab(tool_tab, t('Agent 工具'), "tools")
         _add_tab(info_tab, t('模型信息'), "info")
@@ -507,6 +530,8 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
             lambda u, t: self._update_pill("mem", u, t))
         self.monitor.vram_raw_changed.connect(
             lambda u, t: self._update_pill("vram", u, t))
+        # MoE 预设要显存总量：监控每次采样都记一笔，点预设时零延迟（不用现调 nvidia-smi）
+        self.monitor.vram_raw_changed.connect(self.on_vram_sample)
         self.monitor.gpu_util_changed.connect(
             lambda v: self._update_pill("gpu", v))
         self.monitor.speed_changed.connect(
@@ -539,7 +564,10 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.act_web.triggered.connect(self.open_web)
         self.act_api.triggered.connect(self.open_api)
         self.act_open_agent.triggered.connect(self.open_selected_agent_tool)
-        self.act_clear_log.triggered.connect(self.log_view.clear)
+        self.act_clear_log.triggered.connect(self.clear_run_log)
+        # 日志页顶部按钮（v0.6.2）：清屏 + 打开日志目录
+        self.btn_log_clear.clicked.connect(self.clear_run_log)
+        self.btn_log_open.clicked.connect(self.open_log_dir)
         self.act_open_log.triggered.connect(self.open_log_dir)
         self.act_export.triggered.connect(self.export_config)
         self.act_import.triggered.connect(self.import_config)
@@ -559,6 +587,11 @@ class MainWindow(MenuAboutMixin, ConfigIOMixin, AppPrefsMixin, TrayPillMixin, Ag
         self.chat_detected.connect(self._on_chat_detected)
         self.check_jinja.toggled.connect(self._update_chat_controls)
         self.combo_moe.currentIndexChanged.connect(self._on_moe_changed)
+        # MoE 卸载预设（v0.6.2）：选档位就按本机资源算 N / 缓存；手动改任何一项退回「不套用」
+        self.combo_moe_preset.currentIndexChanged.connect(self.on_moe_preset_changed)
+        self.combo_moe.currentIndexChanged.connect(self.on_moe_manual)
+        self.spin_moe_layers.valueChanged.connect(self.on_moe_manual)
+        self.spin_moe_cache.valueChanged.connect(self.on_moe_manual)
         self.check_residual.toggled.connect(self._save_startup_prefs)
         self.check_port_hint.toggled.connect(self._save_startup_prefs)
         self.check_launcher_update.toggled.connect(self._save_startup_prefs)
