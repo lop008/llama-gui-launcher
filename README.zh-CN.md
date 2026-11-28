@@ -242,8 +242,10 @@ LLama启动器/
 │   ├── ad.png             # 底部广告位 430×40（可选）
 │   └── donate_qr.jpg      # 开发者信息中的捐款二维码（可选）
 ├── docs/
-│   ├── cover.png          # 发布封面图（v0.3.85）
-│   └── screenshots/       # README / Release 引用的界面截图
+│   ├── cover-vX.Y.Z.png   # 发布首图（每版一张：品牌 banner，不含下载链接）
+│   ├── release_body_vX.Y.Z.md  # 发布正文（与 GitHub Release 网页文字逐字一致）
+│   ├── fix_report_vX.Y.Z.md    # 本轮反馈逐条账本（诉求 / 改法 / 验证）
+│   └── screenshots/       # README / Release 引用的界面截图（每版 2 张 + 历史存档）
 ├── certs/                 # 自签名 HTTPS 证书/私钥（自动生成，请勿上传）
 ├── dist/                  # 打包好的可执行文件（pyinstaller 生成，不入库）
 └── src/

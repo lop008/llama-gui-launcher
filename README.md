@@ -241,8 +241,10 @@ LLama启动器/
 │   ├── ad.png             # Bottom ad slot 430×40 (optional)
 │   └── donate_qr.jpg      # Donation QR code in About dialog (optional)
 ├── docs/
-│   ├── cover.png          # Release cover image (v0.3.85)
-│   └── screenshots/       # UI screenshots used by the README / Release
+│   ├── cover-vX.Y.Z.png   # Release cover image (one per release: brand banner, no download link)
+│   ├── release_body_vX.Y.Z.md   # the exact text posted to the GitHub Release
+│   ├── fix_report_vX.Y.Z.md     # per-feedback changelog (what / why / how verified)
+│   └── screenshots/       # UI screenshots used by README / Release (2 per release + archive)
 ├── certs/                 # Self-signed HTTPS key/cert (auto-generated, DO NOT upload)
 ├── dist/                  # Packaged executables (pyinstaller, not in repo)
 └── src/
