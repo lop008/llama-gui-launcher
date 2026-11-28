@@ -1,6 +1,146 @@
 # LLama 启动器 发布说明 / Release Notes
 
-> 最新版本 / Latest release: **v0.6.0** · 发布日期 / Released: 2026-11-27
+> 最新版本 / Latest release: **v0.6.2** · 发布日期 / Released: 2026-11-28
+
+---
+
+# LLama 启动器 v0.6.2 发布说明 / Release Notes
+
+## English
+
+Two rounds of user feedback folded into one release (v0.6.1 was never published). The headline is a
+launch-breaking upstream change handled transparently: llama.cpp 0.4.1 removed `--mlock`, so the
+launcher now writes the load-mode flag your build actually understands. Alongside it: an offline
+sanity check for your launch scripts with an **opt-in** local-model report, whole-UI font scaling,
+and real platform/backend filters on the llama.cpp updater page.
+
+### Fixes
+
+- **`--mlock` no longer breaks launches on new llama.cpp** — 0.4.1 replaced `--mlock` / `--mmap` /
+  `--no-mmap` / `--direct-io` with `-lm/--load-mode`, so the old spelling returned
+  `error: invalid argument` and the server never came up. The launcher reads `llama-server --help`
+  (cached per executable, pre-warmed in the background) and emits `-lm mmap+mlock` / `-lm none` /
+  `-lm mlock` on new builds, keeping the legacy flags on old ones. `.bat` import understands `-lm`
+  too, and the sanity check names the exact replacement — while staying silent on old builds.
+- **Two native crashes fixed** — `QComboBox.setItemText()` faulted when the window was rebuilt
+  repeatedly; background callbacks could reach a window that was already being destroyed (now a
+  window-parented timer, `_closing`-guarded named slots, and monitors stopped only on the real
+  exit path, after the "stop the service too?" dialog).
+- **"Downloaded only" told the truth again** — the "current version" status used to count as
+  downloaded even when no zip was on disk.
+- **Non-Windows packages are reachable again** — the updater used to filter assets before the UI
+  ever saw them.
+- **CPU packages are matched by the CPU filter** — version segments and variant suffixes in names
+  like `bin-ubuntu-26.04-s390x` or `bin-android-arm64-snapdragon` were mistaken for backends.
+
+### New Features
+
+- **Launch-script sanity check** — "Tools → Launch file → Validate launch script" now has a
+  **Sanity check** tab next to the line-by-line parse. Fully offline, evaluated against *this*
+  machine: removed or unknown flags, duplicates, out-of-range values (threads vs logical cores,
+  `-ub` vs `-b`, port), context length vs the model's trained limit, plus VRAM (weights + KV cache
+  + compute cache), RAM and disk estimates. If metadata is missing it says so instead of guessing.
+- **"Ask the model" — only when you press it** — the health data (machine profile + model
+  metadata + parameters, with **API keys stripped**) is sent to the llama-server *already running
+  on your machine*; nothing is sent to any external service, the button is disabled while the
+  service is stopped, and no model runs unless you click. If it fails, the built-in conclusions
+  above remain valid.
+- **UI font scaling** — Ctrl + mouse wheel, or Ctrl `+` / `-` / `0`, zooms the whole interface
+  from 80% to 180%, fixed pixel metrics included, so scaled-up text still fits. Persisted as
+  `ui_scale` in `config.json`; the theme's factory sizes are never overwritten, so a theme switch
+  keeps your zoom and Ctrl+0 returns to 100%.
+- **Platform and backend filters (updater page)** — "Windows packages only" plus a multi-select
+  backend list (CPU / CUDA / Vulkan / ROCm / SYCL / OpenVINO / OpenCL / zDNN), built only from
+  backends that actually appear in the loaded list. Within one dimension selections are OR-ed;
+  across dimensions they are AND-ed; nothing selected means no limit. Packages for other
+  platforms can be downloaded for a second machine, with install disabled and the reason on hover.
+
+### Improvements
+
+- **Speculative decoding greys out what your model cannot use**, with the reason on hover;
+  "needs a draft" stays selectable and is marked `⚠`. A saved mode that does not apply to the
+  current model falls back to Auto and explains itself once in the status bar.
+- **mmproj auto-pairing prefers F16 > BF16 > F32 > quantised**, and hints when a vision model's
+  projector file is present but the field is empty. Inkling 2 is confirmed a vision model — the
+  vision tower lives in the projector (`projection_dim=2304` matching the main model's
+  `embedding_length`), so `has_clip=False` on the main weights is normal.
+- **The command preview became two draggable panes** — a per-flag "flag / what it means" table
+  above the raw command line, parsed from the final command text so the explanation always
+  matches what runs; unknown flags are labelled unknown rather than invented.
+- **All table columns draggable** — auto-filling of leftover width now stops only when you resize
+  the fill column itself, not after dragging any column.
+- **Updater page** — version table / details / log in one vertical splitter; the action column is
+  measured from the buttons so nothing is clipped in any language or zoom level.
+- **Tool menu grouped** (model / service & web / launch file / config / logs & stats / font size /
+  language); path columns elide in the middle so file names survive; tabs have visible borders
+  again (the v0.6.0 theme had removed them).
+- 159 interface strings from both batches translated into all 7 languages; 8 obsolete ones removed —
+  every table holds 1110 entries, 0 missing, 0 unused.
+
+### Downloads
+
+| File | Description |
+|------|-------------|
+| `LLama-Launcher-v0.6.2-win-x64.exe` | Single-file build (x64) — no Python required |
+| `LLama-Launcher-v0.6.2-win-x64-portable.zip` | Portable build (x64) — extract and run |
+| `LLama-Launcher-v0.6.2-win-arm64.exe` | Single-file build (ARM64, Snapdragon / Windows on ARM) |
+| `LLama-Launcher-v0.6.2-win-arm64-portable.zip` | Portable build (ARM64) — extract and run |
+| `Arm64.bat` | One-click launcher for ARM64 — put it next to the exe, it always starts the arm64 build |
+
+## 中文
+
+两批用户反馈合并成一个版本发布（v0.6.1 从未单独发布）。重点是**上游一处会让服务起不来的改动被自动兼容**：
+llama.cpp 0.4.1 删掉了 `--mlock`，启动器现在按本机版本写出你这份 llama.cpp 真正认识的加载模式参数。
+另外新增：启动文件「合理性体检」（AI 分析必须手点）、界面整体字号缩放、更新页平台与后端筛选。
+
+### 🐛 修复
+
+- **新版 llama.cpp 上 `--mlock` 不再把服务搞崩**：0.4.1 把 `--mlock` / `--mmap` / `--no-mmap` /
+  `--direct-io` 合并成 `-lm/--load-mode`，旧写法直接 `error: invalid argument`、服务根本起不来。
+  启动器改为读本机 `llama-server --help`（按 exe 缓存、启动后后台预热）决定写法：新版给
+  `-lm mmap+mlock` / `-lm none` / `-lm mlock`，旧版仍用 `--mlock` / `--no-mmap`；导入 `.bat`
+  时也认识 `-lm`；体检会直接给出替代写法，而本机是旧版时保持沉默，不会推荐一个同样会失败的参数。
+- **两处概率性闪退**：`QComboBox.setItemText()` 在反复重建窗口时崩溃（改走 model item 设置文本）；
+  后台回调打进正在销毁的界面（残留检测改成挂窗口的定时器、状态栏监控改带 `_closing` 闸门的具名槽、
+  关窗只在**真正退出**时停监控且排在「是否同时停止服务」对话框之后，点取消不会把监控停掉）。
+- **「仅显示已下载」不再谎报**：以前把「当前版本」也算已下载，但那只代表本机装的正好是这个版本，
+  zip 可能早已清理或从别处装的。现在只认硬盘上真实存在的文件。
+- **非 Windows 包重新可见**：更新页过去在**取数据阶段**就把非 Windows 包过滤掉了，界面再怎么筛也没用。
+- **纯 CPU 包能被「CPU」筛到了**：`bin-ubuntu-26.04-s390x`、`bin-android-arm64-snapdragon`
+  这类包名里的版本号段与变体后缀不再被误认成后端名。
+
+### 🆕 新增功能
+
+- **启动文件体检**：「工具 → 启动文件 → 校验启动文件」在原有「逐行解析」旁增加**合理性体检**页签，
+  完全离线、按**本机实况**评估：被废弃或不认识的参数、重复设置、取值越界（线程数 vs 逻辑核心、
+  `-ub` vs `-b`、端口）、上下文长度是否超出模型训练上限，以及显存（权重 + KV 缓存 + 计算缓存）、
+  内存、磁盘余量估算。元数据取不到就如实说取不到，不编数字。
+- **「让模型分析」——不点就绝不调用模型**：把体检数据（本机配置 + 模型元数据 + 参数，**已剔除 API Key**）
+  交给**本机正在运行**的那个 llama-server 生成分析报告；不访问任何外部服务，服务未运行时按钮不可点。
+  分析失败时，上面的内置结论明确仍然有效。
+- **界面字号缩放**：在界面任意处 `Ctrl + 滚轮`，或用 `Ctrl` + `+` / `-` / `0`，整体缩放 80%～180%，
+  行高、图标、边距等固定像素量一起等比缩放（否则字放大了控件装不下）。缩放值存 `config.json`
+  的 `ui_scale`，**不覆盖主题的出厂字号**：换主题仍保持你的缩放，`Ctrl+0` 回到 100%。
+- **更新页平台 + 后端筛选**：「仅显示有 Windows 包」复选 + 后端多选下拉（CPU / CUDA / Vulkan / ROCm /
+  SYCL / OpenVINO / OpenCL / zDNN），选项只从**当前列表里真实出现过的**后端生成。语义：**同一维度内多选是
+  「或」，维度之间是「且」**，后端一个都不勾 = 不限后端。其他平台的包可以为第二台机器下载备用，
+  但安装按钮禁用并在悬停时说明原因。
+
+### 🔧 改进
+
+- **投机解码把当前模型用不了的方式置灰**，悬停说明原因（本机不认该取值 / 模型既无对应结构也找不到可用草稿）；
+  「缺草稿」保持可选并标 `⚠`（下一个草稿就能用，堵死不划算）。配置里存的方式对当前模型失效时自动回退「自动」，
+  并在状态栏一次性说明。界面与命令行共用同一份判定函数，两边不会说法不一。
+- **视觉投影自动配对按精度择优**：F16 > BF16 > F32 > 量化（撞上 F32 那份要多占约一倍显存/内存）；
+  模型带投影文件却留空时给出提示。实测确认 **Inkling 2 是视觉模型**：视觉塔在外挂 mmproj 里
+  （`projection_dim=2304` 与主模型 `embedding_length=2304` 对应），主权重 `has_clip=False` 属正常现象。
+- **命令预览改成可拖两栏**：上半「参数拆解 / 目的与意义」逐条解释，下半完整命令行；拆解只解析**最终命令行文本**，
+  解释与实际下发永远同源；未收录的参数如实标注而不编造。
+- **所有表格列都能拖**：剩余宽度补给「主列」的逻辑改成**只有拖过主列本身才停止补宽**（以前拖任意一列就永久不再铺满）。
+- **更新页布局**：版本表 / 版本信息 / 操作日志放进一个竖向分栏；操作列宽度按按钮实测尺寸计算，任何语言、任何字号都不裁字。
+- **工具菜单收进二级**（模型 / 服务与网页 / 启动文件 / 配置 / 日志与统计 / 字号 / 语言）；路径列改中间省略，
+  窗口变窄也看得见文件名；页签恢复可见描边（v0.6.0 主题误写 `border: none`）。
+- 两批共 159 条新增界面文案全部译入 7 张语言表，并清掉改版失效的 8 条：各表 1110 条，缺失 0、多余 0、占位符一致。
 
 ---
 

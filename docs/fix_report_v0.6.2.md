@@ -1,7 +1,7 @@
 # LLama 万能启动器 v0.6.2 修复报告
 
 本轮处理用户提的 12 条改动/新功能，外加顺手查出并修掉的 2 个真实 bug。
-当前状态：**改动已提交本地仓库，未打包、未发 Release**；版本号仍是 `0.6.0`，发版时以 **v0.6.2** 合并尚未发布的 v0.6.1 内容（见 `fix_report_v0.6.1.md`）。
+当前状态：**改动已提交本地仓库，版本号已提到 `0.6.2`（`src/__init__.py`），但未打包、未推送 GitHub、未发 Release**；v0.6.1 从未单独发布，其 7 条修复与本报告内容合并为 v0.6.2（发布物料见 `CHANGELOG.md` / `RELEASE_NOTES.md` / `README*.md` / `参数说明.md`）。
 
 验证口径：`_test_all.py` 全 17 套件通过 + 专项脚本（`_check_advisor.py`、`_check_validate_dialog.py`、`_check_updater.py`、`_check_assets.py`、`_check_cmd_flags.py`、`_v062_cases.py`、`_check_ai_live.py` 真机 AI）+ 七张语言表「缺失 0 · 多余 0 · 校验 PASS」。
 

@@ -1,6 +1,102 @@
 # Changelog
 
 All notable changes to LLama 启动器 / LLama Launcher.
+## [0.6.2] - 2026-11-28
+
+Two feedback rounds folded into one release (v0.6.1 was never published): a launch-script sanity
+check with an opt-in local-model report, UI font scaling, platform/backend filters on the updater
+page, plus a launch-breaking upstream change (`--mlock` removed) that is now handled per build.
+
+### Fixes
+
+- **A launch could die with `error: invalid argument` because of `--mlock` / `--no-mmap`** —
+  llama.cpp 0.4.1 (2026-09) removed `--mlock`, `--mmap`, `--no-mmap` and `--direct-io`, merging
+  them into `-lm/--load-mode` (`auto` / `none` / `mmap` / `mlock` / `mmap+mlock` / `dio`). The
+  launcher no longer hard-codes the old spelling: it reads the local `llama-server --help`
+  (cached per executable, warmed up in the background a few seconds after start) and emits
+  `-lm mmap+mlock` / `-lm none` / `-lm mlock` on new builds while keeping `--mlock` / `--no-mmap`
+  on old ones. Importing a `.bat` reads `-lm` values back into the checkboxes, and the sanity
+  check tells you the exact replacement for a flag your build no longer knows — but stays quiet
+  when your build is the old one, so it can't recommend a flag that would also fail.
+- **Two native crashes** — `QComboBox.setItemText()` faulted (`0xC0000005`) when the window was
+  rebuilt repeatedly (multi-language stress in the suite); text now goes through
+  `combo.model().item(i).setText()`. And background callbacks could land in a window that was
+  already being destroyed: the residual-process check uses a `QTimer` parented to the window
+  instead of a parentless `QTimer.singleShot`, status-bar monitor slots are named slots guarded
+  by `_closing` (they are emitted from the probe thread), and `closeEvent` stops the monitor and
+  usage timers on the real exit path only — after the "stop the service too?" dialog, so
+  cancelling keeps monitoring.
+- **"Downloaded only" listed packages that were not on disk** — the status "current version" was
+  counted as downloaded, but that only means the installed llama.cpp happens to be that build
+  (the zip may have been cleaned up, or the build came from elsewhere). Now only files that
+  actually exist count.
+- **Non-Windows packages were invisible no matter what you set** — the updater filtered assets
+  at fetch time (`win_assets`), so nothing downstream could un-filter them. The list now fetches
+  every package and filters in the UI.
+- **`ubuntu-26.04-s390x` / `android-arm64-snapdragon` were classified as an unknown backend** —
+  distro version segments and variant suffixes are no longer mistaken for a backend name, so
+  plain CPU packages are matched by the "CPU" filter instead of falling into "other".
+
+### New Features
+
+- **Launch-script sanity check** — "Tools → Launch file → Validate launch script" gained a second
+  tab, **Sanity check**, running entirely offline against *this machine*: removed/renamed flags,
+  unknown flags, duplicate settings, out-of-range values (threads vs logical cores, `-ub` vs
+  `-b`, port), context length vs the model's trained limit, and estimates for VRAM (weights +
+  KV cache + compute cache), RAM and free disk. Missing metadata is reported as missing — no
+  invented numbers.
+- **Opt-in "Ask the model" report** — one button sends the health data (machine profile + model
+  metadata + parameters, **API keys stripped**) to the llama-server that is *already running on
+  this machine* and renders its analysis. It is disabled while the service is stopped, no model
+  is ever called unless you click, and no external service is used. If the call fails, the
+  built-in table above is explicitly still valid.
+- **UI font scaling** — Ctrl + mouse wheel anywhere in the window, or Ctrl + `+` / `-` / `0`,
+  scales the entire interface between 80% and 180%, fixed pixel metrics (row heights, icons,
+  margins) included. The ratio is stored in `config.json` (`ui_scale`) and never overwrites the
+  theme's factory sizes, so switching themes keeps your zoom and Ctrl+0 returns to 100%.
+- **Platform and backend filters on the updater page** — a "Windows packages only" checkbox plus
+  a multi-select backend list (CPU / CUDA / Vulkan / ROCm / SYCL / OpenVINO / OpenCL / zDNN)
+  populated only from backends that actually appear in the loaded list. Semantics: multiple
+  selections within one dimension are OR-ed, different dimensions are AND-ed, and selecting no
+  backend means no backend limit. Non-Windows packages can still be downloaded for a second
+  machine but the install control is disabled with a tooltip explaining why.
+
+### Improvements
+
+- **Speculative decoding now greys out what your model can't use** — the build not knowing the
+  `--spec-type` value, or the model having neither the structure nor a usable draft, makes the
+  entry un-selectable with the reason on hover; "needs a draft" stays selectable but is marked
+  `⚠`, since downloading the draft is all it takes. A saved mode that no longer applies to the
+  current model falls back to Auto with a one-off status-bar note. The UI and the command line
+  share one predicate (`spec_decode.spec_selectable()`), so they can never disagree.
+- **mmproj auto-pairing prefers the cheapest sensible precision** — F16 > BF16 > F32 > quantised
+  (picking a stray F32 projector cost roughly twice the memory), and a hint appears when a vision
+  model has a projector file next to it while the field is left empty. Inkling 2 is confirmed a
+  vision model: `clip.has_vision_encoder=True` and `projection_dim=2304` matching the main model's
+  `embedding_length=2304`, with `has_clip=False` on the main weights — the vision tower lives in
+  the projector file, which is normal.
+- **The command preview became two draggable panes** — a per-flag "flag / what it means" table
+  above the raw command line (new `src/cmd_explainer.py`). It parses only the final command
+  line, so the explanation can never drift from what actually gets launched; unknown flags are
+  labelled as unknown instead of being made up; Windows quoting, embedded escaped quotes,
+  boolean flags and negative values are tokenised correctly.
+- **Every table column is draggable** (`src/ui/kit.py:ColumnResizer`) — leftover viewport width
+  is still given to the main column, but the auto-fill now stops only when you drag *that*
+  column; previously dragging any column permanently disabled it and left the table short.
+- **Updater page layout** — version table, details and log live in one vertical splitter you can
+  rebalance; the action column is measured from the buttons' own `sizeHint` (+28 px, floor
+  330 px) so "Download / Install" is never clipped in any language or zoom level.
+- **Tool menu grouped** into 模型 / 服务与网页 / 启动文件 / 配置 / 日志与统计 / 字号 / 语言,
+  and the duplicate top-level Language menu was dropped.
+- **Path columns elide in the middle**, so a narrow window still shows the file name instead of
+  the directory tail.
+- **Tabs are visibly tabs** — the v0.6.0 `brown` theme had `QTabBar::tab { border: none }`,
+  leaving only a background tint. Unselected tabs have a 1 px border, 3 px offset and rounded
+  corners again; the selected one gets a 2 px accent border and bold text.
+- 159 interface strings from both batches translated into all 7 languages (zh-TW / en / ja / ko /
+  ru / es / fr); 8 strings obsoleted by the reworked pages were removed. All tables hold 1110
+  entries with 0 missing, 0 unused and identical placeholders.
+
 ## [0.6.0] - 2026-11-27
 
 A feature release built around llama.cpp's newest switches: speculative decoding can no
